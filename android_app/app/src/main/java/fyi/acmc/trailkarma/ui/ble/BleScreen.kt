@@ -25,6 +25,7 @@ class BleViewModel(app: Application) : AndroidViewModel(app) {
     fun stopScan() = repo.stopScan()
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BleScreen(vm: BleViewModel = viewModel()) {
     val devices by vm.nearbyDevices.collectAsState()

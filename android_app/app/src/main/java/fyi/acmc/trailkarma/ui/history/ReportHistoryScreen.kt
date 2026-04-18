@@ -22,6 +22,7 @@ class ReportHistoryViewModel(app: Application) : AndroidViewModel(app) {
     val reports = ReportRepository(AppDatabase.get(app).trailReportDao()).allReports
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReportHistoryScreen(vm: ReportHistoryViewModel = viewModel()) {
     val reports by vm.reports.collectAsState(initial = emptyList())
