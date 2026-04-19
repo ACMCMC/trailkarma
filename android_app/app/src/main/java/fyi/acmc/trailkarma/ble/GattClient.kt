@@ -8,6 +8,8 @@ import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothProfile
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import fyi.acmc.trailkarma.db.RelayInboxMessageDao
 import fyi.acmc.trailkarma.db.RelayJobIntentDao
 import fyi.acmc.trailkarma.db.RelayPacketDao
@@ -22,6 +24,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeout
@@ -33,9 +36,11 @@ import java.util.UUID
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
-private const val SESSION_TIMEOUT_MS = 120_000L
+private const val CONNECT_SETUP_TIMEOUT_MS = 10_000L
+private const val TRANSFER_TIMEOUT_MS = 120_000L
 private const val MANIFEST_TIMEOUT_MS = 20_000L
 private const val PAYLOAD_TIMEOUT_MS = 20_000L
+private const val CONNECT_RETRY_DELAY_MS = 1_000L
 private const val MAX_HOP_COUNT = 5
 
 @SuppressLint("MissingPermission")
@@ -58,22 +63,50 @@ class GattClient(
     private var notificationSetupQueue: ArrayDeque<UUID> = ArrayDeque()
 
     suspend fun syncWithPeer(device: BluetoothDevice) {
+        syncWithPeer(device, null)
+    }
+
+    suspend fun syncWithPeer(device: BluetoothDevice, since: String?) {
         onLog("📱 syncWithPeer called for ${device.address}")
-        try {
-            withTimeout(SESSION_TIMEOUT_MS) {
-                onLog("⏱ Starting 120-second BLE sync session timeout...")
-                connectAndSync(device)
+        repeat(2) { attempt ->
+            try {
+                onLog("⏱ Starting 10-second BLE connect/setup timeout (attempt ${attempt + 1}/2)...")
+                val gatt = withTimeout(CONNECT_SETUP_TIMEOUT_MS) {
+                    connectAndPrepare(device)
+                }
+                try {
+                    withTimeout(TRANSFER_TIMEOUT_MS) {
+                        onLog("⏱ Starting 120-second BLE transfer timeout...")
+                        syncConnectedGatt(gatt, device.address, since)
+                    }
+                } finally {
+                    runCatching { gatt.disconnect() }
+                    runCatching { gatt.close() }
+                }
+                onLog("✓ syncWithPeer completed successfully for ${device.address}")
+                return
+            } catch (error: Exception) {
+                val shouldRetry =
+                    attempt == 0 &&
+                        error is IllegalStateException &&
+                        error.message?.contains("status=133") == true
+                onLog("✗ BLE sync error with ${device.address}: ${error.javaClass.simpleName} - ${error.message}")
+                if (shouldRetry) {
+                    onLog("↻ Retrying GATT connection once after status=133...")
+                    kotlinx.coroutines.delay(CONNECT_RETRY_DELAY_MS)
+                } else {
+                    return
+                }
             }
-            onLog("✓ syncWithPeer completed successfully for ${device.address}")
-        } catch (error: Exception) {
-            onLog("✗ BLE sync error with ${device.address}: ${error.javaClass.simpleName} - ${error.message}")
         }
     }
 
-    private suspend fun connectAndSync(device: BluetoothDevice) = suspendCancellableCoroutine<Unit> { continuation ->
+    private suspend fun connectAndPrepare(device: BluetoothDevice): BluetoothGatt =
+        suspendCancellableCoroutine { continuation ->
         var gatt: BluetoothGatt? = null
         notificationSetupQueue.clear()
         var connected = false
+        var ready = false
 
         onLog("🔗 Attempting GATT connection to ${device.address}")
 
@@ -139,11 +172,10 @@ class GattClient(
                 }
 
                 if (notificationSetupQueue.isEmpty()) {
-                    onLog("🟢 All notifications ready, starting sync...")
-                    scope.launch {
-                        syncReports(g, device.address)
-                        syncPackets(g, device.address)
-                        g.disconnect()
+                    if (!ready && continuation.isActive) {
+                        ready = true
+                        onLog("🟢 All notifications ready, BLE link prepared")
+                        continuation.resume(g)
                     }
                 }
             }
@@ -198,17 +230,27 @@ class GattClient(
             }
         }
 
-        gatt = device.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE)
-        if (gatt == null) {
-            onLog("✗ device.connectGatt() returned null! Check BLE permissions.")
-        } else {
-            onLog("✓ connectGatt call succeeded, waiting for callbacks...")
+        Handler(Looper.getMainLooper()).post {
+            gatt = device.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE)
+            if (gatt == null) {
+                onLog("✗ device.connectGatt() returned null! Check BLE permissions.")
+            } else {
+                onLog("✓ connectGatt call succeeded, waiting for callbacks...")
+            }
         }
         continuation.invokeOnCancellation {
             onLog("⚠ GATT connection cancelled, disconnecting...")
             gatt?.disconnect()
             gatt?.close()
         }
+    }
+
+    private suspend fun syncConnectedGatt(gatt: BluetoothGatt, senderDevice: String, since: String?) {
+        val reportsJob = scope.async {
+            syncReports(gatt, senderDevice, since)
+        }
+        reportsJob.await()
+        syncPackets(gatt, senderDevice, since)
     }
 
     private fun enableNextNotification(gatt: BluetoothGatt): Boolean {
@@ -231,9 +273,9 @@ class GattClient(
         return false
     }
 
-    private suspend fun syncReports(gatt: BluetoothGatt, senderDevice: String) {
+    private suspend fun syncReports(gatt: BluetoothGatt, senderDevice: String, since: String?) {
         onLog("🔄 Reading peer report manifest...")
-        val peerIds = readIdManifest(gatt, MANIFEST_CHAR_UUID) ?: run {
+        val peerIds = readIdManifest(gatt, MANIFEST_CHAR_UUID, since) ?: run {
             onLog("✗ Could not read peer report manifest from $senderDevice (timeout/error)")
             return
         }
@@ -266,8 +308,8 @@ class GattClient(
         onLog("✓ Synced $pulledCount/${ missing.size} reports (${failedCount} timeouts)")
     }
 
-    private suspend fun syncPackets(gatt: BluetoothGatt, senderDevice: String) {
-        val peerIds = readIdManifest(gatt, PACKET_MANIFEST_CHAR_UUID) ?: return
+    private suspend fun syncPackets(gatt: BluetoothGatt, senderDevice: String, since: String?) {
+        val peerIds = readIdManifest(gatt, PACKET_MANIFEST_CHAR_UUID, since) ?: return
         val localIds = relayPacketDao.getIds().toSet()
         val missing = peerIds - localIds
         if (missing.isEmpty()) return
@@ -282,14 +324,19 @@ class GattClient(
         onLog("Pulled $pulledCount relay packets from $senderDevice")
     }
 
-    private suspend fun readIdManifest(gatt: BluetoothGatt, characteristicUuid: UUID): Set<String>? {
+    private suspend fun readIdManifest(gatt: BluetoothGatt, characteristicUuid: UUID, since: String?): Set<String>? {
         val characteristic = gatt.getService(GATT_SERVICE_UUID)?.getCharacteristic(characteristicUuid) ?: run {
             onLog("✗ Characteristic $characteristicUuid not found")
             return null
         }
         activeTransferUuid = characteristicUuid
         manifestDeferred = CompletableDeferred()
-        characteristic.value = "manifest".toByteArray(Charsets.UTF_8)
+        val request = if (since.isNullOrBlank()) {
+            "manifest"
+        } else {
+            "manifest_since:$since"
+        }
+        characteristic.value = request.toByteArray(Charsets.UTF_8)
         val wrote = gatt.writeCharacteristic(characteristic)
         onLog("  write manifest request sent: $wrote")
         val json = withTimeoutOrNull(MANIFEST_TIMEOUT_MS) { manifestDeferred?.await() } ?: run {

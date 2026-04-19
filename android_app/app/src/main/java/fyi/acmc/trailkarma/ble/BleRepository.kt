@@ -50,11 +50,12 @@ class BleRepository(
     private var advertiseCallback: AdvertiseCallback? = null
     private var localHikerId: String? = null
 
-    // Track last sync time per device (map of address -> epochSecond)
-    // Allow re-sync every 10 seconds to handle data updates
+    // Track last sync time per peer identity (prefer stable hikerId over rotating MAC address).
     private val lastSyncTime = mutableMapOf<String, Long>()
+    private val peerIdentityByAddress = mutableMapOf<String, String>()
+    private val lastSuccessfulDataSyncAt = mutableMapOf<String, String>()
     private var syncInProgress = false
-    private var activeSyncAddress: String? = null
+    private var activeSyncPeerKey: String? = null
 
     private val gattClient by lazy {
         GattClient(
@@ -161,6 +162,8 @@ class BleRepository(
                 if (rawData != null && rawData.isNotEmpty()) {
                     val version = rawData[0]
                     val hikerId = if (rawData.size > 1) String(rawData.copyOfRange(1, rawData.size), Charsets.UTF_8) else "unknown"
+                    val peerKey = peerKey(hikerId, address)
+                    peerIdentityByAddress[address] = peerKey
 
                     // Store hikerId (hiker name) not the MAC address
                     val updated = nearbyDevices.value + hikerId
@@ -187,26 +190,26 @@ class BleRepository(
                     }
 
                     val now = Instant.now().epochSecond
-                    val lastSync = lastSyncTime[address] ?: 0L
+                    val lastSync = lastSyncTime[peerKey] ?: 0L
                     if (syncInProgress) {
                         Log.d(
                             TAG,
-                            "Sync already in progress with ${activeSyncAddress ?: "another device"}, skipping $address"
+                            "Sync already in progress with ${activeSyncPeerKey ?: "another device"}, skipping $hikerId/$address"
                         )
                     } else if (!shouldInitiateSyncWith(hikerId, address)) {
                         Log.d(TAG, "Peer $hikerId won initiator election, waiting for inbound GATT connection")
                     } else if (now - lastSync >= 10) {
-                        lastSyncTime[address] = now
+                        lastSyncTime[peerKey] = now
                         val msg2 = "🔗 Syncing reports with $hikerId ($address)…"
                         log(msg2); Log.i(TAG, msg2)
                         syncInProgress = true
-                        activeSyncAddress = address
+                        activeSyncPeerKey = peerKey
                         scope.launch {
-                            runSyncSession(device)
+                            runSyncSession(device, peerKey)
                         }
                     } else {
                         val remaining = 10 - (now - lastSync)
-                        Log.d(TAG, "Recently synced with $address (cooldown $remaining seconds), skipping")
+                        Log.d(TAG, "Recently synced with $hikerId/$address (cooldown $remaining seconds), skipping")
                     }
                 } else {
                     val msg = "Found TrailKarma device $address with no service data (rawData=${rawData?.let { it.size.toString() + " bytes" } ?: "null"})"
@@ -244,14 +247,15 @@ class BleRepository(
     }
 
     fun onInboundSyncServed(address: String) {
+        val peerKey = peerIdentityByAddress[address] ?: address
         val now = Instant.now().epochSecond
-        val lastSync = lastSyncTime[address] ?: 0L
+        val lastSync = lastSyncTime[peerKey] ?: 0L
         if (syncInProgress) {
-            Log.d(TAG, "Inbound sync served for $address but a sync is already in progress")
+            Log.d(TAG, "Inbound sync served for $peerKey/$address but a sync is already in progress")
             return
         }
         if (now - lastSync < RECIPROCAL_SYNC_COOLDOWN_SECS) {
-            Log.d(TAG, "Skipping reciprocal sync for $address; last sync was ${now - lastSync}s ago")
+            Log.d(TAG, "Skipping reciprocal sync for $peerKey/$address; last sync was ${now - lastSync}s ago")
             return
         }
 
@@ -266,12 +270,12 @@ class BleRepository(
         }
 
         syncInProgress = true
-        activeSyncAddress = address
-        lastSyncTime[address] = now
+        activeSyncPeerKey = peerKey
+        lastSyncTime[peerKey] = now
         scope.launch {
             delay(750)
-            log("↩ Scheduling reciprocal sync with $address after inbound session")
-            runSyncSession(device)
+            log("↩ Scheduling reciprocal sync with $peerKey/$address after inbound session")
+            runSyncSession(device, peerKey)
         }
     }
 
@@ -282,17 +286,22 @@ class BleRepository(
         eventLog.value = (listOf(msg) + eventLog.value).take(100)
     }
 
-    private suspend fun runSyncSession(device: android.bluetooth.BluetoothDevice) {
+    private suspend fun runSyncSession(device: android.bluetooth.BluetoothDevice, peerKey: String) {
         try {
             stopScan()
-            gattClient.syncWithPeer(device)
+            delay(500)
+            gattClient.syncWithPeer(device, lastSuccessfulDataSyncAt[peerKey])
+            lastSuccessfulDataSyncAt[peerKey] = Instant.now().toString()
         } finally {
             syncInProgress = false
-            activeSyncAddress = null
-            lastSyncTime[device.address] = Instant.now().epochSecond
+            activeSyncPeerKey = null
+            lastSyncTime[peerKey] = Instant.now().epochSecond
             startScan()
         }
     }
+
+    private fun peerKey(hikerId: String?, address: String): String =
+        hikerId?.takeIf { it.isNotBlank() && it != "unknown" } ?: address
 
     private fun shouldInitiateSyncWith(remoteHikerId: String, remoteAddress: String): Boolean {
         val local = localHikerId

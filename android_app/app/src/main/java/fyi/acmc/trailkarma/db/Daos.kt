@@ -61,6 +61,9 @@ interface TrailReportDao {
     @Query("SELECT reportId FROM trail_reports")
     suspend fun getIds(): List<String>
 
+    @Query("SELECT reportId FROM trail_reports WHERE timestamp > :since")
+    suspend fun getIdsSince(since: String): List<String>
+
     // Used by GattServer: look up a single report to stream to a peer
     @Query("SELECT * FROM trail_reports WHERE reportId = :id LIMIT 1")
     suspend fun getById(id: String): TrailReport?
@@ -161,6 +164,9 @@ interface RelayPacketDao {
     // Used by BLE set-diff
     @Query("SELECT packetId FROM relay_packets")
     suspend fun getIds(): List<String>
+
+    @Query("SELECT packetId FROM relay_packets WHERE receivedAt > :since")
+    suspend fun getIdsSince(since: String): List<String>
 
     @Query("SELECT COUNT(*) FROM relay_packets WHERE packetId = :id")
     suspend fun exists(id: String): Int

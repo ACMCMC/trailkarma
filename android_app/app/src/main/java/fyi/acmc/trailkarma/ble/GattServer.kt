@@ -157,7 +157,7 @@ class GattServer(
                 MANIFEST_CHAR_UUID -> scope.launch {
                     markPeerServed(device.address)
                     Log.d(TAG, "📋 Building report manifest...")
-                    val ids = reportDao.getIds()
+                    val ids = manifestIdsForRequest(request, reportDao::getIds, reportDao::getIdsSince)
                     val json = ids.joinToString(prefix = "[", postfix = "]") { "\"$it\"" }
                     Log.d(TAG, "📢 Sending manifest notification: ${json.length} bytes, ${ids.size} IDs")
                     notifyJson(device, MANIFEST_CHAR_UUID, json)
@@ -166,7 +166,7 @@ class GattServer(
 
                 PACKET_MANIFEST_CHAR_UUID -> scope.launch {
                     markPeerServed(device.address)
-                    val ids = relayPacketDao.getIds()
+                    val ids = manifestIdsForRequest(request, relayPacketDao::getIds, relayPacketDao::getIdsSince)
                     val json = ids.joinToString(prefix = "[", postfix = "]") { "\"$it\"" }
                     notifyJson(device, PACKET_MANIFEST_CHAR_UUID, json)
                 }
@@ -320,5 +320,15 @@ class GattServer(
         synchronized(notificationLock) {
             peersServedThisConnection.add(address)
         }
+    }
+
+    private suspend fun manifestIdsForRequest(
+        request: String,
+        allIds: suspend () -> List<String>,
+        idsSince: suspend (String) -> List<String>
+    ): List<String> {
+        val prefix = "manifest_since:"
+        val since = request.substringAfter(prefix, "").takeIf { request.startsWith(prefix) && it.isNotBlank() }
+        return if (since != null) idsSince(since) else allIds()
     }
 }
