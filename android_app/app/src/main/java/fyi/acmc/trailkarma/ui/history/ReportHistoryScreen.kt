@@ -2,6 +2,7 @@ package fyi.acmc.trailkarma.ui.history
 
 import android.app.Application
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,9 +13,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Forest
+import androidx.compose.material.icons.filled.Route
 import androidx.compose.material3.Badge
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -32,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -41,6 +48,9 @@ import fyi.acmc.trailkarma.models.BiodiversityContribution
 import fyi.acmc.trailkarma.models.CloudSyncState
 import fyi.acmc.trailkarma.models.TrailReport
 import fyi.acmc.trailkarma.ui.biodiversitySourceLabel
+import fyi.acmc.trailkarma.ui.design.TrailHeroCard
+import fyi.acmc.trailkarma.ui.design.TrailInfoChip
+import fyi.acmc.trailkarma.ui.rewards.RewardsPalette
 import fyi.acmc.trailkarma.ui.rewards.TrailKarmaRewardsTheme
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
@@ -129,6 +139,9 @@ fun ReportHistoryScreen(
     vm: ReportHistoryViewModel = viewModel()
 ) {
     val history by vm.history.collectAsState()
+    val savedCount = history.size
+    val syncedCount = history.count { it.synced }
+    val collectibleCount = history.count { item -> item.badges.any { it.first == "collectible" } }
 
     TrailKarmaRewardsTheme {
         Scaffold(
@@ -139,7 +152,7 @@ fun ReportHistoryScreen(
                         Column {
                             Text("Trail feed")
                             Text(
-                                "Reports and biodiversity contributions stored on this device",
+                                "Everything this device has captured, carried, or verified",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -158,10 +171,7 @@ fun ReportHistoryScreen(
                     .fillMaxSize()
                     .background(
                         Brush.verticalGradient(
-                            colors = listOf(
-                                Color(0xFFFFF8EE),
-                                MaterialTheme.colorScheme.background
-                            )
+                            colors = listOf(Color(0xFFFFF8EE), MaterialTheme.colorScheme.background)
                         )
                     )
                     .padding(padding)
@@ -173,9 +183,39 @@ fun ReportHistoryScreen(
                 } else {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
+                        item {
+                            TrailHeroCard(
+                                title = "Your field record",
+                                subtitle = "This feed ties together local reports, biodiversity captures, pending sync work, and settled rewards so the demo feels like one coherent system rather than separate tools.",
+                                accent = RewardsPalette.Pine,
+                                supporting = {
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        modifier = Modifier.horizontalScroll(rememberScrollState())
+                                    ) {
+                                        TrailInfoChip(
+                                            icon = Icons.Default.Route,
+                                            label = "$savedCount total items",
+                                            accent = RewardsPalette.Sky
+                                        )
+                                        TrailInfoChip(
+                                            icon = Icons.Default.CheckCircle,
+                                            label = "$syncedCount synced",
+                                            accent = RewardsPalette.Forest
+                                        )
+                                        TrailInfoChip(
+                                            icon = Icons.Default.AutoAwesome,
+                                            label = "$collectibleCount collectible wins",
+                                            accent = RewardsPalette.Gold
+                                        )
+                                    }
+                                }
+                            )
+                        }
+
                         items(history) { item -> HistoryItemCard(item) }
                     }
                 }
@@ -187,34 +227,39 @@ fun ReportHistoryScreen(
 @Composable
 private fun HistoryItemCard(item: HistoryItem) {
     Card(
-        shape = RoundedCornerShape(22.dp),
+        shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(Modifier.weight(1f)) {
-                    Text(item.title, style = MaterialTheme.typography.titleMedium)
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text(item.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(
                         item.subtitle,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
-                Badge(containerColor = if (item.synced) Color(0xFF2E7D32) else Color(0xFFEF6C00)) {
-                    Text(if (item.synced) "saved" else "offline")
+                Badge(containerColor = if (item.synced) RewardsPalette.Forest else RewardsPalette.Gold) {
+                    Text(if (item.synced) "synced" else "offline")
                 }
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.horizontalScroll(rememberScrollState())
+            ) {
                 item.badges.forEach { (label, color) ->
                     Badge(containerColor = color) {
                         Text(label)

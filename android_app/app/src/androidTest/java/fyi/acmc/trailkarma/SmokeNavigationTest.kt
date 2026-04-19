@@ -30,24 +30,24 @@ class SmokeNavigationTest {
 
     @Test
     fun commonScreensOpenWithoutCrashing() {
-        waitForText("Menu")
+        waitForText("Trail briefing")
 
         composeRule.onNodeWithContentDescription("Menu").performClick()
-        composeRule.onNodeWithText("Rewards").performClick()
+        composeRule.onNodeWithText("KARMA, badges, and collectibles").performClick()
         waitForText("Rewards")
         waitForText("KARMA, collectibles, and relay wins")
         goBack()
 
-        waitForText("Menu")
+        waitForText("Trail briefing")
         composeRule.onNodeWithContentDescription("Menu").performClick()
-        composeRule.onNodeWithText("Profile").performClick()
+        composeRule.onNodeWithText("Identity, contact defaults, and wallet state").performClick()
         waitForText("Profile")
         waitForText("Biodiversity ledger")
         goBack()
 
-        waitForText("Menu")
+        waitForText("Trail briefing")
         composeRule.onNodeWithContentDescription("Menu").performClick()
-        composeRule.onNodeWithText("Relay Hub").performClick()
+        composeRule.onNodeWithText("Queue and carry delayed voice messages").performClick()
         waitForText("Relay Hub")
         waitForText("Voice relay missions")
     }
