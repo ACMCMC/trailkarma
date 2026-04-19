@@ -1502,6 +1502,8 @@ private fun demoBadgeGallery(
     val verifiedReports = reports.count { it.rewardClaimed }
     val fulfilledRelays = relayJobs.count { it.status == "fulfilled" }
     val verifiedBiodiversity = biodiversity.count { it.verificationStatus == "verified" }
+    val hazardCount = reports.count { it.rewardClaimed && it.type == fyi.acmc.trailkarma.models.ReportType.hazard }
+    val waterCount = reports.count { it.rewardClaimed && it.type == fyi.acmc.trailkarma.models.ReportType.water }
 
     return listOf(
         BadgeStatusResponse(
@@ -1536,6 +1538,28 @@ private fun demoBadgeGallery(
             currentCount = maxOf(verifiedBiodiversity, if (biodiversity.isEmpty()) 1 else 0),
             targetCount = 1,
             mint = "demo-species-spotter"
+        ),
+        BadgeStatusResponse(
+            code = "water_guardian",
+            label = "Water Guardian",
+            description = "Trusted source checks that kept the route hydrated.",
+            category = "safety",
+            accentHex = "#4B91D6",
+            earned = waterCount >= 1 || reports.isEmpty(),
+            currentCount = maxOf(waterCount, if (reports.isEmpty()) 3 else 0),
+            targetCount = 5,
+            mint = "demo-water-guardian"
+        ),
+        BadgeStatusResponse(
+            code = "hazard_herald",
+            label = "Hazard Herald",
+            description = "Repeated verified warnings that protected hikers behind you.",
+            category = "safety",
+            accentHex = "#C96A46",
+            earned = hazardCount >= 1 || reports.isEmpty(),
+            currentCount = maxOf(hazardCount, if (reports.isEmpty()) 4 else 0),
+            targetCount = 5,
+            mint = "demo-hazard-herald"
         )
     )
 }
@@ -1549,17 +1573,50 @@ private fun demoSpeciesCollectibles(): List<SpeciesCollectibleCardUi> = listOf(
         collectibleStatus = "verified",
         collectibleId = "demo-collectible-pacific-wren",
         accentHex = "#7B9E57",
-        discoveredAt = Instant.now().minusSeconds(86_400).toString(),
+        discoveredAt = Instant.now().minusSeconds(172_800).toString(),
+        owned = true
+    ),
+    SpeciesCollectibleCardUi(
+        id = "demo-owned-red-tailed-hawk",
+        label = "Red-tailed Hawk",
+        description = "Locked after a verified ridge-line call and visual confirmation.",
+        confidenceBand = "high",
+        collectibleStatus = "verified",
+        collectibleId = "demo-collectible-red-tailed-hawk",
+        accentHex = "#C77D3B",
+        discoveredAt = Instant.now().minusSeconds(140_000).toString(),
+        owned = true
+    ),
+    SpeciesCollectibleCardUi(
+        id = "demo-owned-mule-deer",
+        label = "Mule Deer",
+        description = "Field guide collectible minted from a clean, verified trail encounter.",
+        confidenceBand = "high",
+        collectibleStatus = "verified",
+        collectibleId = "demo-collectible-mule-deer",
+        accentHex = "#8B7A57",
+        discoveredAt = Instant.now().minusSeconds(118_000).toString(),
+        owned = true
+    ),
+    SpeciesCollectibleCardUi(
+        id = "demo-owned-stellers-jay",
+        label = "Steller's Jay",
+        description = "Archived after the audio model and follow-up review aligned.",
+        confidenceBand = "medium",
+        collectibleStatus = "verified",
+        collectibleId = "demo-collectible-stellers-jay",
+        accentHex = "#4E77A8",
+        discoveredAt = Instant.now().minusSeconds(92_000).toString(),
         owned = true
     ),
     SpeciesCollectibleCardUi(
         id = "demo-pending-red-tailed-hawk",
-        label = "Red-tailed Hawk",
-        description = "Queued for verification after a strong ridge-line recording.",
+        label = "Great Horned Owl",
+        description = "Queued for verification after a dusk recording with a strong confidence band.",
         confidenceBand = "medium",
         collectibleStatus = "pending_verification",
         collectibleId = null,
-        accentHex = "#D0854F",
+        accentHex = "#705D86",
         discoveredAt = Instant.now().minusSeconds(7_200).toString(),
         owned = false
     )

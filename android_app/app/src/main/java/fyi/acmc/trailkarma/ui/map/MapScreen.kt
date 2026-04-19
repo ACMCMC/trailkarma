@@ -163,8 +163,19 @@ fun MapScreen(
     val collectibleCount = displayBiodiversity.count {
         it.collectibleStatus == "verified" || it.collectibleStatus == "verified_no_collectible"
     }
-    val earnedBadgeCount = walletState?.badgeDetails?.count { it.earned } ?: walletState?.badges?.size ?: 0
-    val showHeroMetrics = walletState != null || pendingRewardCount > 0 || collectibleCount > 0 || earnedBadgeCount > 0
+    val onChainBadgeCount = walletState?.badgeDetails?.count { it.earned } ?: walletState?.badges?.size ?: 0
+    val localEstimatedKarma = estimateMapKarma(displayReports, displayBiodiversity)
+    val displayedKarma = when {
+        (walletState?.karmaBalance?.toIntOrNull() ?: 0) > 0 -> walletState?.karmaBalance ?: "0"
+        localEstimatedKarma > 0 -> localEstimatedKarma.toString()
+        else -> "--"
+    }
+    val earnedBadgeCount = if (onChainBadgeCount > 0) {
+        onChainBadgeCount
+    } else {
+        estimateMapBadgeCount(displayReports, displayBiodiversity)
+    }
+    val showHeroMetrics = displayedKarma != "--" || pendingRewardCount > 0 || collectibleCount > 0 || earnedBadgeCount > 0
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     var trailBriefingCollapsed by rememberSaveable { mutableStateOf(false) }
@@ -207,7 +218,7 @@ fun MapScreen(
                             )
                             TrailInfoChip(
                                 icon = Icons.Default.AutoAwesome,
-                                label = "${walletState?.karmaBalance ?: "--"} KARMA",
+                                label = "$displayedKarma KARMA",
                                 accent = RewardsPalette.Gold
                             )
                         }
@@ -474,7 +485,7 @@ fun MapScreen(
                         if (showHeroMetrics) {
                             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                 BriefingMetricCard(
-                                    value = walletState?.karmaBalance ?: "--",
+                                    value = displayedKarma,
                                     label = "KARMA",
                                     accent = RewardsPalette.Gold,
                                     modifier = Modifier.weight(1f)
@@ -904,6 +915,46 @@ private fun biodiversityAccent(item: BiodiversityContribution): Color = when (it
     "verified_no_collectible", "duplicate_species" -> RewardsPalette.Forest
     "pending_verification" -> RewardsPalette.Moss
     else -> RewardsPalette.Sky
+}
+
+private fun estimateMapKarma(
+    reports: List<TrailReport>,
+    biodiversity: List<BiodiversityContribution>
+): Int {
+    val reportKarma = reports.sumOf { report ->
+        if (!report.rewardClaimed) return@sumOf 0
+        when (report.type) {
+            ReportType.hazard -> 10
+            ReportType.water -> 10
+            ReportType.species -> if (report.highConfidenceBonus) 13 else 8
+        }
+    }
+    val biodiversityKarma = biodiversity.sumOf { item ->
+        if (item.verificationStatus == "verified") {
+            item.rewardPointsAwarded.takeIf { it > 0 } ?: 8
+        } else {
+            0
+        }
+    }
+    return reportKarma + biodiversityKarma
+}
+
+private fun estimateMapBadgeCount(
+    reports: List<TrailReport>,
+    biodiversity: List<BiodiversityContribution>
+): Int {
+    val verifiedReports = reports.count { it.rewardClaimed }
+    val verifiedBiodiversity = biodiversity.count { it.verificationStatus == "verified" }
+    val hazardCount = reports.count { it.rewardClaimed && it.type == ReportType.hazard }
+    val waterCount = reports.count { it.rewardClaimed && it.type == ReportType.water }
+    val speciesCount = biodiversity.count { it.verificationStatus == "verified" && it.finalTaxonomicLevel == "species" }
+
+    return listOf(
+        verifiedReports + verifiedBiodiversity > 0,
+        speciesCount > 0,
+        waterCount >= 1,
+        hazardCount >= 1
+    ).count { it }
 }
 
 private fun formatCoordinate(value: Double, positiveHemisphere: String, negativeHemisphere: String): String {

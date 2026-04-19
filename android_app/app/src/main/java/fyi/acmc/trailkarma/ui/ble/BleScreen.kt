@@ -120,6 +120,8 @@ class BleViewModel(app: Application) : AndroidViewModel(app) {
     val operation = _operation
     private val _celebration = MutableStateFlow<String?>(null)
     val celebration = _celebration
+    private val _isSubmittingRelay = MutableStateFlow(false)
+    val isSubmittingRelay = _isSubmittingRelay
     private var knownBadges = emptySet<String>()
     private var announcedNearbyDevices = emptySet<String>()
 
@@ -164,6 +166,11 @@ class BleViewModel(app: Application) : AndroidViewModel(app) {
         shareRealName: Boolean,
         shareCallback: Boolean
     ) = viewModelScope.launch {
+        if (_isSubmittingRelay.value) {
+            TrailFeedbackBus.emit("A relay is already being prepared.", FeedbackTone.Info)
+            return@launch
+        }
+        _isSubmittingRelay.value = true
         _operation.value = OperationUiState(
             title = "Preparing relay mission",
             message = "The message is being signed on this phone so it can survive offline carry and later settlement.",
@@ -172,55 +179,59 @@ class BleViewModel(app: Application) : AndroidViewModel(app) {
             steps = relaySteps(saved = OperationStepState.Active)
         )
 
-        val intent = rewardsRepository.createVoiceRelayIntent(
-            recipientName = recipientName,
-            recipientPhoneNumber = recipientPhone,
-            messageBody = messageBody,
-            shareLocation = shareLocation,
-            shareRealName = shareRealName,
-            shareCallbackNumber = shareCallback
-        )
-
-        if (intent == null) {
-            _operation.value = OperationUiState(
-                title = "Relay creation failed",
-                message = "The app could not create the relay intent right now.",
-                tone = OperationStateTone.Error,
-                steps = relaySteps(saved = OperationStepState.Error)
+        try {
+            val intent = rewardsRepository.createVoiceRelayIntent(
+                recipientName = recipientName,
+                recipientPhoneNumber = recipientPhone,
+                messageBody = messageBody,
+                shareLocation = shareLocation,
+                shareRealName = shareRealName,
+                shareCallbackNumber = shareCallback
             )
-            TrailFeedbackBus.emit("Unable to create the relay mission.", FeedbackTone.Error)
-            return@launch
-        }
 
-        TrailFeedbackBus.emit("Relay saved on this phone.", FeedbackTone.Success)
-
-        if (networkUtil.isOnlineNow()) {
-            _operation.value = OperationUiState(
-                title = "Sending now",
-                message = "You have service, so TrailKarma is opening the relay on-chain and starting the outbound call immediately.",
-                tone = OperationStateTone.Working,
-                progress = 0.42f,
-                steps = relaySteps(
-                    saved = OperationStepState.Complete,
-                    posted = OperationStepState.Active
+            if (intent == null) {
+                _operation.value = OperationUiState(
+                    title = "Relay creation failed",
+                    message = "The app could not create the relay intent right now.",
+                    tone = OperationStateTone.Error,
+                    steps = relaySteps(saved = OperationStepState.Error)
                 )
-            )
-            syncVoiceRelayNow(focusJobId = intent.jobId, showFeedback = true)
-        } else {
-            _operation.value = OperationUiState(
-                title = "Queued for the mesh",
-                message = "This relay is ready to travel phone-to-phone until the first hiker with service can post it and trigger the call.",
-                tone = OperationStateTone.Success,
-                progress = 1f,
-                steps = relaySteps(
-                    saved = OperationStepState.Complete,
-                    mesh = OperationStepState.Active
+                TrailFeedbackBus.emit("Unable to create the relay mission.", FeedbackTone.Error)
+                return@launch
+            }
+
+            TrailFeedbackBus.emit("Relay saved on this phone.", FeedbackTone.Success)
+
+            if (networkUtil.isOnlineNow()) {
+                _operation.value = OperationUiState(
+                    title = "Sending now",
+                    message = "You have service, so TrailKarma is opening the relay on-chain and starting the outbound call immediately.",
+                    tone = OperationStateTone.Working,
+                    progress = 0.42f,
+                    steps = relaySteps(
+                        saved = OperationStepState.Complete,
+                        posted = OperationStepState.Active
+                    )
                 )
-            )
-            TrailFeedbackBus.emit(
-                "Relay queued offline. The first online hiker can carry it to the call path.",
-                FeedbackTone.Info
-            )
+                syncVoiceRelayNow(focusJobId = intent.jobId, showFeedback = true)
+            } else {
+                _operation.value = OperationUiState(
+                    title = "Queued for the mesh",
+                    message = "This relay is ready to travel phone-to-phone until the first hiker with service can post it and trigger the call.",
+                    tone = OperationStateTone.Success,
+                    progress = 1f,
+                    steps = relaySteps(
+                        saved = OperationStepState.Complete,
+                        mesh = OperationStepState.Active
+                    )
+                )
+                TrailFeedbackBus.emit(
+                    "Relay queued offline. The first online hiker can carry it to the call path.",
+                    FeedbackTone.Info
+                )
+            }
+        } finally {
+            _isSubmittingRelay.value = false
         }
     }
 
@@ -292,7 +303,9 @@ class BleViewModel(app: Application) : AndroidViewModel(app) {
                     TrailFeedbackBus.emit("Relay completed and KARMA was awarded on-chain.", FeedbackTone.Success)
                 }
                 newlyCalling.isNotEmpty() -> {
-                    TrailFeedbackBus.emit("Relay posted on-chain. The outbound call is in progress.", FeedbackTone.Success)
+                    val job = newlyCalling.first()
+                    val recipient = job.recipientName.ifBlank { job.recipientPhoneNumber.ifBlank { "your contact" } }
+                    TrailFeedbackBus.emit("Call placed to $recipient.", FeedbackTone.Success)
                 }
                 focusJob?.status == "open" -> {
                     TrailFeedbackBus.emit("Relay posted on-chain and is waiting for call completion.", FeedbackTone.Info)
@@ -335,14 +348,16 @@ class BleViewModel(app: Application) : AndroidViewModel(app) {
         val tone = when (status) {
             "fulfilled" -> OperationStateTone.Success
             "failed" -> OperationStateTone.Error
+            "suppressed_duplicate" -> OperationStateTone.Error
             else -> OperationStateTone.Working
         }
         val message = when (status) {
             "queued_offline" -> "This relay is waiting for a connected hiker to post it and start the call."
             "open" -> "The relay is on-chain and ready for the outbound call or completion refresh."
-            "calling" -> "The outbound call is in progress."
+            "calling" -> "The outbound call has been placed and is now in progress."
             "fulfilled" -> "The call completed, the relay was fulfilled, and the reward path settled."
             "failed" -> "The call path did not complete successfully."
+            "suppressed_duplicate" -> "A duplicate copy of this relay was suppressed so the recipient only gets one call."
             else -> "Relay state is updating."
         }
         return OperationUiState(
@@ -353,7 +368,7 @@ class BleViewModel(app: Application) : AndroidViewModel(app) {
                 "queued_offline" -> 0.35f
                 "open" -> 0.56f
                 "calling" -> 0.76f
-                "fulfilled", "failed" -> 1f
+                "fulfilled", "failed", "suppressed_duplicate" -> 1f
                 else -> 0.42f
             },
             steps = relaySteps(
@@ -367,12 +382,12 @@ class BleViewModel(app: Application) : AndroidViewModel(app) {
                 calling = when (status) {
                     "calling" -> OperationStepState.Active
                     "fulfilled" -> OperationStepState.Complete
-                    "failed" -> OperationStepState.Error
+                    "failed", "suppressed_duplicate" -> OperationStepState.Error
                     else -> OperationStepState.Pending
                 },
                 rewarded = when (status) {
                     "fulfilled" -> OperationStepState.Complete
-                    "failed" -> OperationStepState.Error
+                    "failed", "suppressed_duplicate" -> OperationStepState.Error
                     else -> OperationStepState.Pending
                 }
             )
@@ -416,6 +431,7 @@ fun BleScreen(
     val operation by vm.operation.collectAsState()
     val isOnline by vm.isOnline.collectAsState(initial = false)
     val celebration by vm.celebration.collectAsState()
+    val isSubmittingRelay by vm.isSubmittingRelay.collectAsState()
 
     Log.d("BleScreen", "🖥️ rendering BleScreen with ${devices.size} devices")
 
@@ -579,10 +595,16 @@ fun BleScreen(
                                         )
                                     },
                                     modifier = Modifier.weight(1f),
-                                    enabled = manualRecipientPhone.isNotBlank() && relayMessage.isNotBlank()
+                                    enabled = manualRecipientPhone.isNotBlank() && relayMessage.isNotBlank() && !isSubmittingRelay
                                 ) {
                                     Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null)
-                                    Text(if (isOnline) "Send now" else "Queue offline")
+                                    Text(
+                                        when {
+                                            isSubmittingRelay -> "Preparing..."
+                                            isOnline -> "Send now"
+                                            else -> "Queue offline"
+                                        }
+                                    )
                                 }
                                 OutlinedButton(
                                     onClick = { vm.syncVoiceRelayNow(showFeedback = true) },
@@ -781,6 +803,13 @@ private fun RelayJobCard(job: RelayJobIntent) {
             AssistChip(
                 onClick = {},
                 label = { Text(if (job.source == "self") "from you" else "carried relay") },
+            )
+        }
+        if (job.status == "calling") {
+            Text(
+                "Call placed. TrailKarma is speaking to the recipient now.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
 

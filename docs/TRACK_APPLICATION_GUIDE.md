@@ -96,7 +96,7 @@ In addition to that checked-in notebook, we also have off-repo Marimo notebooks 
   - [README.md](../README.md)
   - [docs/bioacoustics.md](./bioacoustics.md)
   - [docs/REWARDS.md](./REWARDS.md)
-  - [ANDROID_DATABRICKS_SYNC.md](../ANDROID_DATABRICKS_SYNC.md)
+  - [ANDROID_DATABRICKS_SYNC.md](./ANDROID_DATABRICKS_SYNC.md)
   - this track guide
 
 ### Best Submission Framing
@@ -163,7 +163,7 @@ Databricks is one of the core pillars of the system, not an accessory.
 Key files:
 
 - [setup_databricks.py](../setup_databricks.py)
-- [DATABRICKS_SETUP.md](../DATABRICKS_SETUP.md)
+- [DATABRICKS_SETUP.md](./DATABRICKS_SETUP.md)
 - [android_app/app/src/main/java/fyi/acmc/trailkarma/repository/DatabricksSyncRepository.kt](../android_app/app/src/main/java/fyi/acmc/trailkarma/repository/DatabricksSyncRepository.kt)
 - [backend/databricks_mirror.py](../backend/databricks_mirror.py)
 - [backend/src/biodiversity.ts](../backend/src/biodiversity.ts)

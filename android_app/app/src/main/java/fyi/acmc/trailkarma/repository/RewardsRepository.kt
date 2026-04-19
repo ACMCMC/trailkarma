@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.first
 class RewardsRepository(context: Context, private val db: AppDatabase) {
     companion object {
         private const val TAG = "RewardsRepository"
+        private const val VOICE_RELAY_DEDUP_SECONDS = 120L
     }
 
     private val resolvedRewardsBaseUrl = DebugEndpointResolver.resolve(BuildConfig.REWARDS_BASE_URL)
@@ -186,15 +187,26 @@ class RewardsRepository(context: Context, private val db: AppDatabase) {
     ): RelayJobIntent? {
         val baseUser = currentUser() ?: userRepository.ensureLocalUser()
         val user = ensureLocalWallet(baseUser)
+        val normalizedPhone = normalizePhone(recipientPhoneNumber)
+        val trimmedMessage = messageBody.trim()
+        val recentDuplicate = db.relayJobIntentDao().findRecentSelfVoiceRelay(
+            recipientPhoneNumber = normalizedPhone,
+            messageBody = trimmedMessage,
+            createdAfter = Instant.now().minusSeconds(VOICE_RELAY_DEDUP_SECONDS).toString()
+        )
+        if (recentDuplicate != null) {
+            Log.d(TAG, "Suppressing duplicate voice relay for ${user.userId} -> $normalizedPhone")
+            return recentDuplicate
+        }
         val jobId = CryptoUtil.sha256Hex("${user.userId}:${UUID.randomUUID()}:${System.currentTimeMillis()}")
-        val destinationHash = CryptoUtil.sha256Hex(recipientPhoneNumber)
+        val destinationHash = CryptoUtil.sha256Hex(normalizedPhone)
         val contextJson = buildVoiceRelayContext(user, shareLocation, shareRealName, shareCallbackNumber)
         
         // PRIVACY: Encrypt the sensitive payload (recipient, message, context) for the Backend
         val plainPayload = JSONObject()
             .put("recipientName", recipientName)
-            .put("recipientPhoneNumber", recipientPhoneNumber)
-            .put("messageBody", messageBody)
+            .put("recipientPhoneNumber", normalizedPhone)
+            .put("messageBody", trimmedMessage)
             .put("contextJson", contextJson)
             .toString()
         val encryptedBlob = EncryptionUtil.encryptForBackend(plainPayload, BuildConfig.RELAY_ENCRYPTION_PUBLIC_KEY)
@@ -212,7 +224,7 @@ class RewardsRepository(context: Context, private val db: AppDatabase) {
             nonce = nonce
         )
         val signature = walletManager.sign(user.userId, signedMessage)
-        val summary = buildRelaySummary(user, messageBody, shareLocation, shareRealName, shareCallbackNumber)
+        val summary = buildRelaySummary(user, trimmedMessage, shareLocation, shareRealName, shareCallbackNumber)
 
         val intent = RelayJobIntent(
             jobId = jobId,
@@ -220,10 +232,10 @@ class RewardsRepository(context: Context, private val db: AppDatabase) {
             senderWallet = user.walletPublicKey,
             relayType = "voice_outbound",
             recipientName = recipientName,
-            recipientPhoneNumber = recipientPhoneNumber,
+            recipientPhoneNumber = normalizedPhone,
             destinationHash = destinationHash,
             payloadHash = payloadHash,
-            messageBody = messageBody,
+            messageBody = trimmedMessage,
             contextSummary = summary,
             contextJson = contextJson,
             expiryTs = expiryTs,
@@ -295,7 +307,22 @@ class RewardsRepository(context: Context, private val db: AppDatabase) {
         if (!networkUtil.isOnlineNow()) return
         val carrier = syncCurrentUserRegistration() ?: return
         val pendingJobs = db.relayJobIntentDao().getVoiceJobsToSync()
+        val seenRelayKeys = mutableSetOf<String>()
         for (job in pendingJobs) {
+            val relayKey = "${job.relayType}:${job.recipientPhoneNumber.trim()}:${job.messageBody.trim()}"
+            if (!seenRelayKeys.add(relayKey)) {
+                db.relayJobIntentDao().updateVoiceRelayStatus(
+                    jobId = job.jobId,
+                    status = "suppressed_duplicate",
+                    openedTxSignature = job.openedTxSignature,
+                    fulfilledTxSignature = job.fulfilledTxSignature,
+                    callSid = job.callSid,
+                    conversationId = job.conversationId,
+                    transcriptSummary = "Duplicate relay suppressed locally to avoid repeat calls.",
+                    replyJobId = job.replyJobId
+                )
+                continue
+            }
             val response = safeApiCall("openVoiceRelayJob:${job.jobId}") {
                 api.openVoiceRelayJob(
                     OpenVoiceRelayJobRequest(
@@ -310,7 +337,11 @@ class RewardsRepository(context: Context, private val db: AppDatabase) {
                         rewardAmount = job.rewardAmount,
                         nonce = job.nonce,
                         encryptedBlob = job.encryptedBlob
-                            ?: throw IllegalStateException("Missing encrypted relay payload for voice job ${job.jobId}")
+                            ?: throw IllegalStateException("Missing encrypted relay payload for voice job ${job.jobId}"),
+                        recipientName = job.recipientName,
+                        recipientPhoneNumber = job.recipientPhoneNumber,
+                        messageBody = job.messageBody,
+                        contextJson = job.contextJson
                     )
                 )
             } ?: continue
@@ -501,5 +532,12 @@ class RewardsRepository(context: Context, private val db: AppDatabase) {
         val locationSnippet = if (shareLocation) " They shared their last known trail position." else ""
         val callbackSnippet = if (shareCallbackNumber && user.phoneNumber.isNotBlank()) " Their callback number is available if you want to reply." else ""
         return "$identity asked TrailKarma to relay this message: \"$messageBody\".$locationSnippet$callbackSnippet"
+    }
+
+    private fun normalizePhone(value: String): String {
+        val trimmed = value.trim()
+        if (trimmed.isBlank()) return ""
+        val digits = trimmed.filter { it.isDigit() }
+        return if (trimmed.startsWith("+")) "+$digits" else "+$digits"
     }
 }

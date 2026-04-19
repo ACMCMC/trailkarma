@@ -15,6 +15,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.navigation.compose.rememberNavController
 import fyi.acmc.trailkarma.ble.BleService
 import fyi.acmc.trailkarma.db.AppDatabase
+import fyi.acmc.trailkarma.demo.DemoDataSeeder
 import fyi.acmc.trailkarma.location.LocationService
 import fyi.acmc.trailkarma.repository.UserRepository
 import fyi.acmc.trailkarma.repository.DatabricksSyncRepository
@@ -117,7 +118,8 @@ class MainActivity : ComponentActivity() {
                 LaunchedEffect(Unit) {
                     val db = AppDatabase.get(applicationContext)
                     val repo = UserRepository(applicationContext, db.userDao())
-                    repo.ensureLocalUser()
+                    val user = repo.ensureLocalUser()
+                    DemoDataSeeder.seedIfNeeded(applicationContext, db, user)
                     startDest = Routes.MAP
                 }
 

@@ -249,6 +249,10 @@ app.post("/v1/voice-relay/jobs/open", async (req, res) => {
     rewardAmount: z.number().int().positive(),
     nonce: z.number().int().nonnegative(),
     encryptedBlob: z.string().min(32),
+    recipientName: z.string().min(1).optional(),
+    recipientPhoneNumber: z.string().min(6).optional(),
+    messageBody: z.string().min(1).optional(),
+    contextJson: z.string().min(2).optional(),
   });
 
   try {
