@@ -47,6 +47,7 @@ fun MapScreen(
     onNavigateToAbout: () -> Unit = {},
     onNavigateToSyncStatus: () -> Unit = {},
     onNavigateToContact: () -> Unit = {},
+    onNavigateToContactTracing: () -> Unit = {},
     vm: MapViewModel = viewModel()
 ) {
     val context = LocalContext.current
@@ -108,6 +109,16 @@ fun MapScreen(
                             scope.launch { drawerState.close() }
                         },
                         icon = { Icon(Icons.Default.Mail, contentDescription = "Contact") }
+                    )
+
+                    NavigationDrawerItem(
+                        label = { Text("Contact Tracing", style = MaterialTheme.typography.bodyMedium) },
+                        selected = false,
+                        onClick = {
+                            onNavigateToContactTracing()
+                            scope.launch { drawerState.close() }
+                        },
+                        icon = { Icon(Icons.Default.Share, contentDescription = "Contact Tracing") }
                     )
                 }
             }
@@ -261,10 +272,11 @@ fun MapScreen(
             }
         }
 
-        // Minimal flat buttons (bottom-right)
+        // Minimal flat buttons (top-right)
         Column(
             modifier = Modifier
-                .align(Alignment.BottomEnd)
+                .align(Alignment.TopEnd)
+                .padding(WindowInsets.systemBars.asPaddingValues())
                 .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
@@ -297,6 +309,7 @@ fun MapScreen(
             onSelectReport = { onNavigateToReportDetail(it.reportId) },
             modifier = Modifier.align(Alignment.BottomCenter)
         )
+        }
     }
 }
 

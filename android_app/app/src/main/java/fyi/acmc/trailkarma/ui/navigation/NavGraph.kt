@@ -16,18 +16,20 @@ import fyi.acmc.trailkarma.ui.report.ReportDetailScreen
 import fyi.acmc.trailkarma.ui.info.AboutScreen
 import fyi.acmc.trailkarma.ui.info.SyncStatusScreen
 import fyi.acmc.trailkarma.ui.info.ContactScreen
+import fyi.acmc.trailkarma.ui.info.ContactTracingScreen
 
 object Routes {
-    const val LOGIN         = "login"
-    const val MAP           = "map"
-    const val CAMERA        = "camera"
-    const val CREATE_REPORT = "create_report"
-    const val HISTORY       = "history"
-    const val BLE           = "ble"
-    const val REPORT_DETAIL = "report/{reportId}"
-    const val ABOUT         = "about"
-    const val SYNC_STATUS   = "sync_status"
-    const val CONTACT       = "contact"
+    const val LOGIN           = "login"
+    const val MAP             = "map"
+    const val CAMERA          = "camera"
+    const val CREATE_REPORT   = "create_report"
+    const val HISTORY         = "history"
+    const val BLE             = "ble"
+    const val REPORT_DETAIL   = "report/{reportId}"
+    const val ABOUT           = "about"
+    const val SYNC_STATUS     = "sync_status"
+    const val CONTACT         = "contact"
+    const val CONTACT_TRACING = "contact_tracing"
 
     fun reportDetail(reportId: String) = "report/$reportId"
 }
@@ -51,7 +53,8 @@ fun TrailKarmaNavGraph(navController: NavHostController, startDestination: Strin
                 },
                 onNavigateToAbout = { navController.navigate(Routes.ABOUT) },
                 onNavigateToSyncStatus = { navController.navigate(Routes.SYNC_STATUS) },
-                onNavigateToContact = { navController.navigate(Routes.CONTACT) }
+                onNavigateToContact = { navController.navigate(Routes.CONTACT) },
+                onNavigateToContactTracing = { navController.navigate(Routes.CONTACT_TRACING) }
             )
         }
         composable(Routes.CAMERA) {
@@ -80,6 +83,9 @@ fun TrailKarmaNavGraph(navController: NavHostController, startDestination: Strin
         }
         composable(Routes.CONTACT) {
             ContactScreen(onBack = { navController.popBackStack() })
+        }
+        composable(Routes.CONTACT_TRACING) {
+            ContactTracingScreen(onBack = { navController.popBackStack() })
         }
     }
 }

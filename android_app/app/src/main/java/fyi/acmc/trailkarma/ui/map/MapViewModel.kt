@@ -45,8 +45,8 @@ class MapViewModel(app: Application) : AndroidViewModel(app) {
                         e.printStackTrace()
                     }
                 }
-                // Poll every 15 seconds for near real-time updates
-                kotlinx.coroutines.delay(15_000)
+                // Poll every second when online
+                kotlinx.coroutines.delay(1_000)
             }
         }
     }
