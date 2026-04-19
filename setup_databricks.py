@@ -3,8 +3,82 @@
 
 import os
 import uuid
+import json
+import math
+import glob
 import requests
 from datetime import datetime, timedelta
+
+
+PCT_GEOJSON = os.path.join(os.path.dirname(__file__), "data", "Southern_California.geojson")
+
+
+def _haversine_miles(coords):
+    """Approximate total length of a LineString in miles."""
+    total = 0.0
+    for i in range(len(coords) - 1):
+        lng1, lat1 = coords[i][0], coords[i][1]
+        lng2, lat2 = coords[i+1][0], coords[i+1][1]
+        dlat = math.radians(lat2 - lat1)
+        dlng = math.radians(lng2 - lng1)
+        a = math.sin(dlat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlng/2)**2
+        total += 3958.8 * 2 * math.asin(math.sqrt(a))
+    return round(total, 2)
+
+
+def _simplify_coords(coords, tolerance=0.005):
+    """Reduce coordinate count to keep geometry size manageable."""
+    if len(coords) <= 2:
+        return coords
+    result = [coords[0]]
+    for pt in coords[1:-1]:
+        if abs(pt[0] - result[-1][0]) >= tolerance or abs(pt[1] - result[-1][1]) >= tolerance:
+            result.append(pt)
+    result.append(coords[-1])
+    return result
+
+
+def load_pct_trail_statements(full_schema, now):
+    """Read Southern California GeoJSON and return (trail_inserts, first_trail_id)."""
+    statements = []
+    first_trail_id = None
+
+    try:
+        with open(PCT_GEOJSON, encoding="utf-8") as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        print(f"  ⚠️  PCT GeoJSON not found at {PCT_GEOJSON}, using mock trail")
+        return [], None
+
+    sections = {}
+    for feat in data.get("features", []):
+        props = feat.get("properties", {})
+        section_name = props.get("Section_Name", "Unknown")
+        region = props.get("Region", "Southern California")
+        coords = feat.get("geometry", {}).get("coordinates", [])
+        if not coords:
+            continue
+        if section_name not in sections:
+            sections[section_name] = {"region": region, "coords": []}
+        sections[section_name]["coords"].extend(coords)
+
+    for section_name, data in sorted(sections.items()):
+        trail_id = str(uuid.uuid4())
+        if first_trail_id is None:
+            first_trail_id = trail_id
+        coords = _simplify_coords(data["coords"])
+        length_miles = _haversine_miles(coords)
+        geom = json.dumps({"type": "LineString", "coordinates": coords}).replace("'", "\\'")
+        desc = f"PCT {section_name} through {data['region']}".replace("'", "\\'")
+        statements.append(
+            f"INSERT INTO {full_schema}.trails VALUES ("
+            f"'{trail_id}', '{section_name}', '{desc}', "
+            f"{length_miles}, '{data['region']}', '{geom}', "
+            f"current_timestamp(), current_timestamp())"
+        )
+
+    print(f"  ✓ Loaded {len(sections)} PCT sections from GeoJSON")
+    return statements, first_trail_id
 
 def load_env():
     config = {}
@@ -174,10 +248,17 @@ def main():
     ]
 
     # PUT IN ALL THE DATA SO WE START FRESH
-    
-    # Trails
-    mock_geojson = '{"type": "LineString", "coordinates": [[-117.24, 32.88], [-117.23, 32.89]]}'
-    sql_statements.append(f"INSERT INTO {full_schema}.trails VALUES ('{pct_trail_id}', 'Pacific Crest Trail', 'A long-distance hiking and equestrian trail closely aligned with the highest portion of the Cascade and Sierra Nevada mountain ranges.', 2650.0, 'West Coast USA', '{mock_geojson}', current_timestamp(), current_timestamp())")
+
+    # Trails — load real PCT Southern California sections
+    trail_statements, first_trail_id = load_pct_trail_statements(full_schema, now)
+    if trail_statements:
+        sql_statements.extend(trail_statements)
+        pct_trail_id = first_trail_id  # use real trail id for FK references
+    else:
+        # fallback mock if GeoJSON not found
+        mock_geojson = '{"type": "LineString", "coordinates": [[-117.24, 32.88], [-117.23, 32.89]]}'
+        sql_statements.append(f"INSERT INTO {full_schema}.trails VALUES ('{pct_trail_id}', 'Pacific Crest Trail - Mock', 'Mock trail data', 2650.0, 'Southern California', '{mock_geojson}', current_timestamp(), current_timestamp())")
+
     sql_statements.append(f"INSERT INTO {full_schema}.trail_waypoints VALUES ('{str(uuid.uuid4())}', '{pct_trail_id}', 'Southern Terminus', 'trailhead', 32.5896, -116.4669, 'The official start of the PCT at the US-Mexico border.', current_timestamp(), current_timestamp())")
     
     for user_id, name, wallet, karma, trail_id in users:
