@@ -23,6 +23,7 @@ import fyi.acmc.trailkarma.ui.feedback.TrailFeedbackBus
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import android.util.Log
 import java.time.Instant
 import java.util.UUID
 
@@ -63,6 +64,8 @@ class CreateReportViewModel(app: Application) : AndroidViewModel(app) {
                 val user = userRepo.ensureLocalUser()
                 val reportId = UUID.randomUUID().toString()
 
+                val now = Instant.now().toString()
+                Log.d("CreateReport", "💾 Saving report locally: $reportId - $title")
                 repo.save(
                     TrailReport(
                         reportId = reportId,
@@ -72,11 +75,13 @@ class CreateReportViewModel(app: Application) : AndroidViewModel(app) {
                         description = description,
                         lat = loc?.latitude ?: 0.0,
                         lng = loc?.longitude ?: 0.0,
-                        timestamp = Instant.now().toString(),
+                        timestamp = now,
                         speciesName = speciesName,
-                        source = ReportSource.self
+                        source = ReportSource.self,
+                        lastUpdatedAt = now
                     )
                 )
+                Log.d("CreateReport", "✓ Report saved locally")
 
                 if (networkUtil.isOnlineNow()) {
                     operation.value = OperationUiState(
@@ -92,7 +97,11 @@ class CreateReportViewModel(app: Application) : AndroidViewModel(app) {
                     )
 
                     if (syncRepo.isConfigured()) {
-                        syncRepo.syncReports()
+                        Log.d("CreateReport", "🔄 Syncing report to Databricks...")
+                        val syncSuccess = syncRepo.syncReports()
+                        Log.d("CreateReport", if (syncSuccess) "✓ Sync successful" else "✗ Sync failed")
+                    } else {
+                        Log.w("CreateReport", "⚠ Databricks not configured, skipping sync")
                     }
 
                     rewardsRepo.syncCurrentUserRegistration()
