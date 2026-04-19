@@ -17,6 +17,7 @@ import fyi.acmc.trailkarma.models.RelayPacket
 import kotlinx.coroutines.flow.Flow
 import java.time.Instant
 import java.util.UUID
+import kotlin.math.absoluteValue
 
 data class RelayableBiodiversityPayload(
     val observation_id: String,
@@ -111,6 +112,7 @@ class BiodiversityRepository(
                 }
             )
         )
+        autoVerifyCollectibleCandidate(observationId)
     }
 
     suspend fun attachLocalPhoto(observationId: String, photoPath: String) {
@@ -262,5 +264,91 @@ class BiodiversityRepository(
                 )
             )
         }
+    }
+
+    suspend fun autoVerifyCollectibleCandidate(observationId: String) {
+        val item = contributionDao.getByObservationId(observationId) ?: return
+        if (!item.safeForRewarding) return
+
+        val verifiedAt = item.verifiedAt ?: Instant.now().toString()
+        val verificationTxSignature = item.verificationTxSignature
+            ?: "demo-verify-${observationId.take(8)}"
+
+        if (item.finalTaxonomicLevel == "species" && !item.finalLabel.isNullOrBlank()) {
+            val normalizedLabel = item.finalLabel.trim()
+            val existing = contributionDao.findVerifiedSpeciesCollectibleByLabel(normalizedLabel, observationId)
+            if (existing == null) {
+                markCollectibleVerified(
+                    observationId = observationId,
+                    collectibleId = item.collectibleId ?: "species:${slugify(normalizedLabel)}",
+                    collectibleName = item.collectibleName ?: normalizedLabel,
+                    verificationTxSignature = verificationTxSignature,
+                    collectibleImageUri = item.collectibleImageUri ?: buildCollectibleGradient(normalizedLabel),
+                    verifiedAt = verifiedAt
+                )
+            } else {
+                contributionDao.update(
+                    item.copy(
+                        verificationStatus = "verified",
+                        karmaStatus = KarmaStatus.awarded,
+                        verificationTxSignature = verificationTxSignature,
+                        verifiedAt = verifiedAt,
+                        collectibleStatus = "duplicate_species",
+                        collectibleId = existing.collectibleId,
+                        collectibleName = existing.collectibleName ?: normalizedLabel,
+                        collectibleImageUri = existing.collectibleImageUri
+                    )
+                )
+                karmaEventDao.findByObservationId(observationId)?.let { event ->
+                    karmaEventDao.insert(
+                        event.copy(
+                            status = "verified",
+                            collectibleStatus = "duplicate_species",
+                            collectibleId = existing.collectibleId,
+                            verificationTxSignature = verificationTxSignature,
+                            verifiedAt = verifiedAt,
+                            synced = false
+                        )
+                    )
+                }
+            }
+            return
+        }
+
+        contributionDao.update(
+            item.copy(
+                verificationStatus = "verified",
+                karmaStatus = KarmaStatus.awarded,
+                verificationTxSignature = verificationTxSignature,
+                verifiedAt = verifiedAt,
+                collectibleStatus = if (item.collectibleStatus == "not_eligible") "not_eligible" else "verified_no_collectible"
+            )
+        )
+        karmaEventDao.findByObservationId(observationId)?.let { event ->
+            karmaEventDao.insert(
+                event.copy(
+                    status = "verified",
+                    collectibleStatus = "verified_no_collectible",
+                    verificationTxSignature = verificationTxSignature,
+                    verifiedAt = verifiedAt,
+                    synced = false
+                )
+            )
+        }
+    }
+
+    private fun slugify(value: String): String =
+        value.trim()
+            .lowercase()
+            .replace(Regex("[^a-z0-9]+"), "-")
+            .trim('-')
+            .ifBlank { UUID.randomUUID().toString() }
+
+    private fun buildCollectibleGradient(label: String): String {
+        val hash = label.hashCode().absoluteValue
+        val hue = (hash % 360).toFloat()
+        val accent = android.graphics.Color.HSVToColor(floatArrayOf(hue, 0.52f, 0.88f))
+        val accentSoft = android.graphics.Color.HSVToColor(floatArrayOf((hue + 26f) % 360f, 0.38f, 0.96f))
+        return "gradient:${String.format("#%06X", 0xFFFFFF and accent)}:${String.format("#%06X", 0xFFFFFF and accentSoft)}"
     }
 }

@@ -486,6 +486,7 @@ private fun contributionOperationState(item: BiodiversityContribution): Operatio
             detail = collectibleLabel(item),
             state = when (item.collectibleStatus) {
                 "verified" -> OperationStepState.Complete
+                "duplicate_species", "verified_no_collectible" -> OperationStepState.Complete
                 "pending_verification" -> OperationStepState.Active
                 "not_eligible" -> OperationStepState.Pending
                 else -> OperationStepState.Pending
@@ -502,12 +503,14 @@ private fun contributionOperationState(item: BiodiversityContribution): Operatio
         message = when {
             errored -> "Some parts of the biodiversity workflow need attention."
             item.collectibleStatus == "verified" -> "This observation is verified and collectible-backed."
+            item.collectibleStatus == "duplicate_species" -> "This species was verified again, but its collectible was already discovered."
+            item.collectibleStatus == "verified_no_collectible" -> "This observation was verified, but it did not unlock a unique species card."
             active -> "This contribution is moving through classification, sync, and verification."
             else -> "The record is waiting on the next user action or sync window."
         },
         tone = when {
             errored -> OperationStateTone.Error
-            item.collectibleStatus == "verified" -> OperationStateTone.Success
+            item.collectibleStatus in setOf("verified", "duplicate_species", "verified_no_collectible") -> OperationStateTone.Success
             else -> OperationStateTone.Working
         },
         progress = completed / steps.size.toFloat(),
@@ -517,6 +520,8 @@ private fun contributionOperationState(item: BiodiversityContribution): Operatio
 
 private fun collectibleLabel(item: BiodiversityContribution): String = when (item.collectibleStatus) {
     "verified" -> item.collectibleName ?: "Collectible verified"
+    "duplicate_species" -> "${item.collectibleName ?: item.finalLabel ?: "Species"} already collected"
+    "verified_no_collectible" -> "Verified contribution without a new species card"
     "pending_verification" -> "Collectible pending verification"
     "not_eligible" -> "Not currently reward-eligible"
     else -> "No collectible yet"
@@ -524,6 +529,7 @@ private fun collectibleLabel(item: BiodiversityContribution): String = when (ite
 
 private fun collectibleAccent(item: BiodiversityContribution): Color = when (item.collectibleStatus) {
     "verified" -> RewardsPalette.Gold
+    "duplicate_species", "verified_no_collectible" -> RewardsPalette.Forest
     "pending_verification" -> RewardsPalette.Moss
     "not_eligible" -> RewardsPalette.Stone
     else -> RewardsPalette.Sky

@@ -112,6 +112,10 @@ class ReportHistoryViewModel(app: Application) : AndroidViewModel(app) {
             if (item.photoUri != null) add("photo" to Color(0xFF6A1B9A))
             if (item.karmaStatus.name == "pending") add("karma pending" to Color(0xFF8E24AA))
             if (item.collectibleStatus == "verified") add("collectible" to Color(0xFFE7A64F))
+            if (item.collectibleStatus == "duplicate_species") add("species already collected" to Color(0xFF2E7D32))
+            if (item.verificationStatus == "verified" && item.collectibleStatus == "verified_no_collectible") {
+                add("verified" to Color(0xFF2E7D32))
+            }
             if (item.lat == null || item.lon == null) add("location missing" to Color(0xFFC62828))
             add(item.dataShareStatus.replace('_', ' ') to Color(0xFF546E7A))
         }

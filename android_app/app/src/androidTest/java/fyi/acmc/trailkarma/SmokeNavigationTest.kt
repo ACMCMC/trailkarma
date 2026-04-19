@@ -18,6 +18,8 @@ class SmokeNavigationTest {
     val permissionRule: GrantPermissionRule = GrantPermissionRule.grant(
         Manifest.permission.ACCESS_FINE_LOCATION,
         Manifest.permission.ACCESS_COARSE_LOCATION,
+        Manifest.permission.RECORD_AUDIO,
+        Manifest.permission.CAMERA,
         Manifest.permission.BLUETOOTH_SCAN,
         Manifest.permission.BLUETOOTH_ADVERTISE,
         Manifest.permission.BLUETOOTH_CONNECT
@@ -40,7 +42,7 @@ class SmokeNavigationTest {
         composeRule.onNodeWithContentDescription("Menu").performClick()
         composeRule.onNodeWithText("Profile").performClick()
         waitForText("Profile")
-        waitForText("Trail identity")
+        waitForText("Biodiversity ledger")
         goBack()
 
         waitForText("Menu")

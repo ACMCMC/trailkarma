@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Celebration
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Forest
 import androidx.compose.material.icons.filled.LocalActivity
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Route
 import androidx.compose.material.icons.filled.Schedule
@@ -90,6 +91,7 @@ import fyi.acmc.trailkarma.api.BadgeStatusResponse
 import fyi.acmc.trailkarma.api.RewardActivityItemResponse
 import fyi.acmc.trailkarma.api.WalletStateResponse
 import fyi.acmc.trailkarma.db.AppDatabase
+import fyi.acmc.trailkarma.models.BiodiversityContribution
 import fyi.acmc.trailkarma.models.RelayJobIntent
 import fyi.acmc.trailkarma.models.TrailReport
 import fyi.acmc.trailkarma.repository.RewardsRepository
@@ -97,6 +99,19 @@ import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import kotlin.math.absoluteValue
+
+data class SpeciesCollectibleCardUi(
+    val id: String,
+    val label: String,
+    val description: String,
+    val confidenceBand: String,
+    val collectibleStatus: String,
+    val collectibleId: String?,
+    val accentHex: String,
+    val discoveredAt: String,
+    val owned: Boolean
+)
 
 class RewardsViewModel(app: Application) : AndroidViewModel(app) {
     private val db = AppDatabase.get(app)
@@ -104,6 +119,7 @@ class RewardsViewModel(app: Application) : AndroidViewModel(app) {
 
     val reports = db.trailReportDao().getAll()
     val relayJobs = db.relayJobIntentDao().getAll()
+    val biodiversity = db.biodiversityContributionDao().getSaved()
 
     private val _wallet = kotlinx.coroutines.flow.MutableStateFlow<WalletStateResponse?>(null)
     val wallet = _wallet
@@ -189,12 +205,18 @@ fun RewardsScreen(
     val loading by vm.loading.collectAsState()
     val reports by vm.reports.collectAsState(initial = emptyList())
     val relayJobs by vm.relayJobs.collectAsState(initial = emptyList())
+    val biodiversity by vm.biodiversity.collectAsState(initial = emptyList())
     val message by vm.message.collectAsState()
     val celebrationBadge by vm.celebrationBadge.collectAsState()
     val snackbars = remember { SnackbarHostState() }
+    val speciesCollectibles = remember(biodiversity) { buildSpeciesCollectibles(biodiversity) }
+    val timelineItems = remember(activity, reports, relayJobs, biodiversity) {
+        if (activity.isNotEmpty()) activity else buildLocalRewardActivity(reports, relayJobs, biodiversity)
+    }
 
     var tipDialogOpen by remember { mutableStateOf(false) }
     var selectedBadge by remember { mutableStateOf<BadgeStatusResponse?>(null) }
+    var selectedSpeciesCollectible by remember { mutableStateOf<SpeciesCollectibleCardUi?>(null) }
 
     LaunchedEffect(message) {
         message?.let {
@@ -260,7 +282,9 @@ fun RewardsScreen(
                             wallet = wallet,
                             loading = loading,
                             localReports = reports,
-                            relayJobs = relayJobs
+                            relayJobs = relayJobs,
+                            biodiversity = biodiversity,
+                            speciesCollectibles = speciesCollectibles
                         )
                     }
 
@@ -274,12 +298,12 @@ fun RewardsScreen(
 
                     item {
                         SectionHeader(
-                            title = "Collectibles",
-                            subtitle = "Each achievement is minted on Devnet and tied to real trail help."
+                            title = "Rewards gallery",
+                            subtitle = "Achievement mints and verified species cards live together here for the demo."
                         )
                     }
 
-                    if (wallet?.badgeDetails.isNullOrEmpty()) {
+                    if (wallet?.badgeDetails.isNullOrEmpty() && speciesCollectibles.isEmpty()) {
                         item {
                             RewardEmptyState(
                                 title = "Your first collectible is close",
@@ -287,13 +311,40 @@ fun RewardsScreen(
                             )
                         }
                     } else {
-                        item {
-                            LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                                items(wallet?.badgeDetails.orEmpty(), key = { it.code }) { badge ->
-                                    CollectibleBadgeCard(
-                                        badge = badge,
-                                        onClick = { selectedBadge = badge }
-                                    )
+                        if (!wallet?.badgeDetails.isNullOrEmpty()) {
+                            item {
+                                GallerySubheader(
+                                    title = "Achievement mints",
+                                    subtitle = "Fixed Devnet rewards for trail milestones."
+                                )
+                            }
+                            item {
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                                    items(wallet?.badgeDetails.orEmpty(), key = { it.code }) { badge ->
+                                        CollectibleBadgeCard(
+                                            badge = badge,
+                                            onClick = { selectedBadge = badge }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        if (speciesCollectibles.isNotEmpty()) {
+                            item {
+                                GallerySubheader(
+                                    title = "Species field guide",
+                                    subtitle = "Each newly verified species unlocks a unique collectible card."
+                                )
+                            }
+                            item {
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                                    items(speciesCollectibles, key = { it.id }) { collectible ->
+                                        SpeciesCollectibleCard(
+                                            collectible = collectible,
+                                            onClick = { selectedSpeciesCollectible = collectible }
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -310,7 +361,9 @@ fun RewardsScreen(
                         ProgressOverview(
                             wallet = wallet,
                             reports = reports,
-                            relayJobs = relayJobs
+                            relayJobs = relayJobs,
+                            biodiversity = biodiversity,
+                            speciesCollectibles = speciesCollectibles
                         )
                     }
 
@@ -321,7 +374,7 @@ fun RewardsScreen(
                         )
                     }
 
-                    if (activity.isEmpty()) {
+                    if (timelineItems.isEmpty()) {
                         item {
                             RewardEmptyState(
                                 title = "No reward activity yet",
@@ -329,7 +382,7 @@ fun RewardsScreen(
                             )
                         }
                     } else {
-                        items(activity, key = { it.id }) { item ->
+                        items(timelineItems, key = { it.id }) { item ->
                             RewardActivityRow(item = item)
                         }
                     }
@@ -361,6 +414,13 @@ fun RewardsScreen(
             onDismiss = { selectedBadge = null }
         )
     }
+
+    if (selectedSpeciesCollectible != null) {
+        SpeciesCollectibleSpotlightDialog(
+            collectible = selectedSpeciesCollectible!!,
+            onDismiss = { selectedSpeciesCollectible = null }
+        )
+    }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -369,11 +429,19 @@ private fun RewardsHeroCard(
     wallet: WalletStateResponse?,
     loading: Boolean,
     localReports: List<TrailReport>,
-    relayJobs: List<RelayJobIntent>
+    relayJobs: List<RelayJobIntent>,
+    biodiversity: List<BiodiversityContribution>,
+    speciesCollectibles: List<SpeciesCollectibleCardUi>
 ) {
-    val badgeCount = wallet?.rewardStats?.badgeCount ?: wallet?.badgeDetails?.count { it.earned } ?: 0
-    val verifiedCount = wallet?.rewardStats?.verifiedContributionCount ?: localReports.count { it.rewardClaimed }
+    val onChainBadgeCount = wallet?.rewardStats?.badgeCount ?: wallet?.badgeDetails?.count { it.earned } ?: 0
+    val localOwnedSpeciesCount = speciesCollectibles.count { it.owned }
+    val badgeCount = if (onChainBadgeCount > 0) onChainBadgeCount + localOwnedSpeciesCount else localOwnedSpeciesCount
+    val localVerifiedCount = localReports.count { it.rewardClaimed } + biodiversity.count { it.verificationStatus == "verified" }
+    val verifiedCount = maxOf(wallet?.rewardStats?.verifiedContributionCount ?: 0, localVerifiedCount)
     val openRelayCount = relayJobs.count { it.status == "open" || it.status == "pending" }
+    val walletBalance = wallet?.karmaBalance?.toIntOrNull() ?: 0
+    val localEstimatedKarma = estimateLocalKarma(localReports, relayJobs, biodiversity)
+    val displayedKarma = if (walletBalance > 0 || localEstimatedKarma == 0) wallet?.karmaBalance ?: "0" else localEstimatedKarma.toString()
 
     Card(
         shape = RoundedCornerShape(28.dp),
@@ -462,7 +530,7 @@ private fun RewardsHeroCard(
                             )
                         } else {
                             Text(
-                                wallet?.karmaBalance ?: "0",
+                                displayedKarma,
                                 style = MaterialTheme.typography.displayLarge,
                                 color = Color.White
                             )
@@ -492,7 +560,7 @@ private fun RewardsHeroCard(
                     )
                     RewardChip(
                         icon = Icons.Default.Forest,
-                        label = "${wallet?.rewardStats?.speciesCount ?: 0} biodiversity reports"
+                        label = "${maxOf(wallet?.rewardStats?.speciesCount ?: 0, biodiversity.count { it.savedLocally })} biodiversity reports"
                     )
                     RewardChip(
                         icon = Icons.Default.Shield,
@@ -621,6 +689,18 @@ private fun SectionHeader(title: String, subtitle: String) {
 }
 
 @Composable
+private fun GallerySubheader(title: String, subtitle: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(title, style = MaterialTheme.typography.titleMedium)
+        Text(
+            subtitle,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
 private fun CollectibleBadgeCard(
     badge: BadgeStatusResponse,
     onClick: () -> Unit
@@ -718,17 +798,119 @@ private fun CollectibleBadgeCard(
 }
 
 @Composable
+private fun SpeciesCollectibleCard(
+    collectible: SpeciesCollectibleCardUi,
+    onClick: () -> Unit
+) {
+    val accent = colorFromHex(collectible.accentHex)
+    val background = if (collectible.owned) {
+        Brush.linearGradient(
+            colors = listOf(accent.copy(alpha = 0.92f), accent.copy(alpha = 0.62f), RewardsPalette.Card)
+        )
+    } else {
+        Brush.linearGradient(
+            colors = listOf(Color(0xFFE8F0E7), Color(0xFFD6E4D3))
+        )
+    }
+
+    Card(
+        modifier = Modifier
+            .width(242.dp)
+            .height(200.dp)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(28.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        border = BorderStroke(1.dp, accent.copy(alpha = if (collectible.owned) 0.35f else 0.18f))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(background)
+                .padding(18.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(999.dp),
+                    color = if (collectible.owned) Color.White.copy(alpha = 0.22f) else Color.White.copy(alpha = 0.72f)
+                ) {
+                    Text(
+                        text = "SPECIES",
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (collectible.owned) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                Text(
+                    if (collectible.owned) "VERIFIED" else "PENDING",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (collectible.owned) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(
+                    imageVector = Icons.Default.Mic,
+                    contentDescription = null,
+                    tint = if (collectible.owned) Color.White else accent,
+                    modifier = Modifier.size(32.dp)
+                )
+                Text(
+                    collectible.label,
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = if (collectible.owned) Color.White else MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    collectible.description,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (collectible.owned) Color.White.copy(alpha = 0.86f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                LinearProgressIndicator(
+                    progress = { if (collectible.owned) 1f else 0.55f },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(7.dp)
+                        .clip(RoundedCornerShape(999.dp)),
+                    color = if (collectible.owned) Color.White else accent,
+                    trackColor = Color.White.copy(alpha = if (collectible.owned) 0.22f else 0.52f)
+                )
+                Text(
+                    if (collectible.owned) "First verified recording archived" else "Queued for collectible verification",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (collectible.owned) Color.White.copy(alpha = 0.88f) else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun ProgressOverview(
     wallet: WalletStateResponse?,
     reports: List<TrailReport>,
-    relayJobs: List<RelayJobIntent>
+    relayJobs: List<RelayJobIntent>,
+    biodiversity: List<BiodiversityContribution>,
+    speciesCollectibles: List<SpeciesCollectibleCardUi>
 ) {
     val stats = wallet?.rewardStats
+    val localCollectibleCount = speciesCollectibles.count { it.owned } + (wallet?.badgeDetails?.count { it.earned } ?: 0)
+    val displayedCollectibleCount = maxOf(stats?.badgeCount ?: 0, localCollectibleCount)
+    val biodiversityVerifiedCount = biodiversity.count { it.verificationStatus == "verified" }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             ProgressMetricCard(
                 title = "Verified actions",
-                value = "${stats?.verifiedContributionCount ?: reports.count { it.rewardClaimed }}",
+                value = "${maxOf(stats?.verifiedContributionCount ?: 0, reports.count { it.rewardClaimed } + biodiversityVerifiedCount)}",
                 subtitle = "Real contributions settled into KARMA",
                 accent = RewardsPalette.Forest,
                 modifier = Modifier.weight(1f)
@@ -751,8 +933,8 @@ private fun ProgressOverview(
             )
             ProgressMetricCard(
                 title = "Collectibles owned",
-                value = "${stats?.badgeCount ?: wallet?.badgeDetails?.count { it.earned } ?: 0}",
-                subtitle = "Non-transferable trail achievements",
+                value = "$displayedCollectibleCount",
+                subtitle = "Badges plus verified species field-guide cards",
                 accent = RewardsPalette.Clay,
                 modifier = Modifier.weight(1f)
             )
@@ -1054,6 +1236,151 @@ private fun badgeProgress(badge: BadgeStatusResponse): Float {
     return (badge.currentCount.toFloat() / badge.targetCount.toFloat()).coerceIn(0f, 1f)
 }
 
+private fun buildSpeciesCollectibles(contributions: List<BiodiversityContribution>): List<SpeciesCollectibleCardUi> {
+    val verified = contributions
+        .filter {
+            it.finalTaxonomicLevel == "species" &&
+                !it.finalLabel.isNullOrBlank() &&
+                it.collectibleStatus == "verified"
+        }
+        .sortedByDescending { it.verifiedAt ?: it.createdAt }
+        .distinctBy { it.finalLabel!!.trim().lowercase() }
+        .map { item ->
+            SpeciesCollectibleCardUi(
+                id = item.collectibleId ?: item.observationId,
+                label = item.collectibleName ?: item.finalLabel!!,
+                description = item.explanation ?: "Verified species discovery added to your field guide.",
+                confidenceBand = item.confidenceBand ?: "verified",
+                collectibleStatus = item.collectibleStatus,
+                collectibleId = item.collectibleId,
+                accentHex = extractCollectibleAccent(item),
+                discoveredAt = item.verifiedAt ?: item.createdAt,
+                owned = true
+            )
+        }
+
+    val verifiedLabels = verified.map { it.label.trim().lowercase() }.toSet()
+    val pending = contributions
+        .filter {
+            it.finalTaxonomicLevel == "species" &&
+                !it.finalLabel.isNullOrBlank() &&
+                it.collectibleStatus == "pending_verification" &&
+                it.finalLabel!!.trim().lowercase() !in verifiedLabels
+        }
+        .sortedByDescending { it.createdAt }
+        .distinctBy { it.finalLabel!!.trim().lowercase() }
+        .map { item ->
+            SpeciesCollectibleCardUi(
+                id = "pending:${item.observationId}",
+                label = item.collectibleName ?: item.finalLabel!!,
+                description = item.explanation ?: "Awaiting verification for a first-species collectible.",
+                confidenceBand = item.confidenceBand ?: "pending",
+                collectibleStatus = item.collectibleStatus,
+                collectibleId = item.collectibleId,
+                accentHex = extractCollectibleAccent(item),
+                discoveredAt = item.createdAt,
+                owned = false
+            )
+        }
+
+    return verified + pending
+}
+
+private fun extractCollectibleAccent(item: BiodiversityContribution): String {
+    val gradientPrefix = "gradient:"
+    val encoded = item.collectibleImageUri
+    if (encoded?.startsWith(gradientPrefix) == true) {
+        return encoded.removePrefix(gradientPrefix).substringBefore(':')
+    }
+    val hash = (item.collectibleName ?: item.finalLabel ?: item.id).hashCode().absoluteValue
+    val hue = (hash % 360).toFloat()
+    val accent = android.graphics.Color.HSVToColor(floatArrayOf(hue, 0.48f, 0.88f))
+    return String.format("#%06X", 0xFFFFFF and accent)
+}
+
+private fun estimateLocalKarma(
+    reports: List<TrailReport>,
+    relayJobs: List<RelayJobIntent>,
+    biodiversity: List<BiodiversityContribution>
+): Int {
+    val reportKarma = reports.sumOf { report ->
+        if (!report.rewardClaimed) return@sumOf 0
+        when (report.type) {
+            fyi.acmc.trailkarma.models.ReportType.hazard -> 10
+            fyi.acmc.trailkarma.models.ReportType.water -> 10
+            fyi.acmc.trailkarma.models.ReportType.species -> if (report.highConfidenceBonus) 13 else 8
+        }
+    }
+    val relayKarma = relayJobs.count { it.status == "fulfilled" } * 12
+    val biodiversityKarma = biodiversity.count { it.verificationStatus == "verified" } * 8
+    return reportKarma + relayKarma + biodiversityKarma
+}
+
+private fun buildLocalRewardActivity(
+    reports: List<TrailReport>,
+    relayJobs: List<RelayJobIntent>,
+    biodiversity: List<BiodiversityContribution>
+): List<RewardActivityItemResponse> {
+    val reportItems = reports
+        .filter { it.rewardClaimed }
+        .map {
+            RewardActivityItemResponse(
+                id = "local-report-${it.reportId}",
+                kind = "contribution_reward",
+                title = "${it.title} rewarded",
+                subtitle = "Demo-ready local claim preview",
+                occurredAt = it.timestamp,
+                karmaDelta = when (it.type) {
+                    fyi.acmc.trailkarma.models.ReportType.hazard -> 10
+                    fyi.acmc.trailkarma.models.ReportType.water -> 10
+                    fyi.acmc.trailkarma.models.ReportType.species -> if (it.highConfidenceBonus) 13 else 8
+                },
+                txSignature = it.rewardTxSignature,
+                status = "local_demo"
+            )
+        }
+
+    val speciesItems = biodiversity
+        .filter { it.verificationStatus == "verified" }
+        .map {
+            RewardActivityItemResponse(
+                id = "local-bio-${it.observationId}",
+                kind = if (it.collectibleStatus == "verified") "badge_earned" else "contribution_reward",
+                title = if (it.collectibleStatus == "verified") {
+                    "${it.collectibleName ?: it.finalLabel} collected"
+                } else {
+                    "${it.finalLabel ?: "Species"} verified"
+                },
+                subtitle = if (it.collectibleStatus == "verified") {
+                    "New species card added to your rewards gallery"
+                } else {
+                    "Verified biodiversity contribution"
+                },
+                occurredAt = it.verifiedAt ?: it.createdAt,
+                karmaDelta = 8,
+                txSignature = it.verificationTxSignature,
+                status = "local_demo"
+            )
+        }
+
+    val relayItems = relayJobs
+        .filter { it.status == "fulfilled" }
+        .map {
+            RewardActivityItemResponse(
+                id = "local-relay-${it.jobId}",
+                kind = "relay_reward",
+                title = "Relay mission fulfilled",
+                subtitle = it.transcriptSummary ?: "A delayed trail message was delivered successfully.",
+                occurredAt = it.createdAt,
+                karmaDelta = 12,
+                txSignature = it.fulfilledTxSignature,
+                status = "local_demo"
+            )
+        }
+
+    return (reportItems + speciesItems + relayItems).sortedByDescending { it.occurredAt }.take(12)
+}
+
 private fun activityIcon(kind: String): ImageVector = when (kind) {
     "contribution_reward" -> Icons.Default.TipsAndUpdates
     "relay_reward" -> Icons.AutoMirrored.Filled.BluetoothSearching
@@ -1069,6 +1396,83 @@ private fun badgeIcon(code: String): ImageVector = when (code) {
     "water_guardian" -> Icons.Default.WaterDrop
     "hazard_herald" -> Icons.Default.Shield
     else -> Icons.Default.AutoAwesome
+}
+
+@Composable
+private fun SpeciesCollectibleSpotlightDialog(
+    collectible: SpeciesCollectibleCardUi,
+    onDismiss: () -> Unit
+) {
+    val accent = colorFromHex(collectible.accentHex)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            Button(onClick = onDismiss) {
+                Text(if (collectible.owned) "Back to gallery" else "Keep recording")
+            }
+        },
+        title = {
+            Text(
+                if (collectible.owned) "Species collectible earned" else "Species collectible preview",
+                style = MaterialTheme.typography.titleLarge
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(180.dp)
+                        .clip(RoundedCornerShape(26.dp))
+                        .background(
+                            Brush.linearGradient(
+                                colors = if (collectible.owned) {
+                                    listOf(accent, accent.copy(alpha = 0.74f), RewardsPalette.Ink)
+                                } else {
+                                    listOf(Color(0xFFE7F2E6), Color(0xFFD5E2D3))
+                                }
+                            )
+                        )
+                        .border(
+                            width = 1.dp,
+                            color = accent.copy(alpha = 0.28f),
+                            shape = RoundedCornerShape(26.dp)
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Icon(
+                            Icons.Default.Mic,
+                            contentDescription = null,
+                            tint = if (collectible.owned) Color.White else accent,
+                            modifier = Modifier.size(42.dp)
+                        )
+                        Text(
+                            collectible.label,
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = if (collectible.owned) Color.White else MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            if (collectible.owned) "Verified ${formatTimestamp(collectible.discoveredAt)}" else "Waiting on verification",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (collectible.owned) Color.White.copy(alpha = 0.84f) else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                Text(collectible.description, style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    if (collectible.owned) {
+                        "Collectible ID: ${collectible.collectibleId ?: collectible.id}"
+                    } else {
+                        "Confidence band: ${collectible.confidenceBand}"
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    )
 }
 
 private fun colorFromHex(value: String): Color =

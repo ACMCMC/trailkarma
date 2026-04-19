@@ -94,6 +94,27 @@ interface BiodiversityContributionDao {
 
     @Query("SELECT * FROM biodiversity_contributions WHERE photoUri IS NOT NULL AND photoSyncState IN ('LOCAL_ONLY', 'FAILED') AND finalLabel IS NOT NULL")
     suspend fun getPendingPhotoUploads(): List<BiodiversityContribution>
+
+    @Query("""
+        SELECT * FROM biodiversity_contributions
+        WHERE finalTaxonomicLevel = 'species'
+          AND verificationStatus = 'verified'
+          AND collectibleStatus = 'verified'
+        ORDER BY verifiedAt DESC, createdAt DESC
+    """)
+    suspend fun getVerifiedSpeciesCollectibles(): List<BiodiversityContribution>
+
+    @Query("""
+        SELECT * FROM biodiversity_contributions
+        WHERE finalTaxonomicLevel = 'species'
+          AND finalLabel = :label
+          AND verificationStatus = 'verified'
+          AND collectibleStatus = 'verified'
+          AND observationId != :observationId
+        ORDER BY verifiedAt DESC, createdAt DESC
+        LIMIT 1
+    """)
+    suspend fun findVerifiedSpeciesCollectibleByLabel(label: String, observationId: String): BiodiversityContribution?
 }
 
 @Dao

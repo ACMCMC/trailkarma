@@ -92,9 +92,13 @@ class ProfileViewModel(app: Application) : AndroidViewModel(app) {
             db.biodiversityContributionDao().getSaved().collectLatest { contributions ->
                 _biodiversityStats.value = BiodiversityProfileStats(
                     savedCount = contributions.size,
-                    verifiedCount = contributions.count { it.collectibleStatus == "verified" },
+                    verifiedCount = contributions.count { it.verificationStatus == "verified" },
                     pendingCollectibles = contributions.count { it.collectibleStatus == "pending_verification" },
-                    distinctLabels = contributions.mapNotNull { it.finalLabel }.distinct().size
+                    distinctLabels = contributions
+                        .filter { it.collectibleStatus == "verified" }
+                        .mapNotNull { it.collectibleName ?: it.finalLabel }
+                        .distinct()
+                        .size
                 )
             }
         }
