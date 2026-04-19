@@ -7,6 +7,7 @@ import json
 import math
 import csv
 import requests
+import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, UTC
 
 try:
@@ -31,6 +32,7 @@ def iso_z(dt):
     return dt.isoformat().replace("+00:00", "Z")
 
 PCT_GEOJSON = os.path.join(os.path.dirname(__file__), "data", "Southern_California.geojson")
+LIBRARY_WALK_GPX = os.path.join(os.path.dirname(__file__), "data", "library_walk.gpx")
 SPECIES_CSV = os.path.join(os.path.dirname(__file__), "data", "observations-712152.csv")
 
 SOCAL_LAT_MIN, SOCAL_LAT_MAX = 32.0, 35.0
@@ -108,6 +110,48 @@ def load_pct_trail_statements(full_schema, now):
 
     print(f"  ✓ Loaded {len(sections)} PCT sections from GeoJSON with H3 spatial indexing")
     return statements, first_trail_id
+
+def load_gpx_trail_statements(full_schema, gpx_path, trail_name, region, description=None):
+    """Read GPX file and return INSERT statements for the trails table."""
+    statements = []
+    trail_id = str(uuid.uuid4())
+    
+    try:
+        tree = ET.parse(gpx_path)
+        root = tree.getroot()
+        # GPX namespace
+        ns = {'gpx': 'http://www.topografix.com/GPX/1/1'}
+        
+        coords = []
+        for trkpt in root.findall('.//gpx:trkpt', ns):
+            lat = float(trkpt.get('lat'))
+            lon = float(trkpt.get('lon'))
+            coords.append([lon, lat])
+            
+        if not coords:
+            print(f"  ⚠️  No coordinates found in GPX {gpx_path}")
+            return []
+
+        coords = _simplify_coords(coords, tolerance=0.0001)
+        length_miles = _haversine_miles(coords)
+        geom = json.dumps({"type": "LineString", "coordinates": coords}).replace("'", "\\'")
+        desc = (description or f"Trail recording: {trail_name}").replace("'", "\\'")
+
+        # Compute H3 cells for all trail coordinates
+        h3_cells = [latlng_to_h3(lat, lng) for lng, lat in coords]
+        h3_cells_json = json.dumps(list(set(h3_cells)))
+
+        statements.append(
+            f"INSERT INTO {full_schema}.trails VALUES ("
+            f"'{trail_id}', '{trail_name}', '{desc}', "
+            f"{length_miles}, '{region}', '{geom}', '{h3_cells_json}', "
+            f"current_timestamp(), current_timestamp())"
+        )
+        print(f"  ✓ Loaded GPX trail {trail_name} from {os.path.basename(gpx_path)} with H3 spatial indexing")
+        return statements
+    except Exception as e:
+        print(f"  ⚠️  Failed to load GPX {gpx_path}: {e}")
+        return []
 
 def load_species_report_statements(full_schema):
     """Read iNaturalist CSV, filter to Southern California, return INSERT statements with H3 cells."""
@@ -352,6 +396,14 @@ def main():
         mock_geojson = '{"type": "LineString", "coordinates": [[-117.24, 32.88], [-117.23, 32.89]]}'
         mock_h3 = latlng_to_h3(32.88, -117.24)
         sql_statements.append(f"INSERT INTO {full_schema}.trails VALUES ('{pct_trail_id}', 'Pacific Crest Trail - Mock', 'Mock trail data', 2650.0, 'Southern California', '{mock_geojson}', '{json.dumps([mock_h3])}', current_timestamp(), current_timestamp())")
+
+    # Library Walk GPX
+    library_walk_statements = load_gpx_trail_statements(
+        full_schema, LIBRARY_WALK_GPX, "Library Walk", "UCSD", 
+        description="A walk around UCSD through the heart of campus."
+    )
+    if library_walk_statements:
+        sql_statements.extend(library_walk_statements)
 
     sql_statements.append(f"INSERT INTO {full_schema}.trail_waypoints VALUES ('{str(uuid.uuid4())}', '{pct_trail_id}', 'Southern Terminus', 'trailhead', 32.5896, -116.4669, {sql_str(latlng_to_h3(32.5896, -116.4669))}, 'The official start of the PCT at the US-Mexico border.', current_timestamp(), current_timestamp())")
 

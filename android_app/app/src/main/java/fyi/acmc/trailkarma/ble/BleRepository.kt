@@ -5,6 +5,7 @@ import android.bluetooth.BluetoothManager
 import android.bluetooth.le.*
 import android.content.Context
 import android.os.ParcelUuid
+import android.util.Log
 import fyi.acmc.trailkarma.db.RelayInboxMessageDao
 import fyi.acmc.trailkarma.db.RelayJobIntentDao
 import fyi.acmc.trailkarma.db.RelayPacketDao
@@ -16,6 +17,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.util.UUID
+
+private const val TAG = "TrailKarma/BLE"
 
 // UUIDs defined in GattServer.kt — GATT_SERVICE_UUID is the scan filter anchor
 
@@ -69,9 +72,11 @@ class BleRepository(
      * Peers parse this to know "a TrailKarma hiker is nearby" and initiate a GATT sync.
      */
     fun startAdvertising(hikerId: String) {
+        Log.d(TAG, "startAdvertising: hikerId=$hikerId btAdapter=${btAdapter != null}")
         advertiser = btAdapter?.bluetoothLeAdvertiser
         if (advertiser == null) {
-            log("BLE advertising not supported on this device")
+            val msg = "BLE advertising not supported on this device (adapter=${btAdapter != null}, isEnabled=${btAdapter?.isEnabled})"
+            log(msg); Log.w(TAG, msg)
             return
         }
 
@@ -79,6 +84,7 @@ class BleRepository(
         val payload = ByteArray(1 + hikerIdBytes.size)
         payload[0] = PAYLOAD_VERSION
         hikerIdBytes.forEachIndexed { i, b -> payload[1 + i] = b }
+        Log.d(TAG, "advertising payload: version=${payload[0]}, hikerId bytes=${hikerIdBytes.size}")
 
         val settings = AdvertiseSettings.Builder()
             .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
@@ -95,10 +101,20 @@ class BleRepository(
 
         advertiseCallback = object : AdvertiseCallback() {
             override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
-                log("Beacon active — broadcasting as hiker: $hikerId")
+                val msg = "Beacon active — broadcasting as hiker: $hikerId"
+                log(msg); Log.i(TAG, msg)
             }
             override fun onStartFailure(errorCode: Int) {
-                log("Advertising failed: error $errorCode")
+                val reason = when (errorCode) {
+                    ADVERTISE_FAILED_ALREADY_STARTED -> "already started"
+                    ADVERTISE_FAILED_DATA_TOO_LARGE  -> "data too large"
+                    ADVERTISE_FAILED_FEATURE_UNSUPPORTED -> "feature unsupported"
+                    ADVERTISE_FAILED_INTERNAL_ERROR  -> "internal error"
+                    ADVERTISE_FAILED_TOO_MANY_ADVERTISERS -> "too many advertisers"
+                    else -> "unknown ($errorCode)"
+                }
+                val msg = "Advertising failed: $reason"
+                log(msg); Log.e(TAG, msg)
             }
         }
         advertiser?.startAdvertising(settings, data, advertiseCallback)
@@ -106,7 +122,7 @@ class BleRepository(
 
     fun stopAdvertising() {
         advertiseCallback?.let { advertiser?.stopAdvertising(it) }
-        log("Advertising stopped")
+        log("Advertising stopped"); Log.d(TAG, "Advertising stopped")
     }
 
     // ── Scanning ──────────────────────────────────────────────────────────────
@@ -119,9 +135,11 @@ class BleRepository(
      *   3. If not yet synced this session → initiate GATT client sync
      */
     fun startScan() {
+        Log.d(TAG, "startScan: btAdapter=${btAdapter != null}, isEnabled=${btAdapter?.isEnabled}")
         scanner = btAdapter?.bluetoothLeScanner
         if (scanner == null) {
-            log("BLE scanning not supported")
+            val msg = "BLE scanning not supported (adapter=${btAdapter != null}, isEnabled=${btAdapter?.isEnabled})"
+            log(msg); Log.w(TAG, msg)
             return
         }
 
@@ -132,15 +150,16 @@ class BleRepository(
                 val rssi     = result.rssi
                 val rawData  = result.scanRecord?.serviceData?.get(ParcelUuid(GATT_SERVICE_UUID))
 
+                Log.d(TAG, "onScanResult: address=$address rssi=$rssi hasServiceData=${rawData != null} serviceDataLen=${rawData?.size ?: 0}")
                 nearbyDevices.value = nearbyDevices.value + address
 
                 if (rawData != null && rawData.isNotEmpty()) {
-                    val version  = rawData[0]
-                    val hikerId  = if (rawData.size > 1) String(rawData.copyOfRange(1, rawData.size), Charsets.UTF_8) else "unknown"
+                    val version = rawData[0]
+                    val hikerId = if (rawData.size > 1) String(rawData.copyOfRange(1, rawData.size), Charsets.UTF_8) else "unknown"
 
-                    log("📡 Hiker found: $hikerId @ $address (RSSI: $rssi dBm)")
+                    val msg = "📡 Hiker found: $hikerId @ $address (RSSI: $rssi dBm)"
+                    log(msg); Log.i(TAG, msg)
 
-                    // Log encounter
                     scope.launch {
                         val packetId = UUID.nameUUIDFromBytes(
                             (address + Instant.now().epochSecond / 60).toByteArray()
@@ -157,15 +176,30 @@ class BleRepository(
                         )
                     }
 
-                    // Initiate GATT sync if we haven't spoken to this device yet this session
                     if (address !in syncedDevices) {
                         syncedDevices.add(address)
-                        log("🔗 Initiating report sync with $hikerId ($address)…")
+                        val msg2 = "🔗 Initiating report sync with $hikerId ($address)…"
+                        log(msg2); Log.i(TAG, msg2)
                         gattClient.syncWithPeer(device)
+                    } else {
+                        Log.d(TAG, "Already synced with $address this session, skipping GATT connect")
                     }
                 } else {
-                    log("Found generic TrailKarma device: $address")
+                    val msg = "Found TrailKarma device $address with no service data (rawData=${rawData?.let { it.size.toString() + " bytes" } ?: "null"})"
+                    log(msg); Log.w(TAG, msg)
                 }
+            }
+
+            override fun onScanFailed(errorCode: Int) {
+                val reason = when (errorCode) {
+                    SCAN_FAILED_ALREADY_STARTED          -> "already started"
+                    SCAN_FAILED_APPLICATION_REGISTRATION_FAILED -> "app registration failed"
+                    SCAN_FAILED_FEATURE_UNSUPPORTED      -> "feature unsupported"
+                    SCAN_FAILED_INTERNAL_ERROR           -> "internal error"
+                    else -> "unknown ($errorCode)"
+                }
+                val msg = "BLE scan failed: $reason"
+                log(msg); Log.e(TAG, msg)
             }
         }
 
@@ -176,18 +210,20 @@ class BleRepository(
             .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
             .build()
         scanner?.startScan(listOf(filter), settings, scanCallback!!)
-        log("Scanning for nearby hikers…")
+        val msg = "Scanning for nearby hikers… (filter UUID: $GATT_SERVICE_UUID)"
+        log(msg); Log.i(TAG, msg)
     }
 
     fun stopScan() {
         scanCallback?.let { scanner?.stopScan(it) }
         syncedDevices.clear()
-        log("Scan stopped")
+        log("Scan stopped"); Log.d(TAG, "Scan stopped")
     }
 
     // ── Logging ───────────────────────────────────────────────────────────────
 
     private fun log(msg: String) {
+        Log.d(TAG, msg)
         eventLog.value = (listOf(msg) + eventLog.value).take(100)
     }
 }

@@ -32,6 +32,7 @@ class NetworkUtil(context: Context) {
         override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
             Log.d("NetworkUtil", "Network capabilities changed")
             _isOnline.value = networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                    && networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
             _networkChanged.value = true
         }
     }
@@ -44,6 +45,7 @@ class NetworkUtil(context: Context) {
         val network = connectivityManager.activeNetwork ?: return false
         val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
         return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                && capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
     }
 
     fun updateNetworkStatus() {

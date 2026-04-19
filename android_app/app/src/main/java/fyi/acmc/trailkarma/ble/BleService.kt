@@ -5,6 +5,7 @@ import android.app.*
 import android.content.Context
 import android.content.Intent
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import fyi.acmc.trailkarma.db.AppDatabase
 import fyi.acmc.trailkarma.repository.UserRepository
@@ -14,6 +15,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+
+private const val TAG = "TrailKarma/BleService"
 
 private const val CHANNEL_ID = "ble_channel"
 private const val NOTIFICATION_ID = 2
@@ -36,6 +39,7 @@ class BleService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        Log.i(TAG, "BleService onCreate")
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, buildNotification())
 
@@ -43,6 +47,7 @@ class BleService : Service() {
             val db = AppDatabase.get(applicationContext)
             val userRepo = UserRepository(applicationContext, db.userDao())
             val userId = userRepo.currentUserId.first() ?: "unknown"
+            Log.i(TAG, "BLE stack starting for userId=$userId")
 
             bleRepo = BleRepository(
                 applicationContext,
@@ -53,22 +58,21 @@ class BleService : Service() {
             )
             gattServer = GattServer(applicationContext, db.trailReportDao(), db.relayPacketDao())
 
-            // Start GATT server so peers can connect and pull our report manifest
             gattServer.start()
-
-            // Advertise our hiker beacon (userId is trimmed to fit 20-byte limit)
             bleRepo.startAdvertising(userId)
-
-            // Scan for nearby hikers; GattClient connections are initiated from within
-            // BleRepository when it detects a new peer beacon.
             bleRepo.startScan()
+
+            Log.i(TAG, "BLE stack fully started — advertising + scanning + GATT server running")
         }
     }
 
     override fun onDestroy() {
-        bleRepo.stopScan()
-        bleRepo.stopAdvertising()
-        gattServer.stop()
+        Log.i(TAG, "BleService onDestroy")
+        if (::bleRepo.isInitialized) {
+            bleRepo.stopScan()
+            bleRepo.stopAdvertising()
+        }
+        if (::gattServer.isInitialized) gattServer.stop()
         serviceScope.cancel()
         super.onDestroy()
     }

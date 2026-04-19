@@ -6,6 +6,7 @@ import fyi.acmc.trailkarma.db.AppDatabase
 import fyi.acmc.trailkarma.repository.DatabricksSyncRepository
 import fyi.acmc.trailkarma.repository.RewardsRepository
 import kotlinx.coroutines.CancellationException
+import java.io.IOException
 
 class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
@@ -34,8 +35,11 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         } catch (e: CancellationException) {
             android.util.Log.w("SyncWorker", "Sync cancelled, will retry", e)
             Result.retry()
+        } catch (e: IOException) {
+            android.util.Log.w("SyncWorker", "Sync skipped — no internet connection, will retry when online")
+            Result.retry()
         } catch (e: Exception) {
-            android.util.Log.e("SyncWorker", "Sync failed", e)
+            android.util.Log.w("SyncWorker", "Sync failed, will retry", e)
             Result.retry()
         }
     }
