@@ -8,9 +8,26 @@ import java.util.UUID
 data class User(
     @PrimaryKey val userId: String,
     val displayName: String,
+    val realName: String? = null,
+    val phoneNumber: String = "",
+    val defaultRelayPhoneNumber: String = "",
+    val shareLocationByDefault: Boolean = true,
+    val shareRealNameByDefault: Boolean = false,
+    val shareCallbackNumberByDefault: Boolean = true,
     val walletPublicKey: String = "",
     val solanaRegistered: Boolean = false,
     val lastWalletSyncAt: String? = null
+)
+
+@Entity(tableName = "trusted_contacts")
+data class TrustedContact(
+    @PrimaryKey val contactId: String = UUID.randomUUID().toString(),
+    val userId: String,
+    val displayName: String,
+    val phoneNumber: String,
+    val relationshipLabel: String? = null,
+    val isDefault: Boolean = false,
+    val createdAt: String
 )
 
 @Entity(tableName = "location_updates")
@@ -68,8 +85,14 @@ data class RelayJobIntent(
     @PrimaryKey val jobId: String,
     val userId: String,
     val senderWallet: String,
+    val relayType: String = "voice_outbound",
+    val recipientName: String = "",
+    val recipientPhoneNumber: String = "",
     val destinationHash: String,
     val payloadHash: String,
+    val messageBody: String = "",
+    val contextSummary: String = "",
+    val contextJson: String = "{}",
     val expiryTs: Long,
     val rewardAmount: Int,
     val nonce: Long,
@@ -80,8 +103,27 @@ data class RelayJobIntent(
     val proofRef: String? = null,
     val openedTxSignature: String? = null,
     val fulfilledTxSignature: String? = null,
+    val callSid: String? = null,
+    val conversationId: String? = null,
+    val transcriptSummary: String? = null,
+    val replyJobId: String? = null,
     val createdAt: String,
     val synced: Boolean = false
+)
+
+@Entity(tableName = "relay_inbox_messages")
+data class RelayInboxMessage(
+    @PrimaryKey val replyId: String,
+    val originalJobId: String,
+    val userId: String,
+    val senderLabel: String,
+    val senderPhoneNumber: String,
+    val messageSummary: String,
+    val messageBody: String,
+    val contextJson: String = "{}",
+    val createdAt: String,
+    val status: String = "pending",
+    val acknowledged: Boolean = false
 )
 
 @Entity(tableName = "trails")

@@ -18,3 +18,5 @@ Contributors should preserve these constraints:
 - do not require users to acquire SOL
 - keep relay/message jobs as signed offline intents that are opened or fulfilled on-chain later
 - treat backend attestations as the bridge from real-world events to on-chain settlement
+- treat the current ElevenLabs voice relay as the preferred delayed-message transport instead of SMS
+- keep voice delivery hybrid: offline intent locally, carrier sync over BLE, outbound call/reply capture in the backend, settlement on-chain

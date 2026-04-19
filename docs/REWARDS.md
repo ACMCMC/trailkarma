@@ -128,6 +128,10 @@ Backend responsibilities:
 - claim contribution rewards
 - open relay jobs from signed offline intents
 - fulfill relay jobs
+- bootstrap and configure the ElevenLabs voice relay agent plus imported phone number
+- initiate outbound relay calls through ElevenLabs/Twilio
+- poll conversation state and turn successful calls into on-chain relay fulfillment
+- capture recipient replies into the relay inbox for later delivery
 - prepare and submit sponsored KARMA tips
 - maintain a local SQLite audit trail
 
@@ -153,16 +157,73 @@ Important Android files:
 Current Android behavior:
 
 - creates a local app-managed Solana wallet per user
+- creates a richer local hiker profile with trail name, callback number, and trusted contacts
 - registers that wallet with the backend
 - stores wallet registration status locally
 - claims rewards for local reports once the phone is online
 - creates offline relay intents and signs them locally
-- opens relay jobs on-chain once the phone regains connectivity
+- stores voice relay intents as generic relay packets so nearby hikers can carry them over BLE
+- opens relay jobs on-chain once the phone regains connectivity or a carrier hiker syncs them
 - fulfills relay jobs through the backend
 - exposes a dedicated `Rewards` destination from the map drawer and rewards teaser card
 - renders a premium rewards dashboard with KARMA balance, collectible gallery, progress cards, and reward activity feed
 - supports user-facing KARMA tipping from the rewards screen
-- shows redesigned relay mission and report-ledger surfaces that match the rewards system
+- shows redesigned relay mission, profile, and report-ledger surfaces that match the rewards system
+
+## Voice Relay Extension
+
+This branch now extends the original relay concept from delayed SMS into an ElevenLabs-backed outbound calling flow.
+
+Current design:
+
+- the sender still creates a signed offline relay intent locally on Android
+- that intent is stored in Room and also wrapped as a generic `RelayPacket`
+- BLE GATT now syncs both trail reports and relay packets between phones
+- a carrier phone that receives the packet can materialize the same relay intent locally
+- when any carrier regains connectivity, the backend can:
+  - verify the sender wallet mapping
+  - open the relay job on-chain using the original sender signature
+  - use the ElevenLabs agent plus imported Twilio number to place the call
+  - poll the conversation record later
+  - mark the relay fulfilled on-chain for the carrier if the call was meaningfully completed
+  - store any recipient reply in the relay inbox for the original hiker
+
+Important backend files for voice relay:
+
+- [backend/src/voiceRelay.ts](/Users/suraj/Desktop/dhacks/datahacks26/backend/src/voiceRelay.ts)
+- [backend/src/server.ts](/Users/suraj/Desktop/dhacks/datahacks26/backend/src/server.ts)
+- [backend/src/db.ts](/Users/suraj/Desktop/dhacks/datahacks26/backend/src/db.ts)
+
+Important Android files for voice relay and mesh carriage:
+
+- [android_app/app/src/main/java/fyi/acmc/trailkarma/ui/ble/BleScreen.kt](/Users/suraj/Desktop/dhacks/datahacks26/android_app/app/src/main/java/fyi/acmc/trailkarma/ui/ble/BleScreen.kt)
+- [android_app/app/src/main/java/fyi/acmc/trailkarma/ble/GattClient.kt](/Users/suraj/Desktop/dhacks/datahacks26/android_app/app/src/main/java/fyi/acmc/trailkarma/ble/GattClient.kt)
+- [android_app/app/src/main/java/fyi/acmc/trailkarma/ble/GattServer.kt](/Users/suraj/Desktop/dhacks/datahacks26/android_app/app/src/main/java/fyi/acmc/trailkarma/ble/GattServer.kt)
+- [android_app/app/src/main/java/fyi/acmc/trailkarma/repository/RewardsRepository.kt](/Users/suraj/Desktop/dhacks/datahacks26/android_app/app/src/main/java/fyi/acmc/trailkarma/repository/RewardsRepository.kt)
+
+Current voice relay API surface:
+
+- `POST /v1/profile/upsert`
+- `GET /v1/profile/:appUserId`
+- `POST /v1/voice-relay/jobs/open`
+- `GET /v1/voice-relay/jobs/:appUserId`
+- `GET /v1/voice-relay/inbox/:appUserId`
+- `POST /v1/voice-relay/inbox/:replyId/ack`
+
+Runtime status validated on this branch:
+
+- backend TypeScript compiles
+- backend process starts successfully after rebuilding `better-sqlite3` for the active Node ABI
+- Android Kotlin compiles with the new relay packet transport and profile UI
+- ElevenLabs agent configuration was updated successfully from the local backend environment
+- the imported Twilio number is assigned to the TrailKarma relay agent
+- a live outbound call request succeeded and returned a real `conversation_id` and `callSid`
+
+Known remaining caveats:
+
+- the full on-chain open path for a live call still depends on a real sender-side signature coming from the Android wallet
+- reply delivery is fully stored in the backend inbox, but generalized backend-to-carrier mesh redistribution of reply packets is not yet automated
+- physical multi-phone BLE testing is still needed for the end-to-end carrier flow
 
 ## Current GUI Status
 

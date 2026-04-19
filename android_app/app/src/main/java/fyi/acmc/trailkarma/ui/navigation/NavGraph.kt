@@ -17,6 +17,7 @@ import fyi.acmc.trailkarma.ui.info.AboutScreen
 import fyi.acmc.trailkarma.ui.info.SyncStatusScreen
 import fyi.acmc.trailkarma.ui.info.ContactScreen
 import fyi.acmc.trailkarma.ui.info.ContactTracingScreen
+import fyi.acmc.trailkarma.ui.profile.ProfileScreen
 import fyi.acmc.trailkarma.ui.rewards.RewardsScreen
 
 object Routes {
@@ -25,6 +26,7 @@ object Routes {
     const val CAMERA          = "camera"
     const val CREATE_REPORT   = "create_report"
     const val REWARDS         = "rewards"
+    const val PROFILE         = "profile"
     const val HISTORY         = "history"
     const val BLE             = "ble"
     const val REPORT_DETAIL   = "report/{reportId}"
@@ -54,6 +56,7 @@ fun TrailKarmaNavGraph(navController: NavHostController, startDestination: Strin
                     navController.navigate(Routes.reportDetail(reportId))
                 },
                 onNavigateToRewards = { navController.navigate(Routes.REWARDS) },
+                onNavigateToProfile = { navController.navigate(Routes.PROFILE) },
                 onNavigateToBle = { navController.navigate(Routes.BLE) },
                 onNavigateToHistory = { navController.navigate(Routes.HISTORY) },
                 onNavigateToAbout = { navController.navigate(Routes.ABOUT) },
@@ -67,6 +70,15 @@ fun TrailKarmaNavGraph(navController: NavHostController, startDestination: Strin
                 onBack = { navController.popBackStack() },
                 onOpenRelayMissions = { navController.navigate(Routes.BLE) },
                 onOpenHistory = { navController.navigate(Routes.HISTORY) }
+            )
+        }
+        composable(Routes.PROFILE) {
+            ProfileScreen(
+                onBack = { navController.popBackStack() },
+                onOpenAbout = { navController.navigate(Routes.ABOUT) },
+                onOpenSyncStatus = { navController.navigate(Routes.SYNC_STATUS) },
+                onOpenContact = { navController.navigate(Routes.CONTACT) },
+                onOpenTracing = { navController.navigate(Routes.CONTACT_TRACING) }
             )
         }
         composable(Routes.CAMERA) {

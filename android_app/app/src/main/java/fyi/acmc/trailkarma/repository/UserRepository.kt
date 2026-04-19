@@ -28,4 +28,11 @@ class UserRepository(private val context: Context, private val dao: UserDao) {
             else -> dao.getFirst()
         }
     }
+
+    suspend fun updateCurrentUser(transform: (User) -> User): User? {
+        val current = currentUser() ?: return null
+        val updated = transform(current)
+        saveUser(updated)
+        return updated
+    }
 }

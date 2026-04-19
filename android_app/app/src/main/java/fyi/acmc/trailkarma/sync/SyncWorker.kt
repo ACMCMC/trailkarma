@@ -27,6 +27,8 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
             rewardsRepo.syncCurrentUserRegistration()
             rewardsRepo.claimRewardsForPendingReports()
             rewardsRepo.openPendingRelayJobs()
+            rewardsRepo.openPendingVoiceRelayJobs()
+            rewardsRepo.syncRelayInbox()
             Result.success()
         } catch (e: CancellationException) {
             android.util.Log.w("SyncWorker", "Sync cancelled, will retry", e)

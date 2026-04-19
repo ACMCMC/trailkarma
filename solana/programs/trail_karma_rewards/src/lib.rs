@@ -104,6 +104,36 @@ pub mod trail_karma_rewards {
         Ok(())
     }
 
+    pub fn create_attested_relay_job(
+        ctx: Context<CreateAttestedRelayJob>,
+        args: CreateAttestedRelayJobArgs,
+    ) -> Result<()> {
+        let config = &ctx.accounts.config;
+        require_keys_eq!(ctx.accounts.attestor.key(), config.attestor, ErrorCode::UnauthorizedAttestor);
+
+        let now = Clock::get()?.unix_timestamp;
+        require!(args.expiry_ts > now, ErrorCode::RelayIntentExpired);
+        require!(
+            args.expiry_ts <= now + config.max_relay_expiry_secs,
+            ErrorCode::RelayIntentTooFarOut
+        );
+        require_eq!(args.reward_amount, config.reward_relay, ErrorCode::UnexpectedRelayReward);
+
+        let relay_job = &mut ctx.accounts.relay_job;
+        relay_job.job_id = args.job_id;
+        relay_job.sender = args.sender_wallet;
+        relay_job.destination_hash = args.destination_hash;
+        relay_job.payload_hash = args.payload_hash;
+        relay_job.expiry_ts = args.expiry_ts;
+        relay_job.reward_amount = args.reward_amount;
+        relay_job.status = RelayJobStatus::Open as u8;
+        relay_job.fulfiller = Pubkey::default();
+        relay_job.created_at = now;
+        relay_job.fulfilled_at = 0;
+        relay_job.bump = ctx.bumps.relay_job;
+        Ok(())
+    }
+
     pub fn fulfill_relay_job(
         ctx: Context<FulfillRelayJob>,
         args: FulfillRelayJobArgs,
@@ -483,6 +513,24 @@ pub struct CreateRelayJobFromIntent<'info> {
 }
 
 #[derive(Accounts)]
+#[instruction(args: CreateAttestedRelayJobArgs)]
+pub struct CreateAttestedRelayJob<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    pub attestor: Signer<'info>,
+    pub config: Account<'info, Config>,
+    #[account(
+        init,
+        payer = payer,
+        space = 8 + RelayJob::INIT_SPACE,
+        seeds = [b"relay_job", args.job_id.as_ref()],
+        bump
+    )]
+    pub relay_job: Account<'info, RelayJob>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
 #[instruction(args: FulfillRelayJobArgs)]
 pub struct FulfillRelayJob<'info> {
     #[account(mut)]
@@ -669,6 +717,16 @@ pub struct CreateRelayJobArgs {
     pub reward_amount: u64,
     pub nonce: u64,
     pub signed_message: Vec<u8>,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy)]
+pub struct CreateAttestedRelayJobArgs {
+    pub job_id: [u8; 32],
+    pub sender_wallet: Pubkey,
+    pub destination_hash: [u8; 32],
+    pub payload_hash: [u8; 32],
+    pub expiry_ts: i64,
+    pub reward_amount: u64,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy)]

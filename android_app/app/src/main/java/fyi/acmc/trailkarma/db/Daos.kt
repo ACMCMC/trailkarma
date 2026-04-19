@@ -20,6 +20,21 @@ interface UserDao {
 }
 
 @Dao
+interface TrustedContactDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(contact: TrustedContact)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(contacts: List<TrustedContact>)
+
+    @Query("SELECT * FROM trusted_contacts WHERE userId = :userId ORDER BY isDefault DESC, displayName ASC")
+    fun getForUser(userId: String): Flow<List<TrustedContact>>
+
+    @Query("DELETE FROM trusted_contacts WHERE userId = :userId")
+    suspend fun deleteForUser(userId: String)
+}
+
+@Dao
 interface TrailReportDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(report: TrailReport)
@@ -89,6 +104,9 @@ interface RelayPacketDao {
 
     @Query("SELECT COUNT(*) FROM relay_packets WHERE packetId = :id")
     suspend fun exists(id: String): Int
+
+    @Query("SELECT * FROM relay_packets WHERE packetId = :id LIMIT 1")
+    suspend fun getById(id: String): RelayPacket?
 }
 
 @Dao
@@ -102,11 +120,44 @@ interface RelayJobIntentDao {
     @Query("SELECT * FROM relay_job_intents WHERE source = 'self' AND status = 'pending'")
     suspend fun getPendingToOpen(): List<RelayJobIntent>
 
+    @Query("SELECT * FROM relay_job_intents WHERE relayType IN ('voice_outbound', 'voice_reply') AND status NOT IN ('fulfilled', 'failed') ORDER BY createdAt ASC")
+    suspend fun getVoiceJobsToSync(): List<RelayJobIntent>
+
     @Query("UPDATE relay_job_intents SET status = :status, openedTxSignature = :txSignature, synced = 1 WHERE jobId = :jobId")
     suspend fun markOpened(jobId: String, status: String, txSignature: String)
 
     @Query("UPDATE relay_job_intents SET status = 'fulfilled', fulfilledTxSignature = :txSignature, proofRef = :proofRef, synced = 1 WHERE jobId = :jobId")
     suspend fun markFulfilled(jobId: String, proofRef: String, txSignature: String)
+
+    @Query("UPDATE relay_job_intents SET status = :status, openedTxSignature = :openedTxSignature, fulfilledTxSignature = :fulfilledTxSignature, callSid = :callSid, conversationId = :conversationId, transcriptSummary = :transcriptSummary, replyJobId = :replyJobId, synced = 1 WHERE jobId = :jobId")
+    suspend fun updateVoiceRelayStatus(
+        jobId: String,
+        status: String,
+        openedTxSignature: String?,
+        fulfilledTxSignature: String?,
+        callSid: String?,
+        conversationId: String?,
+        transcriptSummary: String?,
+        replyJobId: String?
+    )
+}
+
+@Dao
+interface RelayInboxMessageDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(message: RelayInboxMessage)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(messages: List<RelayInboxMessage>)
+
+    @Query("SELECT * FROM relay_inbox_messages WHERE userId = :userId ORDER BY createdAt DESC")
+    fun getForUser(userId: String): Flow<List<RelayInboxMessage>>
+
+    @Query("SELECT * FROM relay_inbox_messages WHERE userId = :userId AND acknowledged = 0 ORDER BY createdAt ASC")
+    suspend fun getPendingAcknowledgements(userId: String): List<RelayInboxMessage>
+
+    @Query("UPDATE relay_inbox_messages SET acknowledged = 1, status = 'delivered' WHERE replyId = :replyId")
+    suspend fun markAcknowledged(replyId: String)
 }
 
 @Dao

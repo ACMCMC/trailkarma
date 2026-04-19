@@ -5,6 +5,8 @@ import android.bluetooth.BluetoothManager
 import android.bluetooth.le.*
 import android.content.Context
 import android.os.ParcelUuid
+import fyi.acmc.trailkarma.db.RelayInboxMessageDao
+import fyi.acmc.trailkarma.db.RelayJobIntentDao
 import fyi.acmc.trailkarma.db.RelayPacketDao
 import fyi.acmc.trailkarma.db.TrailReportDao
 import fyi.acmc.trailkarma.models.RelayPacket
@@ -26,7 +28,9 @@ private const val MAX_HOP_BROADCAST = 5   // don't re-advertise relay packets be
 class BleRepository(
     private val context: Context,
     private val relayPacketDao: RelayPacketDao,
-    private val trailReportDao: TrailReportDao
+    private val trailReportDao: TrailReportDao,
+    private val relayJobIntentDao: RelayJobIntentDao,
+    private val relayInboxMessageDao: RelayInboxMessageDao
 ) {
     private val scope = CoroutineScope(Dispatchers.IO)
     private val btManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
@@ -45,7 +49,14 @@ class BleRepository(
     private val syncedDevices = mutableSetOf<String>()
 
     private val gattClient by lazy {
-        GattClient(context, trailReportDao, relayPacketDao, ::log)
+        GattClient(
+            context = context,
+            reportDao = trailReportDao,
+            relayPacketDao = relayPacketDao,
+            relayJobIntentDao = relayJobIntentDao,
+            relayInboxMessageDao = relayInboxMessageDao,
+            onLog = ::log
+        )
     }
 
     // ── Advertising ───────────────────────────────────────────────────────────

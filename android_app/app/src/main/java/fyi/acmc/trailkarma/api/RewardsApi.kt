@@ -20,6 +20,26 @@ data class RegisterUserRequest(
 )
 
 @JsonClass(generateAdapter = true)
+data class UpsertProfileRequest(
+    @Json(name = "appUserId") val appUserId: String,
+    @Json(name = "displayName") val displayName: String,
+    @Json(name = "walletPublicKey") val walletPublicKey: String,
+    @Json(name = "realName") val realName: String? = null,
+    @Json(name = "phoneNumber") val phoneNumber: String? = null,
+    @Json(name = "defaultRelayPhoneNumber") val defaultRelayPhoneNumber: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class UserProfileResponse(
+    @Json(name = "appUserId") val appUserId: String,
+    @Json(name = "displayName") val displayName: String,
+    @Json(name = "walletPublicKey") val walletPublicKey: String,
+    @Json(name = "realName") val realName: String? = null,
+    @Json(name = "phoneNumber") val phoneNumber: String? = null,
+    @Json(name = "defaultRelayPhoneNumber") val defaultRelayPhoneNumber: String? = null
+)
+
+@JsonClass(generateAdapter = true)
 data class WalletStateResponse(
     @Json(name = "appUserId") val appUserId: String,
     @Json(name = "displayName") val displayName: String,
@@ -121,6 +141,60 @@ data class FulfillRelayJobRequest(
 )
 
 @JsonClass(generateAdapter = true)
+data class OpenVoiceRelayJobRequest(
+    @Json(name = "appUserId") val appUserId: String,
+    @Json(name = "senderWalletPublicKey") val senderWalletPublicKey: String,
+    @Json(name = "signedMessageBase64") val signedMessageBase64: String,
+    @Json(name = "signatureBase64") val signatureBase64: String,
+    @Json(name = "jobIdHex") val jobIdHex: String,
+    @Json(name = "destinationHashHex") val destinationHashHex: String,
+    @Json(name = "payloadHashHex") val payloadHashHex: String,
+    @Json(name = "expiryTs") val expiryTs: Long,
+    @Json(name = "rewardAmount") val rewardAmount: Int,
+    val nonce: Long,
+    @Json(name = "recipientName") val recipientName: String,
+    @Json(name = "recipientPhoneNumber") val recipientPhoneNumber: String,
+    @Json(name = "messageBody") val messageBody: String,
+    @Json(name = "contextSummary") val contextSummary: String,
+    @Json(name = "contextJson") val contextJson: String
+)
+
+@JsonClass(generateAdapter = true)
+data class VoiceRelayJobResponse(
+    @Json(name = "jobId") val jobId: String,
+    val status: String,
+    @Json(name = "openedTxSignature") val openedTxSignature: String? = null,
+    @Json(name = "fulfilledTxSignature") val fulfilledTxSignature: String? = null,
+    @Json(name = "callSid") val callSid: String? = null,
+    @Json(name = "conversationId") val conversationId: String? = null,
+    @Json(name = "transcriptSummary") val transcriptSummary: String? = null,
+    @Json(name = "replyJobId") val replyJobId: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class VoiceRelayJobsResponse(
+    val items: List<VoiceRelayJobResponse> = emptyList()
+)
+
+@JsonClass(generateAdapter = true)
+data class RelayInboxItemResponse(
+    @Json(name = "replyId") val replyId: String,
+    @Json(name = "originalJobId") val originalJobId: String,
+    @Json(name = "senderLabel") val senderLabel: String,
+    @Json(name = "senderPhoneNumber") val senderPhoneNumber: String,
+    @Json(name = "messageSummary") val messageSummary: String,
+    @Json(name = "messageBody") val messageBody: String,
+    @Json(name = "contextJson") val contextJson: String = "{}",
+    @Json(name = "createdAt") val createdAt: String,
+    val status: String
+)
+
+@JsonClass(generateAdapter = true)
+data class RelayInboxResponse(
+    val items: List<RelayInboxItemResponse> = emptyList()
+)
+
+@JsonClass(generateAdapter = true)
 data class PrepareTipRequest(
     @Json(name = "appUserId") val appUserId: String,
     @Json(name = "recipientWallet") val recipientWallet: String,
@@ -152,6 +226,12 @@ interface RewardsApi {
     @POST("/v1/users/register")
     suspend fun registerUser(@Body body: RegisterUserRequest): Response<WalletStateResponse>
 
+    @POST("/v1/profile/upsert")
+    suspend fun upsertProfile(@Body body: UpsertProfileRequest): Response<UserProfileResponse>
+
+    @GET("/v1/profile/{appUserId}")
+    suspend fun getProfile(@Path("appUserId") appUserId: String): Response<UserProfileResponse>
+
     @GET("/v1/users/{appUserId}/wallet")
     suspend fun getWallet(@Path("appUserId") appUserId: String): Response<WalletStateResponse>
 
@@ -163,6 +243,18 @@ interface RewardsApi {
 
     @POST("/v1/relay-jobs/open")
     suspend fun openRelayJob(@Body body: OpenRelayJobRequest): Response<TxSignatureResponse>
+
+    @POST("/v1/voice-relay/jobs/open")
+    suspend fun openVoiceRelayJob(@Body body: OpenVoiceRelayJobRequest): Response<VoiceRelayJobResponse>
+
+    @GET("/v1/voice-relay/jobs/{appUserId}")
+    suspend fun getVoiceRelayJobs(@Path("appUserId") appUserId: String): Response<VoiceRelayJobsResponse>
+
+    @GET("/v1/voice-relay/inbox/{appUserId}")
+    suspend fun getRelayInbox(@Path("appUserId") appUserId: String): Response<RelayInboxResponse>
+
+    @POST("/v1/voice-relay/inbox/{replyId}/ack")
+    suspend fun acknowledgeRelayInbox(@Path("replyId") replyId: String): Response<TxSignatureResponse>
 
     @POST("/v1/relay-jobs/fulfill")
     suspend fun fulfillRelayJob(@Body body: FulfillRelayJobRequest): Response<TxSignatureResponse>

@@ -42,6 +42,7 @@ fun MapScreen(
     onNavigateToReport: () -> Unit = {},
     onNavigateToReportDetail: (String) -> Unit = {},
     onNavigateToRewards: () -> Unit = {},
+    onNavigateToProfile: () -> Unit = {},
     onNavigateToBle: () -> Unit = {},
     onNavigateToHistory: () -> Unit = {},
     onNavigateToAbout: () -> Unit = {},
@@ -104,6 +105,16 @@ fun MapScreen(
                     )
 
                     NavigationDrawerItem(
+                        label = { Text("Profile", style = MaterialTheme.typography.bodyMedium) },
+                        selected = false,
+                        onClick = {
+                            onNavigateToProfile()
+                            scope.launch { drawerState.close() }
+                        },
+                        icon = { Icon(Icons.Default.Person, contentDescription = "Profile") }
+                    )
+
+                    NavigationDrawerItem(
                         label = { Text("Report History", style = MaterialTheme.typography.bodyMedium) },
                         selected = false,
                         onClick = {
@@ -114,13 +125,13 @@ fun MapScreen(
                     )
 
                     NavigationDrawerItem(
-                        label = { Text("BLE Mesh", style = MaterialTheme.typography.bodyMedium) },
+                        label = { Text("Relay Hub", style = MaterialTheme.typography.bodyMedium) },
                         selected = false,
                         onClick = {
                             onNavigateToBle()
                             scope.launch { drawerState.close() }
                         },
-                        icon = { Icon(Icons.Default.Bluetooth, contentDescription = "BLE Mesh") }
+                        icon = { Icon(Icons.Default.Bluetooth, contentDescription = "Relay Hub") }
                     )
 
                     NavigationDrawerItem(

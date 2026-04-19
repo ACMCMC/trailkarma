@@ -1,61 +1,58 @@
 package fyi.acmc.trailkarma.ble
 
 import android.annotation.SuppressLint
-import android.bluetooth.*
+import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothGatt
+import android.bluetooth.BluetoothGattCallback
+import android.bluetooth.BluetoothGattCharacteristic
+import android.bluetooth.BluetoothGattDescriptor
+import android.bluetooth.BluetoothProfile
 import android.content.Context
-import android.util.Log
+import fyi.acmc.trailkarma.db.RelayInboxMessageDao
+import fyi.acmc.trailkarma.db.RelayJobIntentDao
 import fyi.acmc.trailkarma.db.RelayPacketDao
 import fyi.acmc.trailkarma.db.TrailReportDao
+import fyi.acmc.trailkarma.models.RelayInboxMessage
+import fyi.acmc.trailkarma.models.RelayJobIntent
 import fyi.acmc.trailkarma.models.RelayPacket
 import fyi.acmc.trailkarma.models.ReportSource
 import fyi.acmc.trailkarma.models.ReportType
 import fyi.acmc.trailkarma.models.TrailReport
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 import org.json.JSONObject
 import java.time.Instant
 import java.util.UUID
+import kotlin.coroutines.resume
 
-private const val TAG = "TrailKarma/GattClient"
 private const val CONNECT_TIMEOUT_MS = 15_000L
-private const val MAX_HOP_COUNT = 5 // stop re-advertising packets after this many hops
+private const val MAX_HOP_COUNT = 5
 
-/**
- * Initiated when BleRepository discovers a new peer beacon.
- *
- * Protocol:
- *   1. Connect to peer's GATT server
- *   2. Discover services
- *   3. READ MANIFEST_CHAR → get peer's list of report IDs
- *   4. Diff against local DB → find IDs we don't have
- *   5. For each missing ID: WRITE it to REPORT_CHAR → receive report JSON via NOTIFY
- *   6. INSERT received reports into local Room DB (INSERT OR IGNORE — additive model)
- *   7. Log the exchange as a RelayPacket
- *   8. Disconnect
- */
 @SuppressLint("MissingPermission")
 class GattClient(
     private val context: Context,
     private val reportDao: TrailReportDao,
     private val relayPacketDao: RelayPacketDao,
+    private val relayJobIntentDao: RelayJobIntentDao,
+    private val relayInboxMessageDao: RelayInboxMessageDao,
     private val onLog: (String) -> Unit
 ) {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
-    // Reassembly buffer: accumulates chunked notification frames for one report at a time
-    private val reassemblyBuffer = mutableMapOf<String, Array<ByteArray?>>()
-
-    // Deferred that resolves when manifest read completes
     private var manifestDeferred: CompletableDeferred<String?>? = null
-
-    // Queue of reportIds to request; each has its own deferred
-    private val pendingReports = ArrayDeque<Pair<String, CompletableDeferred<String?>>>()
-    private var activeReportDeferred: CompletableDeferred<String?>? = null
-
-    // Active reassembly state for the current notification stream
+    private var payloadDeferred: CompletableDeferred<String?>? = null
+    private var activeTransferUuid: UUID? = null
     private var reassemblyChunks: Array<ByteArray?>? = null
     private var reassemblyTotal: Int = 0
     private var reassemblyReceived: Int = 0
+    private var reportNotificationsReady = false
 
     fun syncWithPeer(device: BluetoothDevice) {
         scope.launch {
@@ -63,25 +60,22 @@ class GattClient(
                 withTimeout(CONNECT_TIMEOUT_MS) {
                     connectAndSync(device)
                 }
-            } catch (e: TimeoutCancellationException) {
-                onLog("BLE sync timed out with ${device.address}")
-            } catch (e: Exception) {
-                onLog("BLE sync error with ${device.address}: ${e.message}")
+            } catch (error: Exception) {
+                onLog("BLE sync error with ${device.address}: ${error.message}")
             }
         }
     }
 
-    private suspend fun connectAndSync(device: BluetoothDevice) = suspendCancellableCoroutine<Unit> { cont ->
+    private suspend fun connectAndSync(device: BluetoothDevice) = suspendCancellableCoroutine<Unit> { continuation ->
         var gatt: BluetoothGatt? = null
+        reportNotificationsReady = false
 
         val callback = object : BluetoothGattCallback() {
             override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
                 if (newState == BluetoothProfile.STATE_CONNECTED) {
-                    onLog("Connected to ${device.address}, discovering services…")
-                    g.requestMtu(517) // request maximum MTU
-                } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
-                    onLog("Disconnected from ${device.address}")
-                    if (cont.isActive) cont.resume(Unit) {}
+                    g.requestMtu(517)
+                } else if (newState == BluetoothProfile.STATE_DISCONNECTED && continuation.isActive) {
+                    continuation.resume(Unit)
                 }
             }
 
@@ -90,53 +84,60 @@ class GattClient(
             }
 
             override fun onServicesDiscovered(g: BluetoothGatt, status: Int) {
-                if (status != BluetoothGatt.GATT_SUCCESS) {
-                    onLog("Service discovery failed: $status")
+                val service = g.getService(GATT_SERVICE_UUID) ?: run {
                     g.disconnect()
                     return
                 }
-                val service = g.getService(GATT_SERVICE_UUID)
-                if (service == null) {
-                    onLog("${device.address} has no TrailKarma GATT service — skipping")
+                val reportChar = service.getCharacteristic(REPORT_CHAR_UUID)
+                val descriptor = reportChar?.getDescriptor(CCCD_UUID)
+                if (reportChar == null || descriptor == null) {
                     g.disconnect()
                     return
                 }
 
-                // Enable notifications on REPORT_CHAR before we start requesting reports
-                val reportChar = service.getCharacteristic(REPORT_CHAR_UUID)
-                val cccd = reportChar?.getDescriptor(CCCD_UUID)
-                if (cccd != null) {
-                    g.setCharacteristicNotification(reportChar, true)
-                    cccd.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-                    g.writeDescriptor(cccd)
-                } else {
-                    readManifest(g)
-                }
+                g.setCharacteristicNotification(reportChar, true)
+                descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+                g.writeDescriptor(descriptor)
             }
 
             override fun onDescriptorWrite(g: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {
-                // Notifications enabled — now read the manifest
-                readManifest(g)
+                if (!reportNotificationsReady && descriptor.characteristic.uuid == REPORT_CHAR_UUID) {
+                    reportNotificationsReady = true
+                    val packetChar = g.getService(GATT_SERVICE_UUID)?.getCharacteristic(PACKET_CHAR_UUID)
+                    val packetDescriptor = packetChar?.getDescriptor(CCCD_UUID)
+                    if (packetChar != null && packetDescriptor != null) {
+                        g.setCharacteristicNotification(packetChar, true)
+                        packetDescriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+                        g.writeDescriptor(packetDescriptor)
+                        return
+                    }
+                }
+
+                scope.launch {
+                    syncReports(g, device.address)
+                    syncPackets(g, device.address)
+                    g.disconnect()
+                }
             }
 
             override fun onCharacteristicRead(g: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) {
-                if (characteristic.uuid != MANIFEST_CHAR_UUID) return
-                val json = if (status == BluetoothGatt.GATT_SUCCESS)
+                val json = if (status == BluetoothGatt.GATT_SUCCESS) {
                     String(characteristic.value ?: ByteArray(0), Charsets.UTF_8)
-                else null
+                } else {
+                    null
+                }
                 manifestDeferred?.complete(json)
             }
 
             override fun onCharacteristicChanged(g: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
-                if (characteristic.uuid != REPORT_CHAR_UUID) return
+                if (characteristic.uuid != activeTransferUuid) return
                 val frame = characteristic.value ?: return
                 if (frame.size < 4) return
 
-                val seq   = (frame[0].toInt() and 0xFF shl 8) or (frame[1].toInt() and 0xFF)
-                val total = (frame[2].toInt() and 0xFF shl 8) or (frame[3].toInt() and 0xFF)
-                val data  = frame.copyOfRange(4, frame.size)
+                val seq = ((frame[0].toInt() and 0xFF) shl 8) or (frame[1].toInt() and 0xFF)
+                val total = ((frame[2].toInt() and 0xFF) shl 8) or (frame[3].toInt() and 0xFF)
+                val data = frame.copyOfRange(4, frame.size)
 
-                // Initialise reassembly array on first chunk
                 if (seq == 0 || reassemblyChunks == null || reassemblyTotal != total) {
                     reassemblyChunks = arrayOfNulls(total)
                     reassemblyTotal = total
@@ -146,105 +147,165 @@ class GattClient(
                 reassemblyReceived++
 
                 if (reassemblyReceived == total) {
-                    // All chunks received — reassemble and resolve
                     val fullBytes = reassemblyChunks!!.flatMap { it!!.toList() }.toByteArray()
-                    val fullJson = String(fullBytes, Charsets.UTF_8)
+                    payloadDeferred?.complete(String(fullBytes, Charsets.UTF_8))
                     reassemblyChunks = null
-                    activeReportDeferred?.complete(fullJson)
-                }
-            }
-
-            private fun readManifest(g: BluetoothGatt) {
-                val manifestChar = g.getService(GATT_SERVICE_UUID)?.getCharacteristic(MANIFEST_CHAR_UUID) ?: return
-                manifestDeferred = CompletableDeferred()
-                g.readCharacteristic(manifestChar)
-
-                scope.launch {
-                    val manifestJson = manifestDeferred?.await() ?: run {
-                        g.disconnect(); return@launch
-                    }
-
-                    // Parse manifest and diff against our local DB
-                    val peerIds = try {
-                        val arr = JSONArray(manifestJson)
-                        (0 until arr.length()).map { arr.getString(it) }.toSet()
-                    } catch (e: Exception) {
-                        onLog("Bad manifest JSON from ${device.address}"); g.disconnect(); return@launch
-                    }
-
-                    val localIds = reportDao.getIds().toSet()
-                    val missing = peerIds - localIds
-
-                    onLog("Peer ${device.address}: ${peerIds.size} reports, ${missing.size} new to us")
-
-                    if (missing.isEmpty()) { g.disconnect(); return@launch }
-
-                    // Pull each missing report one at a time (WRITE → NOTIFY)
-                    val reportChar = g.getService(GATT_SERVICE_UUID)?.getCharacteristic(REPORT_CHAR_UUID) ?: run {
-                        g.disconnect(); return@launch
-                    }
-
-                    var pulledCount = 0
-                    for (reportId in missing) {
-                        val deferred = CompletableDeferred<String?>()
-                        activeReportDeferred = deferred
-
-                        reportChar.value = reportId.toByteArray(Charsets.UTF_8)
-                        val wrote = g.writeCharacteristic(reportChar)
-                        if (!wrote) continue
-
-                        val reportJson = withTimeoutOrNull(8_000) { deferred.await() } ?: continue
-
-                        insertRelayedReport(reportJson, device.address)
-                        pulledCount++
-                    }
-
-                    onLog("✓ Pulled $pulledCount new reports from ${device.address}")
-
-                    // Log the encounter as a RelayPacket
-                    val packetId = UUID.randomUUID().toString()
-                    val encounterJson = """{"type":"sync","remote":"${device.address}","pulled":$pulledCount}"""
-                    relayPacketDao.insert(
-                        RelayPacket(
-                            packetId     = packetId,
-                            payloadJson  = encounterJson,
-                            receivedAt   = Instant.now().toString(),
-                            senderDevice = device.address,
-                            hopCount     = 0
-                        )
-                    )
-
-                    g.disconnect()
+                    reassemblyTotal = 0
+                    reassemblyReceived = 0
                 }
             }
         }
 
         gatt = device.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE)
-        cont.invokeOnCancellation { gatt?.disconnect() }
+        continuation.invokeOnCancellation { gatt?.disconnect() }
     }
 
-    /** Parse a report JSON received over GATT and insert into Room (additive — IGNORE on dup). */
-    private suspend fun insertRelayedReport(json: String, senderDevice: String) {
+    private suspend fun syncReports(gatt: BluetoothGatt, senderDevice: String) {
+        val peerIds = readIdManifest(gatt, MANIFEST_CHAR_UUID) ?: return
+        val localIds = reportDao.getIds().toSet()
+        val missing = peerIds - localIds
+        if (missing.isEmpty()) return
+
+        var pulledCount = 0
+        for (reportId in missing) {
+            val reportJson = requestPayload(gatt, REPORT_CHAR_UUID, reportId) ?: continue
+            insertRelayedReport(reportJson)
+            pulledCount++
+        }
+
+        onLog("Pulled $pulledCount new reports from $senderDevice")
+    }
+
+    private suspend fun syncPackets(gatt: BluetoothGatt, senderDevice: String) {
+        val peerIds = readIdManifest(gatt, PACKET_MANIFEST_CHAR_UUID) ?: return
+        val localIds = relayPacketDao.getIds().toSet()
+        val missing = peerIds - localIds
+        if (missing.isEmpty()) return
+
+        var pulledCount = 0
+        for (packetId in missing) {
+            val packetJson = requestPayload(gatt, PACKET_CHAR_UUID, packetId) ?: continue
+            insertRelayedPacket(packetJson, senderDevice)
+            pulledCount++
+        }
+
+        onLog("Pulled $pulledCount relay packets from $senderDevice")
+    }
+
+    private suspend fun readIdManifest(gatt: BluetoothGatt, characteristicUuid: UUID): Set<String>? {
+        val characteristic = gatt.getService(GATT_SERVICE_UUID)?.getCharacteristic(characteristicUuid) ?: return null
+        manifestDeferred = CompletableDeferred()
+        gatt.readCharacteristic(characteristic)
+        val json = withTimeoutOrNull(8_000) { manifestDeferred?.await() } ?: return null
+        return try {
+            val array = JSONArray(json)
+            (0 until array.length()).map { array.getString(it) }.toSet()
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private suspend fun requestPayload(gatt: BluetoothGatt, characteristicUuid: UUID, id: String): String? {
+        val characteristic = gatt.getService(GATT_SERVICE_UUID)?.getCharacteristic(characteristicUuid) ?: return null
+        activeTransferUuid = characteristicUuid
+        payloadDeferred = CompletableDeferred()
+        characteristic.value = id.toByteArray(Charsets.UTF_8)
+        val wrote = gatt.writeCharacteristic(characteristic)
+        if (!wrote) return null
+        return withTimeoutOrNull(8_000) { payloadDeferred?.await() }
+    }
+
+    private suspend fun insertRelayedReport(json: String) {
         try {
             val obj = JSONObject(json)
-            val report = TrailReport(
-                reportId    = obj.getString("report_id"),
-                userId      = obj.getString("user_id"),
-                type        = try { ReportType.valueOf(obj.getString("type")) } catch (e: Exception) { ReportType.hazard },
-                title       = obj.getString("title"),
-                description = obj.optString("description", ""),
-                lat         = obj.getDouble("lat"),
-                lng         = obj.getDouble("lng"),
-                h3Cell      = obj.optString("h3_cell").takeIf { it.isNotEmpty() && it != "null" },
-                timestamp   = obj.getString("timestamp"),
-                speciesName = obj.optString("species_name").takeIf { it.isNotEmpty() && it != "null" },
-                confidence  = obj.optDouble("confidence").takeIf { !it.isNaN() }?.toFloat(),
-                source      = ReportSource.relayed,
-                synced      = false // will be uploaded to cloud on next sync
+            val confidence = if (obj.isNull("confidence")) null else obj.optDouble("confidence").toFloat()
+            reportDao.insert(
+                TrailReport(
+                    reportId = obj.getString("report_id"),
+                    userId = obj.getString("user_id"),
+                    type = try {
+                        ReportType.valueOf(obj.getString("type"))
+                    } catch (_: Exception) {
+                        ReportType.hazard
+                    },
+                    title = obj.getString("title"),
+                    description = obj.optString("description", ""),
+                    lat = obj.getDouble("lat"),
+                    lng = obj.getDouble("lng"),
+                    h3Cell = obj.optString("h3_cell").takeIf { it.isNotBlank() && it != "null" },
+                    timestamp = obj.getString("timestamp"),
+                    speciesName = obj.optString("species_name").takeIf { it.isNotBlank() && it != "null" },
+                    confidence = confidence,
+                    source = ReportSource.relayed,
+                    synced = false
+                )
             )
-            reportDao.insert(report) // OnConflictStrategy.IGNORE — safe to call even if we already have it
-        } catch (e: Exception) {
-            onLog("Failed to parse relayed report from $senderDevice: ${e.message}")
+        } catch (error: Exception) {
+            onLog("Failed to parse relayed report: ${error.message}")
+        }
+    }
+
+    private suspend fun insertRelayedPacket(json: String, senderDevice: String) {
+        try {
+            val wrapper = JSONObject(json)
+            val packetId = wrapper.getString("packet_id")
+            val payloadJson = wrapper.getString("payload_json")
+            val hopCount = wrapper.optInt("hop_count", 0)
+            if (hopCount >= MAX_HOP_COUNT) return
+
+            relayPacketDao.insert(
+                RelayPacket(
+                    packetId = packetId,
+                    payloadJson = payloadJson,
+                    receivedAt = wrapper.optString("received_at", Instant.now().toString()),
+                    senderDevice = senderDevice,
+                    hopCount = hopCount + 1
+                )
+            )
+
+            val payload = JSONObject(payloadJson)
+            when (payload.optString("type")) {
+                "voice_relay_intent" -> relayJobIntentDao.insert(
+                    RelayJobIntent(
+                        jobId = payload.getString("job_id"),
+                        userId = payload.getString("user_id"),
+                        senderWallet = payload.getString("sender_wallet"),
+                        relayType = payload.optString("relay_type", "voice_outbound"),
+                        recipientName = payload.optString("recipient_name"),
+                        recipientPhoneNumber = payload.optString("recipient_phone_number"),
+                        destinationHash = payload.getString("destination_hash"),
+                        payloadHash = payload.getString("payload_hash"),
+                        messageBody = payload.optString("message_body"),
+                        contextSummary = payload.optString("context_summary"),
+                        contextJson = payload.optJSONObject("context_json")?.toString() ?: "{}",
+                        expiryTs = payload.getLong("expiry_ts"),
+                        rewardAmount = payload.getInt("reward_amount"),
+                        nonce = payload.getLong("nonce"),
+                        signedMessageBase64 = payload.getString("signed_message_base64"),
+                        signatureBase64 = payload.getString("signature_base64"),
+                        source = "mesh",
+                        status = "queued_offline",
+                        createdAt = Instant.now().toString()
+                    )
+                )
+
+                "relay_reply" -> relayInboxMessageDao.insert(
+                    RelayInboxMessage(
+                        replyId = payload.getString("reply_id"),
+                        originalJobId = payload.getString("original_job_id"),
+                        userId = payload.getString("user_id"),
+                        senderLabel = payload.optString("sender_label", "Relay reply"),
+                        senderPhoneNumber = payload.optString("sender_phone_number"),
+                        messageSummary = payload.optString("message_summary"),
+                        messageBody = payload.optString("message_body"),
+                        contextJson = payload.optJSONObject("context_json")?.toString() ?: "{}",
+                        createdAt = payload.optString("created_at", Instant.now().toString()),
+                        status = payload.optString("status", "pending")
+                    )
+                )
+            }
+        } catch (error: Exception) {
+            onLog("Failed to parse relayed packet: ${error.message}")
         }
     }
 }

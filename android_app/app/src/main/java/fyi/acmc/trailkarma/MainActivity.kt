@@ -6,7 +6,6 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.compose.rememberNavController
@@ -19,6 +18,7 @@ import fyi.acmc.trailkarma.models.TrailReport
 import fyi.acmc.trailkarma.repository.UserRepository
 import fyi.acmc.trailkarma.repository.DatabricksSyncRepository
 import fyi.acmc.trailkarma.sync.SyncWorker
+import fyi.acmc.trailkarma.ui.design.TrailKarmaAppTheme
 import fyi.acmc.trailkarma.ui.navigation.Routes
 import fyi.acmc.trailkarma.ui.navigation.TrailKarmaNavGraph
 import kotlinx.coroutines.flow.first
@@ -75,7 +75,7 @@ class MainActivity : ComponentActivity() {
         requestPermissions()
 
         setContent {
-            MaterialTheme {
+            TrailKarmaAppTheme {
                 val navController = rememberNavController()
                 var startDest by remember { mutableStateOf<String?>(null) }
 

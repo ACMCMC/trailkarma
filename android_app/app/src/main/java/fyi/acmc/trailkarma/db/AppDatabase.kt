@@ -25,17 +25,19 @@ class DatabaseCallback : RoomDatabase.Callback() {
 }
 
 @Database(
-    entities = [User::class, TrailReport::class, LocationUpdate::class, RelayPacket::class, RelayJobIntent::class, Trail::class],
-    version = 7,
+    entities = [User::class, TrustedContact::class, TrailReport::class, LocationUpdate::class, RelayPacket::class, RelayJobIntent::class, RelayInboxMessage::class, Trail::class],
+    version = 8,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun userDao(): UserDao
+    abstract fun trustedContactDao(): TrustedContactDao
     abstract fun trailReportDao(): TrailReportDao
     abstract fun locationUpdateDao(): LocationUpdateDao
     abstract fun relayPacketDao(): RelayPacketDao
     abstract fun relayJobIntentDao(): RelayJobIntentDao
+    abstract fun relayInboxMessageDao(): RelayInboxMessageDao
     abstract fun trailDao(): TrailDao
 
     companion object {

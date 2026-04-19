@@ -560,15 +560,77 @@ export async function openRelayJob(input: {
   rewardAmount: number;
   nonce: number;
 }) {
-  const user = db.prepare("SELECT wallet_public_key FROM users WHERE app_user_id = ?").get(input.appUserId) as
-    | { wallet_public_key: string }
+  const user = db.prepare("SELECT app_user_id, wallet_public_key FROM users WHERE app_user_id = ?").get(input.appUserId) as
+    | { app_user_id: string; wallet_public_key: string }
     | undefined;
   if (!user) {
     throw new Error(`Unknown app user: ${input.appUserId}`);
   }
 
+  return createRelayJobForSender({
+    auditAppUserId: input.appUserId,
+    senderAppUserId: user.app_user_id,
+    senderWalletPublicKey: user.wallet_public_key,
+    signedMessageBase64: input.signedMessageBase64,
+    signatureBase64: input.signatureBase64,
+    jobIdHex: input.jobIdHex,
+    destinationHashHex: input.destinationHashHex,
+    payloadHashHex: input.payloadHashHex,
+    expiryTs: input.expiryTs,
+    rewardAmount: input.rewardAmount,
+    nonce: input.nonce,
+  });
+}
+
+export async function openRelayJobForSenderWallet(input: {
+  auditAppUserId: string;
+  senderWalletPublicKey: string;
+  signedMessageBase64: string;
+  signatureBase64: string;
+  jobIdHex: string;
+  destinationHashHex: string;
+  payloadHashHex: string;
+  expiryTs: number;
+  rewardAmount: number;
+  nonce: number;
+}) {
+  const user = db.prepare("SELECT app_user_id, wallet_public_key FROM users WHERE wallet_public_key = ?").get(input.senderWalletPublicKey) as
+    | { app_user_id: string; wallet_public_key: string }
+    | undefined;
+  if (!user) {
+    throw new Error(`Unknown sender wallet: ${input.senderWalletPublicKey}`);
+  }
+
+  return createRelayJobForSender({
+    auditAppUserId: input.auditAppUserId,
+    senderAppUserId: user.app_user_id,
+    senderWalletPublicKey: user.wallet_public_key,
+    signedMessageBase64: input.signedMessageBase64,
+    signatureBase64: input.signatureBase64,
+    jobIdHex: input.jobIdHex,
+    destinationHashHex: input.destinationHashHex,
+    payloadHashHex: input.payloadHashHex,
+    expiryTs: input.expiryTs,
+    rewardAmount: input.rewardAmount,
+    nonce: input.nonce,
+  });
+}
+
+async function createRelayJobForSender(input: {
+  auditAppUserId: string;
+  senderAppUserId: string;
+  senderWalletPublicKey: string;
+  signedMessageBase64: string;
+  signatureBase64: string;
+  jobIdHex: string;
+  destinationHashHex: string;
+  payloadHashHex: string;
+  expiryTs: number;
+  rewardAmount: number;
+  nonce: number;
+}) {
   const jobId = Buffer.from(input.jobIdHex, "hex");
-  const wallet = new PublicKey(user.wallet_public_key);
+  const wallet = new PublicKey(input.senderWalletPublicKey);
   const profilePda = userProfilePda(wallet);
   const relayPda = relayJobPda(jobId);
   const signedMessage = Buffer.from(input.signedMessageBase64, "base64");
@@ -618,7 +680,7 @@ export async function openRelayJob(input: {
   tx.feePayer = sponsor.publicKey;
 
   const signature = await anchor.web3.sendAndConfirmTransaction(connection, tx, [sponsor]);
-  audit(input.appUserId, wallet.toBase58(), "create_relay_job_from_intent", signature, input);
+  audit(input.auditAppUserId, wallet.toBase58(), "create_relay_job_from_intent", signature, input);
 
   db.prepare(`
     INSERT INTO relay_jobs
@@ -630,7 +692,7 @@ export async function openRelayJob(input: {
       updated_at = excluded.updated_at
   `).run({
     jobId: input.jobIdHex,
-    senderAppUserId: input.appUserId,
+    senderAppUserId: input.senderAppUserId,
     senderWallet: wallet.toBase58(),
     destinationHash: input.destinationHashHex,
     payloadHash: input.payloadHashHex,

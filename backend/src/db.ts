@@ -55,4 +55,60 @@ CREATE TABLE IF NOT EXISTS tx_audit (
   payload_json TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS app_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS voice_relay_jobs (
+  job_id TEXT PRIMARY KEY,
+  sender_app_user_id TEXT NOT NULL,
+  carrier_app_user_id TEXT NOT NULL,
+  sender_wallet TEXT NOT NULL,
+  recipient_name TEXT NOT NULL,
+  recipient_phone_number TEXT NOT NULL,
+  message_body TEXT NOT NULL,
+  context_summary TEXT NOT NULL,
+  context_json TEXT NOT NULL,
+  destination_hash TEXT NOT NULL,
+  payload_hash TEXT NOT NULL,
+  status TEXT NOT NULL,
+  opened_tx_signature TEXT,
+  fulfilled_tx_signature TEXT,
+  call_sid TEXT,
+  conversation_id TEXT,
+  transcript_summary TEXT,
+  reply_id TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  last_checked_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS voice_relay_inbox (
+  reply_id TEXT PRIMARY KEY,
+  original_job_id TEXT NOT NULL,
+  user_app_id TEXT NOT NULL,
+  sender_label TEXT NOT NULL,
+  sender_phone_number TEXT NOT NULL,
+  message_summary TEXT NOT NULL,
+  message_body TEXT NOT NULL,
+  context_json TEXT NOT NULL,
+  status TEXT NOT NULL,
+  acknowledged INTEGER NOT NULL DEFAULT 0,
+  conversation_id TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
 `);
+
+ensureColumn("users", "real_name", "TEXT");
+ensureColumn("users", "phone_number", "TEXT");
+ensureColumn("users", "default_relay_phone_number", "TEXT");
+
+function ensureColumn(tableName: string, columnName: string, definition: string) {
+  const columns = db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>;
+  if (columns.some((column) => column.name === columnName)) return;
+  db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`);
+}

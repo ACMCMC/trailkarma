@@ -15,6 +15,7 @@ We have built a production-ready, offline-first Android application integrated w
 - **Bi-directional Cloud Sync**: Automated background synchronization with Databricks SQL Warehouse using idempotent `MERGE INTO` operations.
 - **H3 Spatial Intelligence**: Databricks natively computes H3 hexagonal cells (Resolution 9) for every report and GPS ping, enabling high-speed spatial aggregations and heatmaps.
 - **BLE Mesh Networking**: A robust, persistent foreground service for phone-to-phone discovery and GATT-based data synchronization. Hikers "sync" missing reports with each other in the wild.
+- **Voice Relay Jobs**: Offline-signed relay intents can now be carried over BLE and later turned into ElevenLabs outbound calls once any carrier hiker regains connectivity.
 - **Dynamic Trail Engine**: Trail metadata (PCT, etc.) is pulled dynamically from Databricks, with O(1) trail-line snapping via `trail_segments`.
 - **Modern UI/UX**: Polished Jetpack Compose interface with animated sync spinners, full-screen report details, and interactive OSM maps.
 - **Android 15 Ready**: Fully compliant with the new 16KB memory page alignment requirements (NDK r27/CameraX 1.4.1).
@@ -37,7 +38,7 @@ The Solana integration is intentionally hybrid. Real-world events still happen o
 
 - `solana/`: Anchor program for user profiles, contribution receipts, relay jobs, badge claims, and sponsored KARMA transfers.
 - `backend/`: TypeScript attestor + sponsor service that verifies claims and submits Devnet transactions.
-- `android_app/`: app-managed wallets, offline relay intent signing, reward claim sync, and wallet/badge UI.
+- `android_app/`: app-managed wallets, offline relay intent signing, BLE packet carrying, reward claim sync, and wallet/badge UI.
 
 ## 🌲 How to Run
 1. **Cloud**: Run `python setup_databricks.py` to initialize the Databricks schema and demo data. This script requires the `h3` Python package.
