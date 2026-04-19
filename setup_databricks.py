@@ -4,6 +4,8 @@
 import os
 import uuid
 import json
+import math
+import csv
 import requests
 from datetime import datetime, timedelta
 
@@ -22,6 +24,122 @@ def latlng_to_h3(lat, lng, resolution=9):
 def sql_str(val):
     """Wrap a value in SQL quotes or return NULL."""
     return f"'{val}'" if val is not None else "NULL"
+
+PCT_GEOJSON = os.path.join(os.path.dirname(__file__), "data", "Southern_California.geojson")
+SPECIES_CSV = os.path.join(os.path.dirname(__file__), "data", "observations-712152.csv")
+
+SOCAL_LAT_MIN, SOCAL_LAT_MAX = 32.0, 35.0
+SOCAL_LNG_MIN, SOCAL_LNG_MAX = -118.0, -116.0
+
+
+def _haversine_miles(coords):
+    """Approximate total length of a LineString in miles."""
+    total = 0.0
+    for i in range(len(coords) - 1):
+        lng1, lat1 = coords[i][0], coords[i][1]
+        lng2, lat2 = coords[i+1][0], coords[i+1][1]
+        dlat = math.radians(lat2 - lat1)
+        dlng = math.radians(lng2 - lng1)
+        a = math.sin(dlat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlng/2)**2
+        total += 3958.8 * 2 * math.asin(math.sqrt(a))
+    return round(total, 2)
+
+
+def _simplify_coords(coords, tolerance=0.005):
+    """Reduce coordinate count to keep geometry size manageable."""
+    if len(coords) <= 2:
+        return coords
+    result = [coords[0]]
+    for pt in coords[1:-1]:
+        if abs(pt[0] - result[-1][0]) >= tolerance or abs(pt[1] - result[-1][1]) >= tolerance:
+            result.append(pt)
+    result.append(coords[-1])
+    return result
+
+
+def load_pct_trail_statements(full_schema, now):
+    """Read Southern California GeoJSON and return (trail_inserts, first_trail_id). Uses H3 cells for spatial indexing."""
+    statements = []
+    first_trail_id = None
+
+    try:
+        with open(PCT_GEOJSON, encoding="utf-8") as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        print(f"  ⚠️  PCT GeoJSON not found at {PCT_GEOJSON}, using mock trail")
+        return [], None
+
+    sections = {}
+    for feat in data.get("features", []):
+        props = feat.get("properties", {})
+        section_name = props.get("Section_Name", "Unknown")
+        region = props.get("Region", "Southern California")
+        coords = feat.get("geometry", {}).get("coordinates", [])
+        if not coords:
+            continue
+        if section_name not in sections:
+            sections[section_name] = {"region": region, "coords": []}
+        sections[section_name]["coords"].extend(coords)
+
+    for section_name, data in sorted(sections.items()):
+        trail_id = str(uuid.uuid4())
+        if first_trail_id is None:
+            first_trail_id = trail_id
+        coords = _simplify_coords(data["coords"])
+        length_miles = _haversine_miles(coords)
+        geom = json.dumps({"type": "LineString", "coordinates": coords}).replace("'", "\\'")
+        desc = f"PCT {section_name} through {data['region']}".replace("'", "\\'")
+
+        # Compute H3 cells for all trail coordinates (res-9 ~174m hexagons)
+        h3_cells = [latlng_to_h3(lat, lng) for lng, lat in coords]
+        h3_cells_json = json.dumps(list(set(h3_cells)))  # deduplicate and store as JSON
+
+        statements.append(
+            f"INSERT INTO {full_schema}.trails VALUES ("
+            f"'{trail_id}', '{section_name}', '{desc}', "
+            f"{length_miles}, '{data['region']}', '{geom}', '{h3_cells_json}', "
+            f"current_timestamp(), current_timestamp())"
+        )
+
+    print(f"  ✓ Loaded {len(sections)} PCT sections from GeoJSON with H3 spatial indexing")
+    return statements, first_trail_id
+
+def load_species_report_statements(full_schema):
+    """Read iNaturalist CSV, filter to Southern California, return INSERT statements with H3 cells."""
+    statements = []
+    try:
+        with open(SPECIES_CSV, encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                try:
+                    lat = float(row["latitude"])
+                    lng = float(row["longitude"])
+                except (ValueError, KeyError):
+                    continue
+                if not (SOCAL_LAT_MIN <= lat <= SOCAL_LAT_MAX and SOCAL_LNG_MIN <= lng <= SOCAL_LNG_MAX):
+                    continue
+
+                report_id = str(uuid.uuid4())
+                title = (row.get("common_name") or row.get("species_guess") or "Unknown Species").replace("'", "\\'")
+                desc = (row.get("description") or row.get("place_guess") or "").replace("'", "\\'")
+                ts = row.get("time_observed_at") or row.get("observed_on") or datetime.utcnow().isoformat() + "Z"
+                image_url = (row.get("image_url") or "").replace("'", "\\'")
+                species_name = (row.get("scientific_name") or "").replace("'", "\\'")
+                h3_cell = latlng_to_h3(lat, lng)
+
+                user_id = row.get("user_id", "unknown")
+                statements.append(
+                    f"INSERT INTO {full_schema}.trail_reports VALUES ("
+                    f"'{report_id}', '{user_id}', 'species', "
+                    f"'{title}', '{desc}', {lat}, {lng}, {sql_str(h3_cell)}, '{ts}', "
+                    f"{sql_str(image_url)}, {sql_str(species_name)}, NULL, 'self', 0, true, "
+                    f"current_timestamp(), current_timestamp())"
+                )
+    except FileNotFoundError:
+        print(f"  ⚠️  Species CSV not found at {SPECIES_CSV}, skipping")
+
+    print(f"  ✓ Loaded {len(statements)} Southern California species reports with H3 spatial indexing")
+    return statements
 
 def load_env():
     config = {}
@@ -219,27 +337,21 @@ def main():
     ]
 
     # PUT IN ALL THE DATA SO WE START FRESH
-    
-    # Seed: Trails (h3_cells populated by Qianqian's PCT script; NULL for now)
-    mock_geojson = '{"type": "LineString", "coordinates": [[-117.24, 32.88], [-117.23, 32.89]]}'
-    sql_statements.append(
-        f"INSERT INTO {full_schema}.trails VALUES "
-        f"('{pct_trail_id}', 'Pacific Crest Trail', "
-        f"'A long-distance hiking and equestrian trail closely aligned with the highest portion of the Cascade and Sierra Nevada mountain ranges.', "
-        f"2650.0, 'West Coast USA', '{mock_geojson}', NULL, current_timestamp(), current_timestamp())"
-    )
-    sql_statements.append(
-        f"INSERT INTO {full_schema}.trail_waypoints VALUES "
-        f"('{str(uuid.uuid4())}', '{pct_trail_id}', 'Southern Terminus', 'trailhead', "
-        f"32.5896, -116.4669, {sql_str(latlng_to_h3(32.5896, -116.4669))}, "
-        f"'The official start of the PCT at the US-Mexico border.', current_timestamp(), current_timestamp())"
-    )
+    # Trails — load real PCT Southern California sections with H3 spatial indexing
+    trail_statements, first_trail_id = load_pct_trail_statements(full_schema, now)
+    if trail_statements:
+        sql_statements.extend(trail_statements)
+        pct_trail_id = first_trail_id  # use real trail id for FK references
+    else:
+        # fallback mock if GeoJSON not found
+        mock_geojson = '{"type": "LineString", "coordinates": [[-117.24, 32.88], [-117.23, 32.89]]}'
+        mock_h3 = latlng_to_h3(32.88, -117.24)
+        sql_statements.append(f"INSERT INTO {full_schema}.trails VALUES ('{pct_trail_id}', 'Pacific Crest Trail - Mock', 'Mock trail data', 2650.0, 'Southern California', '{mock_geojson}', '{json.dumps([mock_h3])}', current_timestamp(), current_timestamp())")
+
+    sql_statements.append(f"INSERT INTO {full_schema}.trail_waypoints VALUES ('{str(uuid.uuid4())}', '{pct_trail_id}', 'Southern Terminus', 'trailhead', 32.5896, -116.4669, {sql_str(latlng_to_h3(32.5896, -116.4669))}, 'The official start of the PCT at the US-Mexico border.', current_timestamp(), current_timestamp())")
 
     for user_id, name, wallet, karma, trail_id in users:
-        sql_statements.append(
-            f"INSERT INTO {full_schema}.users VALUES "
-            f"('{user_id}', '{name}', '{wallet}', {karma}, NULL, '{trail_id}', current_timestamp(), current_timestamp())"
-        )
+        sql_statements.append(f"INSERT INTO {full_schema}.users VALUES ('{user_id}', '{name}', '{wallet}', {karma}, NULL, '{trail_id}', current_timestamp(), current_timestamp())")
 
     for i, (rid, rtype, title, desc, lat, lng, source, species, conf, h3_cell) in enumerate(reports):
         user_id = users[i % len(users)][0]
@@ -260,6 +372,9 @@ def main():
         )
     for packet_id, payload, ts, device in relay_packets:
         sql_statements.append(f"INSERT INTO {full_schema}.relay_packets VALUES ('{packet_id}', '{payload}', '{ts}', '{device}', true, current_timestamp(), current_timestamp())")
+
+    # Species reports from iNaturalist (Southern California only)
+    sql_statements.extend(load_species_report_statements(full_schema))
 
     # Contacts
     # Aldan and Qianqian are contacts
