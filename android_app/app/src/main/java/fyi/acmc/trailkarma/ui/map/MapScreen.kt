@@ -387,9 +387,10 @@ fun MapScreen(
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("REWARDS", style = MaterialTheme.typography.labelSmall, fontSize = 10.sp)
                 if (walletState != null) {
-                    Text(walletState!!.karmaBalance, style = MaterialTheme.typography.titleMedium)
+                    Text(walletState!!.karmaBalance ?: "0", style = MaterialTheme.typography.titleMedium)
+                    val badges = walletState!!.badgeDetails ?: emptyList()
                     Text(
-                        if (walletState!!.badges.isEmpty()) "Tap to open collectibles" else walletState!!.badges.joinToString(" • "),
+                        if (badges.isEmpty()) "Tap to open collectibles" else badges.joinToString(" • ") { it.label },
                         style = MaterialTheme.typography.labelSmall,
                         fontSize = 9.sp,
                         color = MaterialTheme.colorScheme.onPrimaryContainer

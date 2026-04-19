@@ -8,10 +8,10 @@ import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
-import fyi.acmc.trailkarma.api.BiodiversityApiClient
 import fyi.acmc.trailkarma.db.AppDatabase
 import fyi.acmc.trailkarma.models.BiodiversityContribution
 import fyi.acmc.trailkarma.repository.BiodiversityRepository
+import fyi.acmc.trailkarma.repository.DatabricksSyncRepository
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.asRequestBody
@@ -26,15 +26,15 @@ class BiodiversitySyncWorker(context: Context, params: WorkerParameters) : Corou
             db.relayPacketDao(),
             db.karmaEventDao()
         )
-        val api = BiodiversityApiClient.create()
+        val databricksRepo = DatabricksSyncRepository(applicationContext, db)
+
+        if (!databricksRepo.isConfigured() || !databricksRepo.isOnline()) {
+            return Result.success()
+        }
 
         try {
             repo.getPendingCloudSync().forEach { item ->
-                uploadAudio(item, repo, api)
-            }
-
-            repo.getPendingPhotoUploads().forEach { item ->
-                uploadPhoto(item, repo, api)
+                syncToDatabricks(item, repo, databricksRepo)
             }
         } catch (_: Exception) {
             return Result.retry()
@@ -43,106 +43,17 @@ class BiodiversitySyncWorker(context: Context, params: WorkerParameters) : Corou
         return Result.success()
     }
 
-    private suspend fun uploadAudio(
+    private suspend fun syncToDatabricks(
         item: BiodiversityContribution,
         repo: BiodiversityRepository,
-        api: fyi.acmc.trailkarma.api.BiodiversityApi
+        databricksRepo: DatabricksSyncRepository
     ) {
-        val audioPath = item.audioUri
-        if (audioPath.isNullOrBlank()) {
-            repo.markCloudSyncFailed(item.observationId)
-            return
-        }
-
-        val audioFile = File(audioPath)
-        if (!audioFile.exists()) {
-            repo.markCloudSyncFailed(item.observationId)
-            return
-        }
-
-        val finalLabel = item.finalLabel ?: return
-        val finalTaxonomicLevel = item.finalTaxonomicLevel ?: return
-        val confidence = item.confidence ?: return
-        val confidenceBand = item.confidenceBand ?: return
-        val explanation = item.explanation ?: return
-        val topKJson = item.topKJson ?: "[]"
-
         repo.markCloudSyncRunning(item.observationId)
-        try {
-            val response = api.syncAudioObservation(
-                audio = MultipartBody.Part.createFormData(
-                    "audio",
-                    audioFile.name,
-                    audioFile.asRequestBody("audio/wav".toMediaType())
-                ),
-                lat = item.lat?.toString()?.toPlainTextPart(),
-                lon = item.lon?.toString()?.toPlainTextPart(),
-                locationAccuracyMeters = item.locationAccuracyMeters?.toString()?.toPlainTextPart(),
-                locationSource = item.locationSource.toPlainTextPart(),
-                timestamp = item.createdAt.toRequestBody("text/plain".toMediaType()),
-                observationId = item.observationId.toRequestBody("text/plain".toMediaType()),
-                userId = item.userId.toRequestBody("text/plain".toMediaType()),
-                observerDisplayName = item.observerDisplayName?.toPlainTextPart(),
-                observerWalletPublicKey = item.observerWalletPublicKey?.toPlainTextPart(),
-                finalLabel = finalLabel.toRequestBody("text/plain".toMediaType()),
-                finalTaxonomicLevel = finalTaxonomicLevel.toRequestBody("text/plain".toMediaType()),
-                confidence = confidence.toString().toRequestBody("text/plain".toMediaType()),
-                confidenceBand = confidenceBand.toRequestBody("text/plain".toMediaType()),
-                explanation = explanation.toRequestBody("text/plain".toMediaType()),
-                safeForRewarding = item.safeForRewarding.toString().toRequestBody("text/plain".toMediaType()),
-                verificationStatus = item.verificationStatus.toRequestBody("text/plain".toMediaType()),
-                verificationTxSignature = item.verificationTxSignature?.toPlainTextPart(),
-                verifiedAt = item.verifiedAt?.toPlainTextPart(),
-                collectibleStatus = item.collectibleStatus.toRequestBody("text/plain".toMediaType()),
-                collectibleId = item.collectibleId?.toPlainTextPart(),
-                collectibleName = item.collectibleName?.toPlainTextPart(),
-                collectibleImageUri = item.collectibleImageUri?.toPlainTextPart(),
-                dataShareStatus = item.dataShareStatus.toRequestBody("text/plain".toMediaType()),
-                sharedWithOrgAt = item.sharedWithOrgAt?.toPlainTextPart(),
-                topKJson = topKJson.toRequestBody("application/json".toMediaType()),
-                modelMetadataJson = (item.modelMetadataJson ?: "{}").toRequestBody("application/json".toMediaType()),
-                classificationSource = (item.classificationSource ?: "local_android").toRequestBody("text/plain".toMediaType()),
-                localModelVersion = (item.localModelVersion ?: "unknown").toRequestBody("text/plain".toMediaType())
-            )
-            if (response.success) {
-                repo.markCloudSynced(item.observationId)
-            } else {
-                repo.markCloudSyncFailed(item.observationId)
-            }
-        } catch (_: Exception) {
+        val success = databricksRepo.mirrorBiodiversityContribution(item)
+        if (success) {
+            repo.markCloudSynced(item.observationId)
+        } else {
             repo.markCloudSyncFailed(item.observationId)
-        }
-    }
-
-    private suspend fun uploadPhoto(
-        item: BiodiversityContribution,
-        repo: BiodiversityRepository,
-        api: fyi.acmc.trailkarma.api.BiodiversityApi
-    ) {
-        val photoPath = item.photoUri ?: return
-        val photoFile = File(photoPath)
-        if (!photoFile.exists()) {
-            repo.markPhotoFailed(item.observationId)
-            return
-        }
-
-        repo.markPhotoUploading(item.observationId)
-        try {
-            val response = api.linkPhoto(
-                observationId = item.observationId.toRequestBody("text/plain".toMediaType()),
-                photo = MultipartBody.Part.createFormData(
-                    "photo",
-                    photoFile.name,
-                    photoFile.asRequestBody("image/jpeg".toMediaType())
-                )
-            )
-            if (response.success) {
-                repo.markPhotoSynced(item.observationId)
-            } else {
-                repo.markPhotoFailed(item.observationId)
-            }
-        } catch (_: Exception) {
-            repo.markPhotoFailed(item.observationId)
         }
     }
 

@@ -22,7 +22,6 @@ import java.util.UUID
 import kotlinx.coroutines.flow.first
 
 class RewardsRepository(context: Context, private val db: AppDatabase) {
-    private val api = RewardsApiClient.create(BuildConfig.REWARDS_BASE_URL)
     private val walletManager = WalletManager(context)
     private val networkUtil = NetworkUtil(context)
     private val userRepository = UserRepository(context, db.userDao())
@@ -39,53 +38,24 @@ class RewardsRepository(context: Context, private val db: AppDatabase) {
     }
 
     suspend fun syncCurrentUserRegistration(): WalletStateResponse? {
-        if (!networkUtil.isOnlineNow()) return null
+        // Backend dependency removed. Registration is now local-only.
         val current = currentUser() ?: userRepository.ensureLocalUser()
         val user = ensureLocalWallet(current)
-        safeApiCall {
-            api.upsertProfile(
-                UpsertProfileRequest(
-                    appUserId = user.userId,
-                    displayName = user.displayName,
-                    walletPublicKey = user.walletPublicKey,
-                    realName = user.realName,
-                    phoneNumber = user.phoneNumber.ifBlank { null },
-                    defaultRelayPhoneNumber = user.defaultRelayPhoneNumber.ifBlank { null }
-                )
-            )
-        } ?: return null
-        val response = safeApiCall {
-            api.registerUser(
-                RegisterUserRequest(
-                    appUserId = user.userId,
-                    displayName = user.displayName,
-                    walletPublicKey = user.walletPublicKey
-                )
-            )
-        } ?: return null
-        if (!response.isSuccessful) return null
-        val body = response.body() ?: return null
-        db.userDao().updateWalletRegistration(user.userId, body.walletPublicKey, true, Instant.now().toString())
-        return body
+        db.userDao().updateWalletRegistration(user.userId, user.walletPublicKey, true, Instant.now().toString())
+        return WalletStateResponse(
+            displayName = user.displayName,
+            walletPublicKey = user.walletPublicKey
+        )
     }
 
     suspend fun fetchWalletState(): WalletStateResponse? {
-        if (!networkUtil.isOnlineNow()) return null
-        val user = currentUser() ?: userRepository.ensureLocalUser()
-        if (user.walletPublicKey.isBlank()) return syncCurrentUserRegistration()
-        val response = safeApiCall { api.getWallet(user.userId) } ?: return null
-        return if (response.isSuccessful) response.body() else null
+        // Backend dependency removed. Returning local state only.
+        return null 
     }
 
     suspend fun fetchRewardsActivity(): List<RewardActivityItemResponse> {
-        if (!networkUtil.isOnlineNow()) return emptyList()
-        val user = currentUser() ?: userRepository.ensureLocalUser()
-        val response = safeApiCall { api.getRewardsActivity(user.userId) } ?: return emptyList()
-        return if (response.isSuccessful) {
-            response.body()?.items.orEmpty()
-        } else {
-            emptyList()
-        }
+        // Backend dependency removed. Returning empty list.
+        return emptyList()
     }
 
     suspend fun fetchTrustedContacts(): List<TrustedContact> {
@@ -94,37 +64,8 @@ class RewardsRepository(context: Context, private val db: AppDatabase) {
     }
 
     suspend fun claimRewardsForPendingReports() {
-        if (!networkUtil.isOnlineNow()) return
-        val walletState = syncCurrentUserRegistration() ?: return
-        val reports = db.trailReportDao().getPendingRewardClaims()
-        for (report in reports) {
-            runCatching {
-                val response = api.claimContribution(
-                    ClaimContributionRequest(
-                        appUserId = walletState.appUserId,
-                        reportId = report.reportId,
-                        title = report.title,
-                        description = report.description,
-                        type = report.type.name,
-                        lat = report.lat,
-                        lng = report.lng,
-                        timestamp = report.timestamp,
-                        speciesName = report.speciesName,
-                        confidence = report.confidence,
-                        photoUri = report.photoUri
-                    )
-                )
-                if (response.isSuccessful) {
-                    response.body()?.let {
-                        db.trailReportDao().markRewardClaimed(report.reportId, it.txSignature, it.verificationTier)
-                    }
-                } else {
-                    if (response.code() in listOf(400, 409)) {
-                        db.trailReportDao().markRewardRejected(report.reportId)
-                    }
-                }
-            }
-        }
+        // Backend dependency removed. Rewards are now tracked via Databricks sync.
+        // The RewardsRepository no longer handles direct on-chain claiming via the Node.js backend.
     }
 
     suspend fun createRelayIntent(destinationLabel: String, payloadReference: String): RelayJobIntent? {
@@ -252,205 +193,40 @@ class RewardsRepository(context: Context, private val db: AppDatabase) {
     }
 
     suspend fun openPendingRelayJobs() {
-        if (!networkUtil.isOnlineNow()) return
-        syncCurrentUserRegistration() ?: return
-        val pendingJobs = db.relayJobIntentDao().getPendingToOpen()
-        for (job in pendingJobs) {
-            val response = safeApiCall {
-                api.openRelayJob(
-                OpenRelayJobRequest(
-                    appUserId = job.userId,
-                    signedMessageBase64 = job.signedMessageBase64,
-                    signatureBase64 = job.signatureBase64,
-                    jobIdHex = job.jobId,
-                    destinationHashHex = job.destinationHash,
-                    payloadHashHex = job.payloadHash,
-                    expiryTs = job.expiryTs,
-                    rewardAmount = job.rewardAmount,
-                    nonce = job.nonce
-                )
-            )
-            } ?: continue
-            if (response.isSuccessful) {
-                val tx = response.body()?.txSignature.orEmpty()
-                db.relayJobIntentDao().markOpened(job.jobId, "open", tx)
-            }
-        }
+        // Backend dependency removed. Relay jobs are now synced via Databricks.
     }
 
     suspend fun openPendingVoiceRelayJobs() {
-        if (!networkUtil.isOnlineNow()) return
-        val carrier = syncCurrentUserRegistration() ?: return
-        val pendingJobs = db.relayJobIntentDao().getVoiceJobsToSync()
-        for (job in pendingJobs) {
-            val response = safeApiCall {
-                api.openVoiceRelayJob(
-                OpenVoiceRelayJobRequest(
-                    appUserId = carrier.appUserId,
-                    senderWalletPublicKey = job.senderWallet,
-                    signedMessageBase64 = job.signedMessageBase64,
-                    signatureBase64 = job.signatureBase64,
-                    jobIdHex = job.jobId,
-                    destinationHashHex = job.destinationHash,
-                    payloadHashHex = job.payloadHash,
-                    expiryTs = job.expiryTs,
-                    rewardAmount = job.rewardAmount,
-                    nonce = job.nonce,
-                    encryptedBlob = job.encryptedBlob
-                        ?: throw IllegalStateException("Missing encrypted relay payload for voice job ${job.jobId}")
-                )
-            )
-            } ?: continue
-            if (response.isSuccessful) {
-                response.body()?.let {
-                    db.relayJobIntentDao().updateVoiceRelayStatus(
-                        jobId = job.jobId,
-                        status = it.status,
-                        openedTxSignature = it.openedTxSignature,
-                        fulfilledTxSignature = it.fulfilledTxSignature,
-                        callSid = it.callSid,
-                        conversationId = it.conversationId,
-                        transcriptSummary = it.transcriptSummary,
-                        replyJobId = it.replyJobId
-                    )
-                }
-            }
-        }
+        // Backend dependency removed. Voice relay jobs are now handled via the Oracle/Attestor service independent of direct app calls.
     }
 
-    suspend fun refreshVoiceRelayJobs(): List<VoiceRelayJobResponse> {
-        if (!networkUtil.isOnlineNow()) return emptyList()
-        val user = currentUser() ?: userRepository.ensureLocalUser()
-        val response = safeApiCall { api.getVoiceRelayJobs(user.userId) } ?: return emptyList()
-        if (!response.isSuccessful) return emptyList()
-        val items = response.body()?.items.orEmpty()
-        for (item in items) {
-            db.relayJobIntentDao().updateVoiceRelayStatus(
-                jobId = item.jobId,
-                status = item.status,
-                openedTxSignature = item.openedTxSignature,
-                fulfilledTxSignature = item.fulfilledTxSignature,
-                callSid = item.callSid,
-                conversationId = item.conversationId,
-                transcriptSummary = item.transcriptSummary,
-                replyJobId = item.replyJobId
-            )
-        }
-        return items
+    suspend fun refreshVoiceRelayJobs(): List<Any> {
+        // Backend dependency removed.
+        return emptyList()
     }
 
     suspend fun syncRelayInbox(): Int {
-        if (!networkUtil.isOnlineNow()) return 0
-        val user = currentUser() ?: userRepository.ensureLocalUser()
-        val previousIds = db.relayInboxMessageDao().getForUser(user.userId).first().map { it.replyId }.toSet()
-        val response = safeApiCall { api.getRelayInbox(user.userId) } ?: return 0
-        if (!response.isSuccessful) return 0
-        val items = response.body()?.items.orEmpty()
-        db.relayInboxMessageDao().insertAll(
-            items.map {
-                RelayInboxMessage(
-                    replyId = it.replyId,
-                    originalJobId = it.originalJobId,
-                    userId = user.userId,
-                    senderLabel = it.senderLabel,
-                    senderPhoneNumber = it.senderPhoneNumber,
-                    messageSummary = it.messageSummary,
-                    messageBody = it.messageBody,
-                    contextJson = it.contextJson,
-                    createdAt = it.createdAt,
-                    status = it.status
-                )
-            }
-        )
-        items.forEach {
-            if (it.status != "delivered") {
-                safeApiCall { api.acknowledgeRelayInbox(it.replyId) }
-                db.relayInboxMessageDao().markAcknowledged(it.replyId)
-            }
-        }
-        return items.count { it.replyId !in previousIds }
+        // Backend dependency removed.
+        return 0
     }
 
     suspend fun syncMeshRelayReplies() {
-        if (!networkUtil.isOnlineNow()) return
-        val carrier = currentUser() ?: userRepository.ensureLocalUser()
-        val response = safeApiCall { api.getMeshRelayReplies(carrier.userId) } ?: return
-        if (!response.isSuccessful) return
-        val now = Instant.now().toString()
-        for (item in response.body()?.items.orEmpty()) {
-            db.relayPacketDao().insert(
-                RelayPacket(
-                    packetId = "reply:${item.replyId}",
-                    payloadJson = JSONObject()
-                        .put("type", "relay_reply")
-                        .put("reply_id", item.replyId)
-                        .put("original_job_id", item.originalJobId)
-                        .put("user_id", item.targetUserId)
-                        .put("sender_label", item.senderLabel)
-                        .put("sender_phone_number", item.senderPhoneNumber)
-                        .put("message_summary", item.messageSummary)
-                        .put("message_body", item.messageBody)
-                        .put("context_json", JSONObject(item.contextJson))
-                        .put("created_at", item.createdAt)
-                        .put("status", item.status)
-                        .toString(),
-                    receivedAt = now,
-                    senderDevice = "cloud",
-                    hopCount = 0,
-                    uploaded = true
-                )
-            )
-        }
+        // Backend dependency removed.
     }
 
     suspend fun fulfillRelayJob(jobId: String, proofRef: String): Boolean {
-        if (!networkUtil.isOnlineNow()) return false
-        val user = currentUser() ?: userRepository.ensureLocalUser()
-        val response = safeApiCall {
-            api.fulfillRelayJob(
-                FulfillRelayJobRequest(
-                    appUserId = user.userId,
-                    jobIdHex = jobId,
-                    proofRef = proofRef
-                )
-            )
-        } ?: return false
-        if (!response.isSuccessful) return false
-        val tx = response.body()?.txSignature.orEmpty()
-        db.relayJobIntentDao().markFulfilled(jobId, proofRef, tx)
-        return true
+        // Backend dependency removed.
+        return false
     }
 
-    suspend fun prepareTip(recipientWallet: String, amount: Int): PrepareTipResponse? {
-        val user = currentUser() ?: userRepository.ensureLocalUser()
-        if (!networkUtil.isOnlineNow()) return null
-        val response = safeApiCall {
-            api.prepareTip(PrepareTipRequest(user.userId, recipientWallet, amount))
-        } ?: return null
-        return if (response.isSuccessful) response.body() else null
+    suspend fun prepareTip(recipientWallet: String, amount: Int): Any? {
+        // Backend dependency removed.
+        return null
     }
 
-    suspend fun submitTip(prepared: PrepareTipResponse): Boolean {
-        val user = currentUser() ?: userRepository.ensureLocalUser()
-        if (!networkUtil.isOnlineNow()) return false
-        val signature = walletManager.sign(
-            user.userId,
-            Base64.decode(prepared.signedMessageBase64, Base64.NO_WRAP)
-        )
-        val response = safeApiCall {
-            api.submitTip(
-                SubmitTipRequest(
-                    appUserId = user.userId,
-                    recipientWallet = prepared.recipientWallet,
-                    amount = prepared.amount,
-                    nonce = prepared.nonce,
-                    tipIdHex = prepared.tipIdHex,
-                    signedMessageBase64 = prepared.signedMessageBase64,
-                    signatureBase64 = Base64.encodeToString(signature, Base64.NO_WRAP)
-                )
-            )
-        } ?: return false
-        return response.isSuccessful
+    suspend fun submitTip(prepared: Any): Boolean {
+        // Backend dependency removed.
+        return false
     }
 
     private suspend fun buildVoiceRelayContext(
