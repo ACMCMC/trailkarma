@@ -16,24 +16,28 @@ class Converters {
 class DatabaseCallback : RoomDatabase.Callback() {
     override fun onCreate(db: SupportSQLiteDatabase) {
         super.onCreate(db)
-        // No mock data - sync from cloud instead
+        val now = Instant.now().toString()
+        val columns = "(reportId, userId, type, title, description, lat, lng, timestamp, speciesName, confidence, source, synced, verificationStatus, rewardClaimed, highConfidenceBonus)"
+        db.execSQL("""INSERT INTO trail_reports $columns VALUES ('mock-1', 'seed', 'hazard', 'Rockslide ahead', 'Section near mile 24 has debris', 32.88, -117.24, '$now', NULL, NULL, 'self', 0, 'pending', 0, 0)""")
+        db.execSQL("""INSERT INTO trail_reports $columns VALUES ('mock-2', 'seed', 'hazard', 'Rattlesnake spotted', 'Stay alert, seen near water source', 32.87, -117.25, '$now', NULL, NULL, 'relayed', 0, 'pending', 0, 0)""")
+        db.execSQL("""INSERT INTO trail_reports $columns VALUES ('mock-3', 'seed', 'water', 'Water source confirmed', 'Spring flowing, fresh water tested', 32.89, -117.23, '$now', NULL, NULL, 'self', 0, 'pending', 0, 0)""")
     }
 }
 
-// v3 -> v4: LocationUpdate.id changed from autoGenerate Long -> UUID String
-// No migration needed — fallbackToDestructiveMigration wipes and rebuilds.
-// The cloud (Databricks) is the source of truth; local DB re-syncs on next launch.
 @Database(
-    entities = [User::class, TrailReport::class, LocationUpdate::class, RelayPacket::class, Trail::class],
-    version = 6, // hopCount added to RelayPacket; h3Cell on TrailReport + LocationUpdate
+    entities = [User::class, TrustedContact::class, TrailReport::class, LocationUpdate::class, RelayPacket::class, RelayJobIntent::class, RelayInboxMessage::class, Trail::class],
+    version = 8,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun userDao(): UserDao
+    abstract fun trustedContactDao(): TrustedContactDao
     abstract fun trailReportDao(): TrailReportDao
     abstract fun locationUpdateDao(): LocationUpdateDao
     abstract fun relayPacketDao(): RelayPacketDao
+    abstract fun relayJobIntentDao(): RelayJobIntentDao
+    abstract fun relayInboxMessageDao(): RelayInboxMessageDao
     abstract fun trailDao(): TrailDao
 
     companion object {

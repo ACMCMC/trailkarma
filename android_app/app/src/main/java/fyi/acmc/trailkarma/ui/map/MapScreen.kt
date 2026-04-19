@@ -1,12 +1,9 @@
 package fyi.acmc.trailkarma.ui.map
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -30,6 +27,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.systemBars
 import fyi.acmc.trailkarma.models.ReportType
 import fyi.acmc.trailkarma.models.TrailReport
+import fyi.acmc.trailkarma.models.Trail
 import org.osmdroid.views.MapView
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
@@ -37,13 +35,16 @@ import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polyline
 import com.squareup.moshi.JsonAdapter
 import com.squareup.moshi.Moshi
-import com.squareup.moshi.Types
 
 @Composable
 fun MapScreen(
     onNavigateToCamera: () -> Unit = {},
     onNavigateToReport: () -> Unit = {},
     onNavigateToReportDetail: (String) -> Unit = {},
+    onNavigateToRewards: () -> Unit = {},
+    onNavigateToProfile: () -> Unit = {},
+    onNavigateToBle: () -> Unit = {},
+    onNavigateToHistory: () -> Unit = {},
     onNavigateToAbout: () -> Unit = {},
     onNavigateToSyncStatus: () -> Unit = {},
     onNavigateToContact: () -> Unit = {},
@@ -54,11 +55,16 @@ fun MapScreen(
     val reports by vm.reports.collectAsState(initial = emptyList())
     val userLocation by vm.userLocation.collectAsState(initial = null)
     val trails by vm.trails.collectAsState(initial = emptyList())
+    val walletState by vm.walletState.collectAsState()
+    val isOnline by vm.isOnline.collectAsState(initial = false)
 
     var mapView: MapView? by remember { mutableStateOf(null) }
     var currentMapStyle by remember { mutableStateOf(TileSourceFactory.MAPNIK) }
-    var selectedTrail by remember { mutableStateOf<fyi.acmc.trailkarma.models.Trail?>(null) }
+    var selectedTrail by remember { mutableStateOf<Trail?>(null) }
     var zoomLevel by remember { mutableStateOf(13) }
+    // Tracks the data snapshot that was last rendered — overlays are only rebuilt when this changes.
+    data class OverlayKey(val reports: List<Any>, val loc: Any?, val trail: Any?, val zoom: Int, val style: Any)
+    var lastOverlayKey by remember { mutableStateOf<OverlayKey?>(null) }
 
     LaunchedEffect(trails) {
         if (selectedTrail == null && trails.isNotEmpty()) {
@@ -66,12 +72,22 @@ fun MapScreen(
         }
     }
 
+    LaunchedEffect(
+        reports.count { it.rewardClaimed },
+        reports.count { it.verificationStatus == "rejected" }
+    ) {
+        vm.refreshWalletState()
+    }
+
     val displayReports = reports
+    val offlineReportCount = reports.count { !it.synced }
+    val pendingRewardCount = reports.count { !it.rewardClaimed && it.verificationStatus != "rejected" }
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
     ModalNavigationDrawer(
         drawerState = drawerState,
+        gesturesEnabled = false,
         drawerContent = {
             ModalDrawerSheet(modifier = Modifier.fillMaxWidth(0.75f)) {
                 Column(
@@ -80,6 +96,46 @@ fun MapScreen(
                         .padding(16.dp)
                 ) {
                     Text("Menu", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 16.dp))
+
+                    NavigationDrawerItem(
+                        label = { Text("Rewards", style = MaterialTheme.typography.bodyMedium) },
+                        selected = false,
+                        onClick = {
+                            onNavigateToRewards()
+                            scope.launch { drawerState.close() }
+                        },
+                        icon = { Icon(Icons.Default.AutoAwesome, contentDescription = "Rewards") }
+                    )
+
+                    NavigationDrawerItem(
+                        label = { Text("Profile", style = MaterialTheme.typography.bodyMedium) },
+                        selected = false,
+                        onClick = {
+                            onNavigateToProfile()
+                            scope.launch { drawerState.close() }
+                        },
+                        icon = { Icon(Icons.Default.Person, contentDescription = "Profile") }
+                    )
+
+                    NavigationDrawerItem(
+                        label = { Text("Report History", style = MaterialTheme.typography.bodyMedium) },
+                        selected = false,
+                        onClick = {
+                            onNavigateToHistory()
+                            scope.launch { drawerState.close() }
+                        },
+                        icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = "History") }
+                    )
+
+                    NavigationDrawerItem(
+                        label = { Text("Relay Hub", style = MaterialTheme.typography.bodyMedium) },
+                        selected = false,
+                        onClick = {
+                            onNavigateToBle()
+                            scope.launch { drawerState.close() }
+                        },
+                        icon = { Icon(Icons.Default.Bluetooth, contentDescription = "Relay Hub") }
+                    )
 
                     NavigationDrawerItem(
                         label = { Text("About", style = MaterialTheme.typography.bodyMedium) },
@@ -140,7 +196,6 @@ fun MapScreen(
                 }
             },
             update = { map ->
-                // Update zoom level and scale markers accordingly
                 val currentZoom = map.zoomLevelDouble.toInt()
                 if (currentZoom != zoomLevel) {
                     zoomLevel = currentZoom
@@ -148,8 +203,14 @@ fun MapScreen(
 
                 val markerSize = (40 + (zoomLevel - 10) * 6).coerceIn(40, 140)
 
+                val overlayKey = OverlayKey(displayReports, userLocation, selectedTrail, markerSize, currentMapStyle)
+                if (overlayKey == lastOverlayKey) return@AndroidView
+                lastOverlayKey = overlayKey
+
                 map.overlays.clear()
-                map.setTileSource(currentMapStyle)
+                if (map.tileProvider.tileSource != currentMapStyle) {
+                    map.setTileSource(currentMapStyle)
+                }
 
                 // Add selected trail geometry if available
                 selectedTrail?.geometryJson?.let { geoJsonStr ->
@@ -269,6 +330,53 @@ fun MapScreen(
                     style = MaterialTheme.typography.labelSmall,
                     fontSize = 10.sp
                 )
+                Text(
+                    if (isOnline) "Online now" else "Offline safe mode",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontSize = 10.sp,
+                    color = if (isOnline) Color(0xFF1B5E20) else Color(0xFF8D6E63)
+                )
+                if (offlineReportCount > 0 || pendingRewardCount > 0) {
+                    Text(
+                        buildString {
+                            if (offlineReportCount > 0) append("$offlineReportCount local")
+                            if (offlineReportCount > 0 && pendingRewardCount > 0) append(" • ")
+                            if (pendingRewardCount > 0) append("$pendingRewardCount reward pending")
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        fontSize = 10.sp
+                    )
+                }
+            }
+        }
+
+        Card(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(WindowInsets.systemBars.asPaddingValues())
+                .padding(start = 56.dp, top = 100.dp)
+                .clickable(onClick = onNavigateToRewards),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+        ) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("REWARDS", style = MaterialTheme.typography.labelSmall, fontSize = 10.sp)
+                if (walletState != null) {
+                    Text(walletState!!.karmaBalance, style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        if (walletState!!.badges.isEmpty()) "Tap to open collectibles" else walletState!!.badges.joinToString(" • "),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontSize = 9.sp,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                } else {
+                    Text("Wallet syncing", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        if (isOnline) "Registering rewards state now" else "Will register when service returns",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontSize = 9.sp,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
             }
         }
 

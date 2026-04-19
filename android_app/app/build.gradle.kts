@@ -22,9 +22,13 @@ android {
         versionCode = 1
         versionName = "1.0"
 
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:3000\"")
+        val rewardsBaseUrl = project.findProperty("rewards.url")?.toString()
+            ?: System.getenv("REWARDS_BASE_URL")
+            ?: "http://10.0.2.2:3000"
+        buildConfigField("String", "REWARDS_BASE_URL", "\"$rewardsBaseUrl\"")
 
         // Read from local.properties
         val localProperties = Properties()
@@ -45,7 +49,7 @@ android {
         val databricksWarehouse = localProperties.getProperty("databricks.warehouse")
             ?: project.findProperty("databricks.warehouse")?.toString()
             ?: System.getenv("DATABRICKS_WAREHOUSE")
-            ?: ""
+            ?: "5fa7bca37483870e"
 
         buildConfigField("String", "DATABRICKS_URL", "\"$databricksUrl\"")
         buildConfigField("String", "DATABRICKS_TOKEN", "\"$databricksToken\"")
@@ -108,6 +112,9 @@ dependencies {
     implementation(libs.retrofit.converter.moshi)
     implementation(libs.okhttp.logging)
     implementation(libs.moshi.kotlin)
+    ksp(libs.moshi.kotlin.codegen)
+    implementation(libs.androidx.security.crypto)
+    implementation(libs.bouncycastle.bcprov)
 
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
@@ -126,8 +133,14 @@ dependencies {
 
     // Test
     testImplementation(libs.junit)
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation(libs.androidx.test.core)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.rules)
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 
     // CameraX
     val cameraxVersion = "1.4.1"

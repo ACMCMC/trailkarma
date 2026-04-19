@@ -1,0 +1,16 @@
+[toolchain]
+anchor_version = "1.0.0"
+
+[features]
+resolution = true
+skip-lint = false
+
+[programs.devnet]
+trail_karma_rewards = "GmRtJ6ghkm26SfdTDXTFDoX4TzHgQstCjwPPs5EpdZGS"
+
+[provider]
+cluster = "Devnet"
+wallet = "~/.config/solana/id.json"
+
+[scripts]
+test = "anchor test"

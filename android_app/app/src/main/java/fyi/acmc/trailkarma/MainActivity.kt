@@ -6,7 +6,6 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.compose.rememberNavController
@@ -19,6 +18,7 @@ import fyi.acmc.trailkarma.models.TrailReport
 import fyi.acmc.trailkarma.repository.UserRepository
 import fyi.acmc.trailkarma.repository.DatabricksSyncRepository
 import fyi.acmc.trailkarma.sync.SyncWorker
+import fyi.acmc.trailkarma.ui.design.TrailKarmaAppTheme
 import fyi.acmc.trailkarma.ui.navigation.Routes
 import fyi.acmc.trailkarma.ui.navigation.TrailKarmaNavGraph
 import kotlinx.coroutines.flow.first
@@ -47,19 +47,27 @@ class MainActivity : ComponentActivity() {
 
         lifecycleScope.launch {
             val db = AppDatabase.get(applicationContext)
+            seedDatabaseIfEmpty(db)
             val syncRepo = DatabricksSyncRepository(applicationContext, db)
-            
-            if (BuildConfig.DATABRICKS_TOKEN.isNotEmpty()) {
+
+            if (BuildConfig.DATABRICKS_URL.isNotEmpty() &&
+                BuildConfig.DATABRICKS_TOKEN.isNotEmpty() &&
+                BuildConfig.DATABRICKS_WAREHOUSE.isNotEmpty()
+            ) {
                 syncRepo.setDatabricksConfig(
                     url = BuildConfig.DATABRICKS_URL,
                     token = BuildConfig.DATABRICKS_TOKEN,
                     warehouse = BuildConfig.DATABRICKS_WAREHOUSE
                 )
-                
-                // Initial sync on startup
+
                 if (syncRepo.isOnline()) {
-                    syncRepo.syncReports()
-                    syncRepo.pullReportsFromCloud()
+                    runCatching {
+                        syncRepo.syncReports()
+                        syncRepo.syncLocations()
+                        syncRepo.syncRelayPackets()
+                        syncRepo.pullReportsFromCloud()
+                        syncRepo.pullTrailsFromCloud()
+                    }
                 }
             }
         }
@@ -67,15 +75,15 @@ class MainActivity : ComponentActivity() {
         requestPermissions()
 
         setContent {
-            MaterialTheme {
+            TrailKarmaAppTheme {
                 val navController = rememberNavController()
                 var startDest by remember { mutableStateOf<String?>(null) }
 
                 LaunchedEffect(Unit) {
                     val db = AppDatabase.get(applicationContext)
                     val repo = UserRepository(applicationContext, db.userDao())
-                    val userId = repo.currentUserId.first()
-                    startDest = if (userId != null) Routes.MAP else Routes.LOGIN
+                    repo.ensureLocalUser()
+                    startDest = Routes.MAP
                 }
 
                 startDest?.let {
@@ -95,5 +103,52 @@ class MainActivity : ComponentActivity() {
         ))
     }
 
+    private suspend fun seedDatabaseIfEmpty(db: AppDatabase) {
+        val count = db.trailReportDao().getAll().first().size
+        if (count == 0) {
+            val now = Instant.now().toString()
+            val repo = UserRepository(applicationContext, db.userDao())
+            val userId = repo.currentUserId.first() ?: "demo-user"
 
+            db.trailReportDao().insert(
+                TrailReport(
+                    reportId = "mock-1",
+                    userId = userId,
+                    type = ReportType.hazard,
+                    title = "Rockslide ahead",
+                    description = "Section near mile 24 has debris",
+                    lat = 32.88,
+                    lng = -117.24,
+                    timestamp = now,
+                    source = ReportSource.self
+                )
+            )
+            db.trailReportDao().insert(
+                TrailReport(
+                    reportId = "mock-2",
+                    userId = userId,
+                    type = ReportType.hazard,
+                    title = "Rattlesnake spotted",
+                    description = "Stay alert, seen near water source",
+                    lat = 32.87,
+                    lng = -117.25,
+                    timestamp = now,
+                    source = ReportSource.relayed
+                )
+            )
+            db.trailReportDao().insert(
+                TrailReport(
+                    reportId = "mock-3",
+                    userId = userId,
+                    type = ReportType.water,
+                    title = "Water source confirmed",
+                    description = "Spring flowing, fresh water tested",
+                    lat = 32.89,
+                    lng = -117.23,
+                    timestamp = now,
+                    source = ReportSource.self
+                )
+            )
+        }
+    }
 }

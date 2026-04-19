@@ -1,0 +1,23 @@
+[package]
+name = "trail_karma_rewards"
+version = "0.1.0"
+description = "TrailKarma Solana rewards program"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "trail_karma_rewards"
+
+[features]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+cpi = ["no-entrypoint"]
+default = []
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
+
+[dependencies]
+anchor-lang = { version = "1.0.0", features = ["init-if-needed"] }
+anchor-spl = { version = "1.0.0", features = ["associated_token", "token_2022"] }
+solana-instructions-sysvar = "3.0.0"
+solana-sdk-ids = "3.1.0"

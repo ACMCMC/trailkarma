@@ -7,7 +7,7 @@ import json
 import math
 import csv
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 
 try:
     import h3
@@ -24,6 +24,11 @@ def latlng_to_h3(lat, lng, resolution=9):
 def sql_str(val):
     """Wrap a value in SQL quotes or return NULL."""
     return f"'{val}'" if val is not None else "NULL"
+
+
+def iso_z(dt):
+    """Serialize datetimes as RFC3339 with Z suffix."""
+    return dt.isoformat().replace("+00:00", "Z")
 
 PCT_GEOJSON = os.path.join(os.path.dirname(__file__), "data", "Southern_California.geojson")
 SPECIES_CSV = os.path.join(os.path.dirname(__file__), "data", "observations-712152.csv")
@@ -122,7 +127,7 @@ def load_species_report_statements(full_schema):
                 report_id = str(uuid.uuid4())
                 title = (row.get("common_name") or row.get("species_guess") or "Unknown Species").replace("'", "\\'")
                 desc = (row.get("description") or row.get("place_guess") or "").replace("'", "\\'")
-                ts = row.get("time_observed_at") or row.get("observed_on") or datetime.utcnow().isoformat() + "Z"
+                ts = row.get("time_observed_at") or row.get("observed_on") or iso_z(datetime.now(UTC))
                 image_url = (row.get("image_url") or "").replace("'", "\\'")
                 species_name = (row.get("scientific_name") or "").replace("'", "\\'")
                 h3_cell = latlng_to_h3(lat, lng)
@@ -169,11 +174,11 @@ def main():
     schema = "trailkarma"
     full_schema = f"{catalog}.{schema}"
 
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
 
     # The 4 demo hikers (id, name, wallet, karma, active_trail_id)
     pct_trail_id = str(uuid.uuid4())
-    
+
     users = [
         (str(uuid.uuid4()), 'Aldan', '8Bse...1a', 150, pct_trail_id),
         (str(uuid.uuid4()), 'Qianqian', 'C9fe...2b', 320, pct_trail_id),
@@ -197,18 +202,18 @@ def main():
 
     # Locations — now include h3_cell
     locations = [
-        (str(uuid.uuid4()), now.isoformat() + 'Z',                           base_lat,         base_lng,         latlng_to_h3(base_lat,         base_lng)),
-        (str(uuid.uuid4()), (now - timedelta(minutes=30)).isoformat() + 'Z', base_lat + 0.002, base_lng - 0.002, latlng_to_h3(base_lat + 0.002, base_lng - 0.002)),
-        (str(uuid.uuid4()), (now - timedelta(minutes=60)).isoformat() + 'Z', base_lat - 0.002, base_lng + 0.002, latlng_to_h3(base_lat - 0.002, base_lng + 0.002)),
+        (str(uuid.uuid4()), iso_z(now), base_lat, base_lng, latlng_to_h3(base_lat, base_lng)),
+        (str(uuid.uuid4()), iso_z(now - timedelta(minutes=30)), base_lat + 0.002, base_lng - 0.002, latlng_to_h3(base_lat + 0.002, base_lng - 0.002)),
+        (str(uuid.uuid4()), iso_z(now - timedelta(minutes=60)), base_lat - 0.002, base_lng + 0.002, latlng_to_h3(base_lat - 0.002, base_lng + 0.002)),
     ]
 
     # Relay Packets
     relay_packets = [
-        (str(uuid.uuid4()), '{"type":"report","report_id":"mock-2"}', (now - timedelta(hours=2)).isoformat() + 'Z', 'device-123'),
+        (str(uuid.uuid4()), '{"type":"report","report_id":"mock-2"}', iso_z(now - timedelta(hours=2)), 'device-123'),
     ]
 
     sql_statements = [
-        f"CREATE SCHEMA IF NOT EXISTS {full_schema}",
+        f"CREATE SCHEMA IF NOT EXISTS {schema}",
 
         # WIPE OUT EXISTING TABLES (order matters for FK constraints)
         f"DROP TABLE IF EXISTS {full_schema}.user_contacts",
@@ -355,7 +360,7 @@ def main():
 
     for i, (rid, rtype, title, desc, lat, lng, source, species, conf, h3_cell) in enumerate(reports):
         user_id = users[i % len(users)][0]
-        ts = (now - timedelta(hours=i*2)).isoformat() + 'Z'
+        ts = iso_z(now - timedelta(hours=i * 2))
         sql_statements.append(
             f"INSERT INTO {full_schema}.trail_reports VALUES "
             f"('{rid}', '{user_id}', '{rtype}', '{title}', '{desc}', "
@@ -373,9 +378,6 @@ def main():
     for packet_id, payload, ts, device in relay_packets:
         sql_statements.append(f"INSERT INTO {full_schema}.relay_packets VALUES ('{packet_id}', '{payload}', '{ts}', '{device}', true, current_timestamp(), current_timestamp())")
 
-    # Species reports from iNaturalist (Southern California only)
-    sql_statements.extend(load_species_report_statements(full_schema))
-
     # Contacts
     # Aldan and Qianqian are contacts
     sql_statements.append(f"INSERT INTO {full_schema}.user_contacts VALUES ('{str(uuid.uuid4())}', '{users[0][0]}', '{users[1][0]}', 'accepted', current_timestamp(), current_timestamp())")
@@ -392,12 +394,15 @@ def main():
         print(f"  ❌ Failed to connect to Databricks API: {e}")
         return False
 
-    warehouse_id = None
-    for wh in warehouses:
-        if wh.get('state') == 'RUNNING':
-            warehouse_id = wh.get('id')
-            print(f"  ✓ Using: {wh.get('name')}\n")
-            break
+    warehouse_id = config.get("DATABRICKS_WAREHOUSE") or None
+    if warehouse_id:
+        print(f"  ✓ Using configured warehouse: {warehouse_id}\n")
+    else:
+        for wh in warehouses:
+            if wh.get('state') == 'RUNNING':
+                warehouse_id = wh.get('id')
+                print(f"  ✓ Using: {wh.get('name')}\n")
+                break
 
     if not warehouse_id:
         print("  ❌ No running warehouses! Please start a warehouse in Databricks and rerun.")

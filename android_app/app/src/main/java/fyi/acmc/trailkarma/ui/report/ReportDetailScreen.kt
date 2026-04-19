@@ -165,6 +165,23 @@ fun ReportDetailScreen(
                                 Text("pending upload", fontSize = 10.sp, color = Color(0xFFFF9800))
                             }
                         }
+                        when {
+                            r.rewardClaimed -> {
+                                Badge(containerColor = Color(0xFF2E7D32)) {
+                                    Text("KARMA settled", fontSize = 10.sp)
+                                }
+                            }
+                            r.verificationStatus == "rejected" -> {
+                                Badge(containerColor = Color(0xFFD50000)) {
+                                    Text("rejected", fontSize = 10.sp)
+                                }
+                            }
+                            else -> {
+                                Badge(containerColor = Color(0xFF1976D2)) {
+                                    Text("pending review", fontSize = 10.sp)
+                                }
+                            }
+                        }
                     }
 
                     HorizontalDivider()
@@ -222,6 +239,21 @@ fun ReportDetailScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                    }
+
+                    r.rewardTxSignature?.let { signature ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(Icons.Default.AutoAwesome, contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
+                            Text(
+                                "Reward tx ${signature.take(12)}...",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
             }

@@ -44,8 +44,14 @@ class BleService : Service() {
             val userRepo = UserRepository(applicationContext, db.userDao())
             val userId = userRepo.currentUserId.first() ?: "unknown"
 
-            bleRepo = BleRepository(applicationContext, db.relayPacketDao(), db.trailReportDao())
-            gattServer = GattServer(applicationContext, db.trailReportDao())
+            bleRepo = BleRepository(
+                applicationContext,
+                db.relayPacketDao(),
+                db.trailReportDao(),
+                db.relayJobIntentDao(),
+                db.relayInboxMessageDao()
+            )
+            gattServer = GattServer(applicationContext, db.trailReportDao(), db.relayPacketDao())
 
             // Start GATT server so peers can connect and pull our report manifest
             gattServer.start()

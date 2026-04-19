@@ -21,6 +21,7 @@ Also copy your workspace URL from the browser:
 # Option A: Export directly
 export DATABRICKS_HOST=https://your-workspace.cloud.databricks.com
 export DATABRICKS_TOKEN=dapi...
+export DATABRICKS_WAREHOUSE=5fa7bca37483870e
 
 # Option B: Create .env file (easier for reuse)
 cp .env.example .env
@@ -52,7 +53,7 @@ Safe to run anytime—drops old tables and creates fresh ones.
 ## What Gets Created
 
 ```
-main.trailkarma/
+trailkarma/
 ├── trails (1 master trail - PCT)
 ├── trail_waypoints (master POIs)
 ├── users (4 demo hikers)
@@ -61,6 +62,8 @@ main.trailkarma/
 ├── location_updates (3 GPS pings)
 └── relay_packets (BLE mesh data / encounters)
 ```
+
+In our Databricks workspace the active catalog is `workspace`, so fully-qualified references like `workspace.trailkarma.trail_reports` also work. The setup script itself creates the `trailkarma` schema and seeds it with demo data.
 
 ### 📍 H3 Spatial Indexing (Advanced Analytics)
 To win the **Cloud/Analytics tracks**, we are leveraging **Uber H3 Indexing**. Instead of slow raw-coordinate queries, we index all trail data and reports into hexagonal cells.
@@ -200,24 +203,24 @@ Run these in Databricks SQL to impress judges:
 ```sql
 -- Active hazards on PCT using H3 optimization
 SELECT title, description, lat, lng, timestamp
-FROM workspace.trailkarma.trail_reports
+FROM trailkarma.trail_reports
 WHERE type = 'hazard'
 AND h3_cell = h3_longlatash3(-117.24, 32.88, 9)
 ORDER BY timestamp DESC;
 
 -- Species sightings heatmap (Hexagonal Aggregation)
 SELECT h3_cell, species_name, AVG(confidence) as avg_conf, COUNT(*) as sightings
-FROM workspace.trailkarma.trail_reports
+FROM trailkarma.trail_reports
 WHERE type = 'species'
 GROUP BY h3_cell, species_name;
 
 -- Real-time hiker trail snapping
 -- Finds hikers currently in the same H3 cell as a known trail segment
 SELECT u.display_name, r.h3_cell, t.name as trail_name
-FROM workspace.trailkarma.location_updates r
-JOIN workspace.trailkarma.users u ON r.user_id = u.user_id
-JOIN workspace.trailkarma.trail_segments s ON r.h3_cell = s.h3_cell
-JOIN workspace.trailkarma.trails t ON s.trail_id = t.trail_id;
+FROM trailkarma.location_updates r
+JOIN trailkarma.users u ON r.user_id = u.user_id
+JOIN trailkarma.trail_segments s ON r.h3_cell = s.h3_cell
+JOIN trailkarma.trails t ON s.trail_id = t.trail_id;
 ```
 
 ## Troubleshooting

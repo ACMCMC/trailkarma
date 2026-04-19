@@ -4,24 +4,32 @@ import android.content.Context
 import androidx.work.*
 import fyi.acmc.trailkarma.db.AppDatabase
 import fyi.acmc.trailkarma.repository.DatabricksSyncRepository
+import fyi.acmc.trailkarma.repository.RewardsRepository
 import kotlinx.coroutines.CancellationException
 
 class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         val db = AppDatabase.get(applicationContext)
         val syncRepo = DatabricksSyncRepository(applicationContext, db)
+        val rewardsRepo = RewardsRepository(applicationContext, db)
 
-        // Only sync if online and Databricks is configured
         if (!syncRepo.isOnline()) return Result.retry()
 
         return try {
-            // Push local changes to cloud
-            syncRepo.syncReports()
-            syncRepo.syncLocations()
-            syncRepo.syncRelayPackets() // upload BLE encounter + relay data
+            if (syncRepo.isConfigured()) {
+                syncRepo.syncReports()
+                syncRepo.syncLocations()
+                syncRepo.syncRelayPackets()
+                syncRepo.pullReportsFromCloud()
+                syncRepo.pullTrailsFromCloud()
+            }
 
-            // Pull all data from cloud to local
-            syncRepo.pullReportsFromCloud()
+            rewardsRepo.syncCurrentUserRegistration()
+            rewardsRepo.claimRewardsForPendingReports()
+            rewardsRepo.openPendingRelayJobs()
+            rewardsRepo.openPendingVoiceRelayJobs()
+            rewardsRepo.syncMeshRelayReplies()
+            rewardsRepo.syncRelayInbox()
             Result.success()
         } catch (e: CancellationException) {
             android.util.Log.w("SyncWorker", "Sync cancelled, will retry", e)

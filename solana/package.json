@@ -1,0 +1,7 @@
+{
+  "name": "trailkarma-solana",
+  "private": true,
+  "scripts": {
+    "test": "anchor test"
+  }
+}

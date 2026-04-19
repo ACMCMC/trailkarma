@@ -3,12 +3,16 @@ package fyi.acmc.trailkarma.ui.map
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import fyi.acmc.trailkarma.api.WalletStateResponse
 import fyi.acmc.trailkarma.db.AppDatabase
 import fyi.acmc.trailkarma.models.LocationUpdate
+import fyi.acmc.trailkarma.models.Trail
 import fyi.acmc.trailkarma.models.TrailReport
+import fyi.acmc.trailkarma.network.NetworkUtil
+import fyi.acmc.trailkarma.repository.DatabricksSyncRepository
+import fyi.acmc.trailkarma.repository.RewardsRepository
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.delay
 import org.osmdroid.util.GeoPoint
 
 data class MapMarker(
@@ -21,50 +25,41 @@ data class MapMarker(
 
 class MapViewModel(app: Application) : AndroidViewModel(app) {
     private val db = AppDatabase.get(app)
+    private val syncRepo = DatabricksSyncRepository(app, db)
+    private val rewardsRepository = RewardsRepository(app, db)
 
     val reports: Flow<List<TrailReport>> = db.trailReportDao().getAll()
     val userLocation: Flow<LocationUpdate?> = db.locationUpdateDao().getLatest()
-    val trails: Flow<List<fyi.acmc.trailkarma.models.Trail>> = db.trailDao().getAll()
-    val selectedReport = MutableStateFlow<TrailReport?>(null)
+    val trails: Flow<List<Trail>> = db.trailDao().getAll()
+    val walletState = MutableStateFlow<WalletStateResponse?>(null)
+    val isOnline = NetworkUtil(app).isOnline
 
     init {
-        startPolling()
+        viewModelScope.launch {
+            refreshCloudData()
+            refreshWalletState()
+        }
         listenForNetworkChanges()
     }
 
-    private fun startPolling() {
-        viewModelScope.launch {
-            val syncRepo = fyi.acmc.trailkarma.repository.DatabricksSyncRepository(getApplication(), db)
-            while (true) {
-                if (syncRepo.isOnline()) {
-                    try {
-                        syncRepo.syncReports()
-                        syncRepo.pullReportsFromCloud()
-                        syncRepo.pullTrailsFromCloud()
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                    }
-                }
-                // Poll every second when online
-                kotlinx.coroutines.delay(1_000)
-            }
+    private suspend fun refreshCloudData() {
+        if (!syncRepo.isOnline() || !syncRepo.isConfigured()) return
+        runCatching {
+            syncRepo.syncReports()
+            syncRepo.syncLocations()
+            syncRepo.syncRelayPackets()
+            syncRepo.pullReportsFromCloud()
+            syncRepo.pullTrailsFromCloud()
         }
     }
 
     private fun listenForNetworkChanges() {
         viewModelScope.launch {
-            val networkUtil = fyi.acmc.trailkarma.network.NetworkUtil(getApplication())
+            val networkUtil = NetworkUtil(getApplication())
             networkUtil.networkChanged.collect { changed ->
                 if (changed && networkUtil.isOnlineNow()) {
-                    android.util.Log.d("MapViewModel", "Network became available, triggering sync")
-                    val syncRepo = fyi.acmc.trailkarma.repository.DatabricksSyncRepository(getApplication(), db)
-                    try {
-                        syncRepo.syncReports()
-                        syncRepo.pullReportsFromCloud()
-                        syncRepo.pullTrailsFromCloud()
-                    } catch (e: Exception) {
-                        android.util.Log.e("MapViewModel", "Auto-sync failed", e)
-                    }
+                    refreshCloudData()
+                    refreshWalletState()
                     networkUtil.clearNetworkChangeFlag()
                 }
             }
@@ -113,7 +108,9 @@ class MapViewModel(app: Application) : AndroidViewModel(app) {
     }
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
-    fun selectReport(report: TrailReport?) {
-        selectedReport.value = report
+    fun refreshWalletState() {
+        viewModelScope.launch {
+            walletState.value = rewardsRepository.fetchWalletState() ?: rewardsRepository.syncCurrentUserRegistration()
+        }
     }
 }
