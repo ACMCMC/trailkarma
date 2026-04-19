@@ -40,25 +40,40 @@ class BleService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        Log.i(TAG, "BleService onCreate")
+        Log.i(TAG, "🔵 BleService onCreate called")
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, buildNotification())
 
         serviceScope.launch {
-            val db = AppDatabase.get(applicationContext)
-            val userRepo = UserRepository(applicationContext, db.userDao())
-            val user = userRepo.ensureLocalUser()
-            val hikerName = user.displayName.ifBlank { user.userId }
-            Log.i(TAG, "BLE stack starting for hiker: $hikerName")
+            try {
+                Log.i(TAG, "📝 Getting database and user...")
+                val db = AppDatabase.get(applicationContext)
+                val userRepo = UserRepository(applicationContext, db.userDao())
+                val user = userRepo.ensureLocalUser()
+                val hikerName = user.displayName.ifBlank { user.userId }
+                Log.i(TAG, "✓ BLE stack starting for hiker: $hikerName")
 
-            bleRepo = BleRepositoryHolder.getInstance(applicationContext)
-            gattServer = GattServer(applicationContext, db.trailReportDao(), db.relayPacketDao())
+                Log.i(TAG, "📡 Initializing BleRepository...")
+                bleRepo = BleRepositoryHolder.getInstance(applicationContext)
+                Log.i(TAG, "✓ BleRepository ready")
 
-            gattServer.start()
-            bleRepo.startAdvertising(hikerName)
-            bleRepo.startScan()
+                Log.i(TAG, "🖥 Starting GattServer...")
+                gattServer = GattServer(applicationContext, db.trailReportDao(), db.relayPacketDao())
+                gattServer.start()
+                Log.i(TAG, "✓ GattServer started")
 
-            Log.i(TAG, "BLE stack fully started — advertising + scanning + GATT server running")
+                Log.i(TAG, "📢 Starting advertising as: $hikerName")
+                bleRepo.startAdvertising(hikerName)
+                Log.i(TAG, "✓ Advertising started")
+
+                Log.i(TAG, "🔍 Starting scan...")
+                bleRepo.startScan()
+                Log.i(TAG, "✓ Scan started")
+
+                Log.i(TAG, "🟢 BLE stack fully started — advertising + scanning + GATT server running")
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ BLE initialization failed: ${e.message}", e)
+            }
         }
     }
 
