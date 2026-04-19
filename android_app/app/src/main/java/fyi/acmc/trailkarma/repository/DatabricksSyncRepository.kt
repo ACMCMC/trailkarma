@@ -2,12 +2,18 @@ package fyi.acmc.trailkarma.repository
 
 import android.content.Context
 import android.content.SharedPreferences
-import fyi.acmc.trailkarma.api.DatabricksApi
-import fyi.acmc.trailkarma.api.DatabricksSyncRequest
+import android.util.Log
+import com.squareup.moshi.JsonAdapter
+import com.squareup.moshi.Moshi
+import com.squareup.moshi.Types
 import fyi.acmc.trailkarma.api.DatabricksApiClient
+import fyi.acmc.trailkarma.api.DatabricksSyncRequest
 import fyi.acmc.trailkarma.db.AppDatabase
+import fyi.acmc.trailkarma.models.ReportSource
+import fyi.acmc.trailkarma.models.ReportType
+import fyi.acmc.trailkarma.models.TrailReport
 import fyi.acmc.trailkarma.network.NetworkUtil
-import kotlinx.coroutines.flow.first
+import okhttp3.OkHttpClient
 
 class DatabricksSyncRepository(context: Context, private val db: AppDatabase) {
     private val prefs: SharedPreferences = context.getSharedPreferences("databricks", Context.MODE_PRIVATE)
@@ -37,6 +43,8 @@ class DatabricksSyncRepository(context: Context, private val db: AppDatabase) {
         val api = DatabricksApiClient.create(databricksUrl, databricksToken)
         val reports = db.trailReportDao().getUnsynced()
 
+        Log.d("DatabricksSync", "Pushing ${reports.size} unsynced reports to Databricks")
+
         var success = true
         for (report in reports) {
             val species = if (report.type.name == "species") "'${report.speciesName}'" else "NULL"
@@ -56,16 +64,90 @@ class DatabricksSyncRepository(context: Context, private val db: AppDatabase) {
                 val response = api.executeSql(request)
 
                 if (response.status.state == "SUCCEEDED") {
+                    Log.d("DatabricksSync", "✓ Uploaded report: ${report.title}")
                     db.trailReportDao().markSynced(report.reportId)
                 } else {
+                    Log.e("DatabricksSync", "✗ Failed to upload: ${report.title}")
                     success = false
                 }
             } catch (e: Exception) {
+                Log.e("DatabricksSync", "✗ Error uploading: ${report.title}", e)
                 success = false
             }
         }
 
         return success
+    }
+
+    suspend fun pullReportsFromCloud(): Boolean {
+        if (!networkUtil.isOnlineNow() || warehouseId.isEmpty()) return false
+
+        try {
+            val api = DatabricksApiClient.create(databricksUrl, databricksToken)
+            val selectSql = "SELECT report_id, type, title, description, lat, lng, timestamp, species_name, confidence, source FROM trailkarma.trail_reports ORDER BY timestamp DESC"
+            val request = DatabricksSyncRequest(warehouseId, selectSql)
+            val response = api.executeSql(request)
+
+            if (response.status.state != "SUCCEEDED") {
+                Log.e("DatabricksSync", "✗ Pull failed: ${response.status.state}")
+                return false
+            }
+
+            val result = response.result
+            val rows = result?.data
+            if (rows.isNullOrEmpty()) {
+                Log.d("DatabricksSync", "No reports in cloud")
+                return true
+            }
+
+            Log.d("DatabricksSync", "Pulling ${rows.size} reports from Databricks")
+
+            var pulledCount = 0
+            for (row in rows) {
+                try {
+                    if (row.size < 10) continue
+
+                    val reportId = row.getOrNull(0) as? String ?: continue
+                    val typeStr = row.getOrNull(1) as? String ?: "hazard"
+                    val type = try { ReportType.valueOf(typeStr) } catch (e: Exception) { ReportType.hazard }
+                    val title = row.getOrNull(2) as? String ?: ""
+                    val description = row.getOrNull(3) as? String ?: ""
+                    val lat = (row.getOrNull(4) as? Number)?.toDouble() ?: 0.0
+                    val lng = (row.getOrNull(5) as? Number)?.toDouble() ?: 0.0
+                    val timestamp = row.getOrNull(6) as? String ?: ""
+                    val speciesName = row.getOrNull(7) as? String
+                    val confidence = (row.getOrNull(8) as? Number)?.toFloat()
+                    val sourceStr = row.getOrNull(9) as? String ?: "self"
+                    val source = try { ReportSource.valueOf(sourceStr) } catch (e: Exception) { ReportSource.self }
+
+                    val report = TrailReport(
+                        reportId = reportId,
+                        type = type,
+                        title = title,
+                        description = description,
+                        lat = lat,
+                        lng = lng,
+                        timestamp = timestamp,
+                        speciesName = speciesName,
+                        confidence = confidence,
+                        source = source,
+                        synced = true
+                    )
+
+                    db.trailReportDao().insert(report)
+                    Log.d("DatabricksSync", "✓ Synced: $title")
+                    pulledCount++
+                } catch (e: Exception) {
+                    Log.w("DatabricksSync", "Failed to parse row", e)
+                }
+            }
+
+            Log.d("DatabricksSync", "✓ Successfully synced $pulledCount reports from cloud")
+            return true
+        } catch (e: Exception) {
+            Log.e("DatabricksSync", "✗ Error pulling from cloud", e)
+            return false
+        }
     }
 
     suspend fun syncLocations(): Boolean {

@@ -21,7 +21,8 @@ interface DatabricksApi {
 @JsonClass(generateAdapter = true)
 data class DatabricksSqlResponse(
     val statement_id: String,
-    val status: SqlStatus
+    val status: SqlStatus,
+    val result: SqlResult? = null
 )
 
 @JsonClass(generateAdapter = true)
@@ -34,6 +35,11 @@ data class SqlStatus(
 data class SqlError(
     val error_code: String,
     val message: String
+)
+
+@JsonClass(generateAdapter = true)
+data class SqlResult(
+    val data: List<List<Any?>>? = null
 )
 
 object DatabricksApiClient {

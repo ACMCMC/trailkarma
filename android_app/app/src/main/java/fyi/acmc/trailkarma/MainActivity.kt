@@ -12,6 +12,9 @@ import androidx.lifecycle.lifecycleScope
 import androidx.navigation.compose.rememberNavController
 import fyi.acmc.trailkarma.db.AppDatabase
 import fyi.acmc.trailkarma.location.LocationService
+import fyi.acmc.trailkarma.models.ReportSource
+import fyi.acmc.trailkarma.models.ReportType
+import fyi.acmc.trailkarma.models.TrailReport
 import fyi.acmc.trailkarma.repository.UserRepository
 import fyi.acmc.trailkarma.repository.DatabricksSyncRepository
 import fyi.acmc.trailkarma.sync.SyncWorker
@@ -19,6 +22,8 @@ import fyi.acmc.trailkarma.ui.navigation.Routes
 import fyi.acmc.trailkarma.ui.navigation.TrailKarmaNavGraph
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import fyi.acmc.trailkarma.BuildConfig
+import java.time.Instant
 
 class MainActivity : ComponentActivity() {
 
@@ -42,17 +47,22 @@ class MainActivity : ComponentActivity() {
 
                 LaunchedEffect(Unit) {
                     val db = AppDatabase.get(applicationContext)
+
+                    seedDatabaseIfEmpty(db)
+
                     val repo = UserRepository(applicationContext, db.userDao())
                     val userId = repo.currentUserId.first()
                     startDest = if (userId != null) Routes.MAP else Routes.LOGIN
 
                     if (userId != null) {
                         val syncRepo = DatabricksSyncRepository(applicationContext, db)
-                        syncRepo.setDatabricksConfig(
-                            url = "https://dbc-f1d1578e-8435.cloud.databricks.com",
-                            token = "dapia5720e0dfb4e196415703773b1f4aa78",
-                            warehouse = "5fa7bca37483870e"
-                        )
+                        if (BuildConfig.DATABRICKS_TOKEN.isNotEmpty()) {
+                            syncRepo.setDatabricksConfig(
+                                url = BuildConfig.DATABRICKS_URL,
+                                token = BuildConfig.DATABRICKS_TOKEN,
+                                warehouse = BuildConfig.DATABRICKS_WAREHOUSE
+                            )
+                        }
                     }
                 }
 
@@ -71,5 +81,42 @@ class MainActivity : ComponentActivity() {
             Manifest.permission.BLUETOOTH_ADVERTISE,
             Manifest.permission.BLUETOOTH_CONNECT
         ))
+    }
+
+    private suspend fun seedDatabaseIfEmpty(db: AppDatabase) {
+        val count = db.trailReportDao().getAll().first().size
+        if (count == 0) {
+            val now = Instant.now().toString()
+            db.trailReportDao().insert(TrailReport(
+                reportId = "mock-1",
+                type = ReportType.hazard,
+                title = "Rockslide ahead",
+                description = "Section near mile 24 has debris",
+                lat = 32.88,
+                lng = -117.24,
+                timestamp = now,
+                source = ReportSource.self
+            ))
+            db.trailReportDao().insert(TrailReport(
+                reportId = "mock-2",
+                type = ReportType.hazard,
+                title = "Rattlesnake spotted",
+                description = "Stay alert, seen near water source",
+                lat = 32.87,
+                lng = -117.25,
+                timestamp = now,
+                source = ReportSource.relayed
+            ))
+            db.trailReportDao().insert(TrailReport(
+                reportId = "mock-3",
+                type = ReportType.water,
+                title = "Water source confirmed",
+                description = "Spring flowing, fresh water tested",
+                lat = 32.89,
+                lng = -117.23,
+                timestamp = now,
+                source = ReportSource.self
+            ))
+        }
     }
 }

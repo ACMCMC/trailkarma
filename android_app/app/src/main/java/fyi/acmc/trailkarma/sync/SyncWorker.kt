@@ -14,8 +14,12 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         if (!syncRepo.isOnline()) return Result.retry()
 
         runCatching {
+            // Push local changes to cloud
             syncRepo.syncReports()
             syncRepo.syncLocations()
+
+            // Pull all data from cloud to local
+            syncRepo.pullReportsFromCloud()
         }.getOrNull() ?: return Result.retry()
 
         return Result.success()

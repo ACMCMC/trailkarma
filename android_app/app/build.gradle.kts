@@ -22,6 +22,21 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:3000\"")
+
+        // Databricks credentials
+        val databricksUrl = project.findProperty("databricks.url")?.toString()
+            ?: System.getenv("DATABRICKS_HOST")
+            ?: "https://dbc-f1d1578e-8435.cloud.databricks.com"
+        val databricksToken = project.findProperty("databricks.token")?.toString()
+            ?: System.getenv("DATABRICKS_TOKEN")
+            ?: ""
+        val databricksWarehouse = project.findProperty("databricks.warehouse")?.toString()
+            ?: System.getenv("DATABRICKS_WAREHOUSE")
+            ?: ""
+
+        buildConfigField("String", "DATABRICKS_URL", "\"$databricksUrl\"")
+        buildConfigField("String", "DATABRICKS_TOKEN", "\"$databricksToken\"")
+        buildConfigField("String", "DATABRICKS_WAREHOUSE", "\"$databricksWarehouse\"")
     }
 
     buildTypes {

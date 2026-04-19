@@ -1,18 +1,26 @@
 package fyi.acmc.trailkarma.db
 
 import android.content.Context
-import androidx.room.Database
-import androidx.room.Room
-import androidx.room.RoomDatabase
-import androidx.room.TypeConverter
-import androidx.room.TypeConverters
+import androidx.room.*
+import androidx.sqlite.db.SupportSQLiteDatabase
 import fyi.acmc.trailkarma.models.*
+import java.time.Instant
 
 class Converters {
     @TypeConverter fun reportTypeToString(v: ReportType) = v.name
     @TypeConverter fun stringToReportType(v: String) = ReportType.valueOf(v)
     @TypeConverter fun reportSourceToString(v: ReportSource) = v.name
     @TypeConverter fun stringToReportSource(v: String) = ReportSource.valueOf(v)
+}
+
+class DatabaseCallback : RoomDatabase.Callback() {
+    override fun onCreate(db: SupportSQLiteDatabase) {
+        super.onCreate(db)
+        val now = Instant.now().toString()
+        db.execSQL("""INSERT INTO trail_reports (reportId, type, title, description, lat, lng, timestamp, speciesName, confidence, source, synced) VALUES ('mock-1', 'hazard', 'Rockslide ahead', 'Section near mile 24 has debris', 32.88, -117.24, '$now', NULL, NULL, 'self', 0)""")
+        db.execSQL("""INSERT INTO trail_reports (reportId, type, title, description, lat, lng, timestamp, speciesName, confidence, source, synced) VALUES ('mock-2', 'hazard', 'Rattlesnake spotted', 'Stay alert, seen near water source', 32.87, -117.25, '$now', NULL, NULL, 'relayed', 0)""")
+        db.execSQL("""INSERT INTO trail_reports (reportId, type, title, description, lat, lng, timestamp, speciesName, confidence, source, synced) VALUES ('mock-3', 'water', 'Water source confirmed', 'Spring flowing, fresh water tested', 32.89, -117.23, '$now', NULL, NULL, 'self', 0)""")
+    }
 }
 
 @Database(
@@ -32,6 +40,7 @@ abstract class AppDatabase : RoomDatabase() {
 
         fun get(context: Context): AppDatabase = INSTANCE ?: synchronized(this) {
             Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, "trailkarma.db")
+                .addCallback(DatabaseCallback())
                 .build().also { INSTANCE = it }
         }
     }
