@@ -101,6 +101,41 @@ CREATE TABLE IF NOT EXISTS voice_relay_inbox (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS biodiversity_events (
+  observation_id TEXT PRIMARY KEY,
+  user_id TEXT,
+  observer_display_name TEXT,
+  observer_wallet_public_key TEXT,
+  audio_path TEXT NOT NULL,
+  photo_uri TEXT,
+  timestamp TEXT NOT NULL,
+  lat REAL,
+  lon REAL,
+  location_accuracy_meters REAL,
+  location_source TEXT NOT NULL,
+  final_label TEXT NOT NULL,
+  final_taxonomic_level TEXT NOT NULL,
+  confidence REAL NOT NULL,
+  confidence_band TEXT NOT NULL,
+  explanation TEXT NOT NULL,
+  safe_for_rewarding INTEGER NOT NULL,
+  verification_status TEXT NOT NULL,
+  verification_tx_signature TEXT,
+  verified_at TEXT,
+  collectible_status TEXT NOT NULL,
+  collectible_id TEXT,
+  collectible_name TEXT,
+  collectible_image_uri TEXT,
+  data_share_status TEXT NOT NULL,
+  shared_with_org_at TEXT,
+  classification_source TEXT NOT NULL,
+  local_model_version TEXT NOT NULL,
+  top_k_json TEXT NOT NULL,
+  model_metadata_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
 `);
 
 ensureColumn("users", "real_name", "TEXT");

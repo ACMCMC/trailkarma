@@ -15,6 +15,7 @@ import fyi.acmc.trailkarma.models.KarmaStatus
 import fyi.acmc.trailkarma.models.PhotoSyncState
 import fyi.acmc.trailkarma.models.RelayPacket
 import kotlinx.coroutines.flow.Flow
+import java.io.File
 import java.time.Instant
 import java.util.UUID
 import kotlin.math.absoluteValue
@@ -149,6 +150,10 @@ class BiodiversityRepository(
         localModelVersion: String?
     ) {
         val item = contributionDao.getByObservationId(observationId) ?: return
+        val collectibleEligible = isDemoCollectibleEligible(
+            finalLabel = finalLabel,
+            finalTaxonomicLevel = finalTaxonomicLevel
+        )
         contributionDao.update(
             item.copy(
                 topKJson = topKAdapter.toJson(topK),
@@ -165,7 +170,8 @@ class BiodiversityRepository(
                 modelMetadataJson = modelMetadataJson,
                 classificationSource = classificationSource,
                 localModelVersion = localModelVersion,
-                collectibleStatus = if (safeForRewarding) "pending_verification" else "not_eligible",
+                collectibleStatus = if (collectibleEligible) "pending_verification" else "not_eligible",
+                collectibleName = if (collectibleEligible && item.collectibleName == null) finalLabel else item.collectibleName,
                 dataShareStatus = when {
                     item.lat == null || item.lon == null -> "location_missing"
                     else -> "classification_ready"
@@ -230,6 +236,15 @@ class BiodiversityRepository(
         }
     }
 
+    suspend fun deleteContribution(observationId: String) {
+        val item = contributionDao.getByObservationId(observationId) ?: return
+        runCatching { File(item.audioUri).delete() }
+        item.photoUri?.let { runCatching { File(it).delete() } }
+        karmaEventDao.deleteByObservationId(observationId)
+        relayPacketDao.deleteById("bio-$observationId")
+        contributionDao.deleteByObservationId(observationId)
+    }
+
     suspend fun markCollectibleVerified(
         observationId: String,
         collectibleId: String,
@@ -268,7 +283,11 @@ class BiodiversityRepository(
 
     suspend fun autoVerifyCollectibleCandidate(observationId: String) {
         val item = contributionDao.getByObservationId(observationId) ?: return
-        if (!item.safeForRewarding) return
+        val collectibleEligible = isDemoCollectibleEligible(
+            finalLabel = item.finalLabel,
+            finalTaxonomicLevel = item.finalTaxonomicLevel
+        )
+        if (!collectibleEligible) return
 
         val verifiedAt = item.verifiedAt ?: Instant.now().toString()
         val verificationTxSignature = item.verificationTxSignature
@@ -276,42 +295,14 @@ class BiodiversityRepository(
 
         if (item.finalTaxonomicLevel == "species" && !item.finalLabel.isNullOrBlank()) {
             val normalizedLabel = item.finalLabel.trim()
-            val existing = contributionDao.findVerifiedSpeciesCollectibleByLabel(normalizedLabel, observationId)
-            if (existing == null) {
-                markCollectibleVerified(
-                    observationId = observationId,
-                    collectibleId = item.collectibleId ?: "species:${slugify(normalizedLabel)}",
-                    collectibleName = item.collectibleName ?: normalizedLabel,
-                    verificationTxSignature = verificationTxSignature,
-                    collectibleImageUri = item.collectibleImageUri ?: buildCollectibleGradient(normalizedLabel),
-                    verifiedAt = verifiedAt
-                )
-            } else {
-                contributionDao.update(
-                    item.copy(
-                        verificationStatus = "verified",
-                        karmaStatus = KarmaStatus.awarded,
-                        verificationTxSignature = verificationTxSignature,
-                        verifiedAt = verifiedAt,
-                        collectibleStatus = "duplicate_species",
-                        collectibleId = existing.collectibleId,
-                        collectibleName = existing.collectibleName ?: normalizedLabel,
-                        collectibleImageUri = existing.collectibleImageUri
-                    )
-                )
-                karmaEventDao.findByObservationId(observationId)?.let { event ->
-                    karmaEventDao.insert(
-                        event.copy(
-                            status = "verified",
-                            collectibleStatus = "duplicate_species",
-                            collectibleId = existing.collectibleId,
-                            verificationTxSignature = verificationTxSignature,
-                            verifiedAt = verifiedAt,
-                            synced = false
-                        )
-                    )
-                }
-            }
+            markCollectibleVerified(
+                observationId = observationId,
+                collectibleId = item.collectibleId ?: buildDemoCollectibleId(normalizedLabel, observationId),
+                collectibleName = item.collectibleName ?: normalizedLabel,
+                verificationTxSignature = verificationTxSignature,
+                collectibleImageUri = item.collectibleImageUri ?: buildCollectibleGradient(normalizedLabel),
+                verifiedAt = verifiedAt
+            )
             return
         }
 
@@ -321,7 +312,7 @@ class BiodiversityRepository(
                 karmaStatus = KarmaStatus.awarded,
                 verificationTxSignature = verificationTxSignature,
                 verifiedAt = verifiedAt,
-                collectibleStatus = if (item.collectibleStatus == "not_eligible") "not_eligible" else "verified_no_collectible"
+                collectibleStatus = "verified_no_collectible"
             )
         )
         karmaEventDao.findByObservationId(observationId)?.let { event ->
@@ -343,6 +334,27 @@ class BiodiversityRepository(
             .replace(Regex("[^a-z0-9]+"), "-")
             .trim('-')
             .ifBlank { UUID.randomUUID().toString() }
+
+    private fun isDemoCollectibleEligible(
+        finalLabel: String?,
+        finalTaxonomicLevel: String?
+    ): Boolean {
+        if (finalLabel.isNullOrBlank()) return false
+        if (finalTaxonomicLevel.isNullOrBlank() || finalTaxonomicLevel == "unknown") return false
+        val normalized = finalLabel.trim().lowercase()
+        return normalized !in setOf(
+            "unknown animal sound",
+            "human speech",
+            "wind / stream noise",
+            "traffic noise",
+            "dog bark",
+            "footsteps / gear rustle",
+            "silence"
+        )
+    }
+
+    private fun buildDemoCollectibleId(label: String, observationId: String): String =
+        "species:${slugify(label)}:${observationId.take(8)}"
 
     private fun buildCollectibleGradient(label: String): String {
         val hash = label.hashCode().absoluteValue

@@ -92,6 +92,9 @@ interface BiodiversityContributionDao {
     @Query("SELECT * FROM biodiversity_contributions WHERE observationId = :observationId LIMIT 1")
     suspend fun getByObservationId(observationId: String): BiodiversityContribution?
 
+    @Query("DELETE FROM biodiversity_contributions WHERE observationId = :observationId")
+    suspend fun deleteByObservationId(observationId: String)
+
     @Query("SELECT * FROM biodiversity_contributions WHERE inferenceState IN ('PENDING_LOCAL', 'FAILED_LOCAL') ORDER BY createdAt ASC")
     suspend fun getPendingLocalInference(): List<BiodiversityContribution>
 
@@ -164,6 +167,9 @@ interface RelayPacketDao {
 
     @Query("SELECT * FROM relay_packets WHERE packetId = :id LIMIT 1")
     suspend fun getById(id: String): RelayPacket?
+
+    @Query("DELETE FROM relay_packets WHERE packetId = :id")
+    suspend fun deleteById(id: String)
 }
 
 @Dao
@@ -236,4 +242,7 @@ interface KarmaEventDao {
 
     @Query("SELECT * FROM karma_events WHERE observationId = :observationId LIMIT 1")
     suspend fun findByObservationId(observationId: String): KarmaEvent?
+
+    @Query("DELETE FROM karma_events WHERE observationId = :observationId")
+    suspend fun deleteByObservationId(observationId: String)
 }

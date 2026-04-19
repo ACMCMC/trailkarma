@@ -236,6 +236,9 @@ class LocalBiodiversityInferenceEngine(private val context: Context) {
 
         val interpreter = Interpreter(loadMappedModel(bundle, bundle.manifest.modelFile), Interpreter.Options().apply {
             setNumThreads(4)
+            // The exported Perch bundle uses Flex ops and has been unstable with XNNPACK on emulators.
+            // Keep CPU execution deterministic across physical devices and emulator smoke tests.
+            setUseXNNPACK(false)
         })
         try {
             val inputTensor = interpreter.getInputTensor(0)
@@ -396,7 +399,7 @@ class LocalBiodiversityInferenceEngine(private val context: Context) {
                 family = topMeta.family
             )
         }
-        if (rawConfidence < 0.38f && candidates.none { it.label == "unknown animal sound" }) {
+        if (rawConfidence < 0.18f && candidates.none { it.label == "unknown animal sound" }) {
             candidates.add(
                 0,
                 AcousticCandidate(
@@ -815,15 +818,25 @@ private object DeterministicDecisionPolicy {
         }
 
         val familyCandidate = payload.topCandidates.firstOrNull { it.taxonomicLevel == "family" }
-        if (top.taxonomicLevel == "species" && payload.rawConfidence >= 0.45f) {
+        if (top.taxonomicLevel == "species" && payload.rawConfidence >= 0.35f) {
+            return LocalInferenceDecision(
+                finalLabel = top.label,
+                finalTaxonomicLevel = "species",
+                confidenceBand = "medium",
+                explanation = "Best local guess is ${top.label}, but confidence is still too weak to reward or verify without stronger evidence.",
+                safeForRewarding = false
+            )
+        }
+
+        if (top.taxonomicLevel == "species" && payload.rawConfidence >= 0.2f) {
             val fallbackLabel = top.genus ?: familyCandidate?.label ?: top.label
             val fallbackLevel = if (top.genus != null) "genus" else "family"
             return LocalInferenceDecision(
                 finalLabel = fallbackLabel,
                 finalTaxonomicLevel = fallbackLevel,
-                confidenceBand = "medium",
-                explanation = "This sounds like $fallbackLabel, but species-level resolution is not reliable enough from this clip alone.",
-                safeForRewarding = fallbackLevel == "genus"
+                confidenceBand = "low",
+                explanation = "Best local guess is $fallbackLabel, but this clip is still ambiguous and should be treated as a low-confidence classification.",
+                safeForRewarding = false
             )
         }
 

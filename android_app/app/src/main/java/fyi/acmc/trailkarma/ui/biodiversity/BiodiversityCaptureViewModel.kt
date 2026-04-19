@@ -149,6 +149,16 @@ class BiodiversityCaptureViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun deleteContribution(observationId: String) {
+        viewModelScope.launch {
+            repo.deleteContribution(observationId)
+            if (_uiState.value.latestObservationId == observationId) {
+                _uiState.value = _uiState.value.copy(latestObservationId = null)
+            }
+            TrailFeedbackBus.emit("Biodiversity contribution removed from the local ledger.", FeedbackTone.Info)
+        }
+    }
+
     @SuppressLint("MissingPermission")
     suspend fun awaitLocationSnapshot(): BiodiversityLocationSnapshot = suspendCancellableCoroutine { continuation ->
         fusedLocation.lastLocation

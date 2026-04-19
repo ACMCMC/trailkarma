@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.systemBars
 import fyi.acmc.trailkarma.models.ReportType
 import fyi.acmc.trailkarma.models.TrailReport
 import fyi.acmc.trailkarma.models.Trail
+import fyi.acmc.trailkarma.models.BiodiversityContribution
 import org.osmdroid.views.MapView
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
@@ -54,6 +55,7 @@ fun MapScreen(
 ) {
     val context = LocalContext.current
     val reports by vm.reports.collectAsState(initial = emptyList())
+    val biodiversity by vm.biodiversity.collectAsState(initial = emptyList())
     val userLocation by vm.userLocation.collectAsState(initial = null)
     val trails by vm.trails.collectAsState(initial = emptyList())
     val walletState by vm.walletState.collectAsState()
@@ -64,7 +66,7 @@ fun MapScreen(
     var selectedTrail by remember { mutableStateOf<Trail?>(null) }
     var zoomLevel by remember { mutableStateOf(13) }
     // Tracks the data snapshot that was last rendered — overlays are only rebuilt when this changes.
-    data class OverlayKey(val reports: List<Any>, val loc: Any?, val trail: Any?, val zoom: Int, val style: Any)
+    data class OverlayKey(val reports: List<Any>, val biodiversity: List<Any>, val loc: Any?, val trail: Any?, val zoom: Int, val style: Any)
     var lastOverlayKey by remember { mutableStateOf<OverlayKey?>(null) }
 
     LaunchedEffect(trails) {
@@ -81,6 +83,9 @@ fun MapScreen(
     }
 
     val displayReports = reports
+    val displayBiodiversity = biodiversity.filter {
+        it.savedLocally && it.lat != null && it.lon != null && !it.finalLabel.isNullOrBlank()
+    }
     val offlineReportCount = reports.count { !it.synced }
     val pendingRewardCount = reports.count { !it.rewardClaimed && it.verificationStatus != "rejected" }
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
@@ -204,7 +209,7 @@ fun MapScreen(
 
                 val markerSize = (40 + (zoomLevel - 10) * 6).coerceIn(40, 140)
 
-                val overlayKey = OverlayKey(displayReports, userLocation, selectedTrail, markerSize, currentMapStyle)
+                val overlayKey = OverlayKey(displayReports, displayBiodiversity, userLocation, selectedTrail, markerSize, currentMapStyle)
                 if (overlayKey == lastOverlayKey) return@AndroidView
                 lastOverlayKey = overlayKey
 
@@ -252,6 +257,26 @@ fun MapScreen(
 
                         setOnMarkerClickListener { _, _ ->
                             onNavigateToReportDetail(report.reportId)
+                            true
+                        }
+                    }
+                    map.overlays.add(marker)
+                }
+
+                displayBiodiversity.forEach { observation ->
+                    val marker = Marker(map).apply {
+                        position = GeoPoint(observation.lat!!, observation.lon!!)
+                        title = observation.collectibleName ?: observation.finalLabel!!
+                        snippet = buildString {
+                            append(observation.finalTaxonomicLevel ?: "biodiversity")
+                            observation.collectibleStatus.takeIf { it.isNotBlank() }?.let {
+                                append(" • ")
+                                append(it.replace('_', ' '))
+                            }
+                        }
+                        icon = MarkerFactory.createMarkerDrawable(context, ReportType.species, markerSize)
+                        setOnMarkerClickListener { clickedMarker, _ ->
+                            clickedMarker.showInfoWindow()
                             true
                         }
                     }
@@ -327,7 +352,7 @@ fun MapScreen(
                     fontSize = 11.sp
                 )
                 Text(
-                    "${displayReports.size} reports",
+                    "${displayReports.size + displayBiodiversity.size} map observations",
                     style = MaterialTheme.typography.labelSmall,
                     fontSize = 10.sp
                 )
@@ -418,6 +443,7 @@ fun MapScreen(
         // Bottom sheet — always shows the report list; tapping a row navigates to full detail
         ReportListSheet(
             reports = displayReports,
+            biodiversity = displayBiodiversity,
             onSelectReport = { onNavigateToReportDetail(it.reportId) },
             modifier = Modifier.align(Alignment.BottomCenter)
         )
@@ -428,6 +454,7 @@ fun MapScreen(
 @Composable
 private fun ReportListSheet(
     reports: List<TrailReport>,
+    biodiversity: List<BiodiversityContribution>,
     onSelectReport: (TrailReport) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -440,7 +467,7 @@ private fun ReportListSheet(
     ) {
         Column(Modifier.fillMaxWidth()) {
             Text(
-                "Nearby (${reports.size})",
+                "Nearby (${reports.size + biodiversity.size})",
                 style = MaterialTheme.typography.labelMedium,
                 modifier = Modifier.padding(12.dp)
             )
@@ -451,7 +478,7 @@ private fun ReportListSheet(
                     .padding(horizontal = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(1.dp)
             ) {
-                items(reports.take(5)) { report ->
+                items(reports.take(4)) { report ->
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -475,6 +502,44 @@ private fun ReportListSheet(
                                 )
                             }
                             Text(if (report.synced) "✓" else "…", fontSize = 10.sp, color = Color.Gray)
+                        }
+                    }
+                }
+
+                items(biodiversity.take(4)) { observation ->
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = Color.White
+                    ) {
+                        Row(
+                            Modifier
+                                .padding(12.dp)
+                                .fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    observation.collectibleName ?: observation.finalLabel ?: "Biodiversity observation",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    maxLines = 1
+                                )
+                                Text(
+                                    buildString {
+                                        append(observation.finalTaxonomicLevel ?: "biodiversity")
+                                        append(" • ")
+                                        append(observation.collectibleStatus.replace('_', ' '))
+                                    },
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontSize = 9.sp,
+                                    color = Color.Gray
+                                )
+                            }
+                            Text(
+                                if (observation.cloudSyncState.name == "SYNCED") "✓" else "bio",
+                                fontSize = 10.sp,
+                                color = Color.Gray
+                            )
                         }
                     }
                 }

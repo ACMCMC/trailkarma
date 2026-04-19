@@ -23,11 +23,13 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -40,6 +42,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -85,6 +88,7 @@ fun BiodiversityCaptureScreen(
     val contribution by vm.currentContribution.collectAsState(initial = null)
     val savedContributions by vm.savedContributions.collectAsState(initial = emptyList())
     var pendingPhotoPath by remember { mutableStateOf<String?>(null) }
+    var pendingDeleteObservationId by remember { mutableStateOf<String?>(null) }
 
     val takePhotoLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture()
@@ -237,12 +241,43 @@ fun BiodiversityCaptureScreen(
                                 )
                             } else {
                                 savedContributions.take(5).forEach { item ->
-                                    BiodiversityLedgerRow(item)
+                                    BiodiversityLedgerRow(
+                                        item = item,
+                                        onDelete = { pendingDeleteObservationId = item.observationId }
+                                    )
                                 }
                             }
                         }
                     }
                 }
+            }
+
+            pendingDeleteObservationId?.let { observationId ->
+                val target = savedContributions.firstOrNull { it.observationId == observationId }
+                AlertDialog(
+                    onDismissRequest = { pendingDeleteObservationId = null },
+                    title = { Text("Delete saved observation?") },
+                    text = {
+                        Text(
+                            "This removes ${target?.finalLabel ?: "this biodiversity record"} from the local ledger, map, and relay cache on this device."
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                vm.deleteContribution(observationId)
+                                pendingDeleteObservationId = null
+                            }
+                        ) {
+                            Text("Delete")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { pendingDeleteObservationId = null }) {
+                            Text("Cancel")
+                        }
+                    }
+                )
             }
         }
     }
@@ -405,7 +440,10 @@ private fun StatusStrip(contribution: BiodiversityContribution) {
 }
 
 @Composable
-private fun BiodiversityLedgerRow(item: BiodiversityContribution) {
+private fun BiodiversityLedgerRow(
+    item: BiodiversityContribution,
+    onDelete: () -> Unit
+) {
     TrailListRow(
         title = item.finalLabel ?: "Unresolved biodiversity capture",
         subtitle = buildString {
@@ -422,11 +460,23 @@ private fun BiodiversityLedgerRow(item: BiodiversityContribution) {
         },
         accent = collectibleAccent(item),
         trailing = {
-            Text(
-                item.dataShareStatus.replace('_', ' '),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    item.dataShareStatus.replace('_', ' '),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                IconButton(onClick = onDelete) {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = "Delete saved biodiversity observation",
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
         }
     )
 }
@@ -504,7 +554,7 @@ private fun contributionOperationState(item: BiodiversityContribution): Operatio
             errored -> "Some parts of the biodiversity workflow need attention."
             item.collectibleStatus == "verified" -> "This observation is verified and collectible-backed."
             item.collectibleStatus == "duplicate_species" -> "This species was verified again, but its collectible was already discovered."
-            item.collectibleStatus == "verified_no_collectible" -> "This observation was verified, but it did not unlock a unique species card."
+            item.collectibleStatus == "verified_no_collectible" -> "This observation was verified, but it did not produce a species card."
             active -> "This contribution is moving through classification, sync, and verification."
             else -> "The record is waiting on the next user action or sync window."
         },
@@ -521,7 +571,7 @@ private fun contributionOperationState(item: BiodiversityContribution): Operatio
 private fun collectibleLabel(item: BiodiversityContribution): String = when (item.collectibleStatus) {
     "verified" -> item.collectibleName ?: "Collectible verified"
     "duplicate_species" -> "${item.collectibleName ?: item.finalLabel ?: "Species"} already collected"
-    "verified_no_collectible" -> "Verified contribution without a new species card"
+    "verified_no_collectible" -> "Verified contribution without a species card"
     "pending_verification" -> "Collectible pending verification"
     "not_eligible" -> "Not currently reward-eligible"
     else -> "No collectible yet"
