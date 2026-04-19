@@ -54,18 +54,16 @@ class GattClient(
     private var reassemblyReceived: Int = 0
     private var reportNotificationsReady = false
 
-    fun syncWithPeer(device: BluetoothDevice) {
-        scope.launch {
-            onLog("📱 syncWithPeer called for ${device.address}")
-            try {
-                withTimeout(CONNECT_TIMEOUT_MS) {
-                    onLog("⏱ Starting 15-second connection timeout...")
-                    connectAndSync(device)
-                }
-                onLog("✓ syncWithPeer completed successfully for ${device.address}")
-            } catch (error: Exception) {
-                onLog("✗ BLE sync error with ${device.address}: ${error.javaClass.simpleName} - ${error.message}")
+    suspend fun syncWithPeer(device: BluetoothDevice) {
+        onLog("📱 syncWithPeer called for ${device.address}")
+        try {
+            withTimeout(CONNECT_TIMEOUT_MS) {
+                onLog("⏱ Starting 15-second connection timeout...")
+                connectAndSync(device)
             }
+            onLog("✓ syncWithPeer completed successfully for ${device.address}")
+        } catch (error: Exception) {
+            onLog("✗ BLE sync error with ${device.address}: ${error.javaClass.simpleName} - ${error.message}")
         }
     }
 
@@ -84,7 +82,10 @@ class GattClient(
                     g.requestMtu(517)
                 } else if (newState == BluetoothProfile.STATE_DISCONNECTED && continuation.isActive) {
                     onLog("❌ Peer disconnected, ending sync")
+                    g.close()
                     continuation.resume(Unit)
+                } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                    g.close()
                 }
             }
 
@@ -196,6 +197,7 @@ class GattClient(
         continuation.invokeOnCancellation {
             onLog("⚠ GATT connection cancelled, disconnecting...")
             gatt?.disconnect()
+            gatt?.close()
         }
     }
 
