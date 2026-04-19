@@ -54,6 +54,7 @@ captures/
 node_modules/
 dist/
 backend/trailkarma.db
+backend/data/
 backend/keys/
 backend/.env
 __pycache__/

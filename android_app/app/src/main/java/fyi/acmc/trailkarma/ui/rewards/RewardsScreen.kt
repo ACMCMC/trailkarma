@@ -334,7 +334,7 @@ fun RewardsScreen(
                             item {
                                 GallerySubheader(
                                     title = "Species field guide",
-                                    subtitle = "Each newly verified species unlocks a unique collectible card."
+                                    subtitle = "Each verified species recording can surface as its own collectible card for the demo."
                                 )
                             }
                             item {
@@ -1273,7 +1273,7 @@ private fun buildSpeciesCollectibles(contributions: List<BiodiversityContributio
             SpeciesCollectibleCardUi(
                 id = "pending:${item.observationId}",
                 label = item.collectibleName ?: item.finalLabel!!,
-                description = item.explanation ?: "Awaiting verification for a first-species collectible.",
+                description = item.explanation ?: "Awaiting verification for this species collectible.",
                 confidenceBand = item.confidenceBand ?: "pending",
                 collectibleStatus = item.collectibleStatus,
                 collectibleId = item.collectibleId,

@@ -16,7 +16,7 @@ import {
 } from "@solana/spl-token";
 import bs58 from "bs58";
 import BN from "bn.js";
-import { config } from "../config.js";
+import { config, requireSolanaEnv } from "../config.js";
 import { db } from "../db.js";
 import {
   BadgeCode,
@@ -30,65 +30,92 @@ import {
 type AnyRecord = Record<string, unknown>;
 type AnchorEnumVariant = Record<string, Record<string, never>>;
 
-const connection = new Connection(config.solanaRpcUrl, "confirmed");
-const sponsor = Keypair.fromSecretKey(bs58.decode(config.sponsorSecretKey));
-const attestor = Keypair.fromSecretKey(bs58.decode(config.attestorSecretKey));
-const provider = new anchor.AnchorProvider(
-  connection,
-  new anchor.Wallet(sponsor),
-  anchor.AnchorProvider.defaultOptions(),
-);
-anchor.setProvider(provider);
+type SolanaRuntime = {
+  connection: Connection;
+  sponsor: Keypair;
+  attestor: Keypair;
+  program: any;
+  configPda: PublicKey;
+  programId: PublicKey;
+};
 
-function loadProgram(): anchor.Program {
+let runtime: SolanaRuntime | null = null;
+
+function getSolanaRuntime(): SolanaRuntime {
+  if (runtime) {
+    return runtime;
+  }
+
+  const required = requireSolanaEnv();
+  const programId = new PublicKey(required.programId);
+  const connection = new Connection(config.solanaRpcUrl, "confirmed");
+  const sponsor = Keypair.fromSecretKey(bs58.decode(required.sponsorSecretKey));
+  const attestor = Keypair.fromSecretKey(bs58.decode(required.attestorSecretKey));
+  const provider = new anchor.AnchorProvider(
+    connection,
+    new anchor.Wallet(sponsor),
+    anchor.AnchorProvider.defaultOptions(),
+  );
+  anchor.setProvider(provider);
+
   const idl = JSON.parse(fs.readFileSync(config.idlPath, "utf8")) as anchor.Idl & { address?: string };
-  idl.address = config.programId.toBase58();
-  return new anchor.Program(idl, provider);
+  idl.address = programId.toBase58();
+  const program = new anchor.Program(idl, provider);
+  const configPda = PublicKey.findProgramAddressSync([Buffer.from(config.configSeed)], programId)[0];
+
+  runtime = {
+    connection,
+    sponsor,
+    attestor,
+    program,
+    configPda,
+    programId,
+  };
+  return runtime;
 }
 
-export const program = loadProgram() as any;
-
-export const configPda = PublicKey.findProgramAddressSync(
-  [Buffer.from(config.configSeed)],
-  config.programId,
-)[0];
-
 export function userProfilePda(wallet: PublicKey): PublicKey {
+  const { programId } = getSolanaRuntime();
   return PublicKey.findProgramAddressSync(
     [Buffer.from("user_profile"), wallet.toBuffer()],
-    config.programId,
+    programId,
   )[0];
 }
 
 export function contributionReceiptPda(receiptId: Uint8Array): PublicKey {
+  const { programId } = getSolanaRuntime();
   return PublicKey.findProgramAddressSync(
     [Buffer.from("contribution_receipt"), Buffer.from(receiptId)],
-    config.programId,
+    programId,
   )[0];
 }
 
 export function relayJobPda(jobId: Uint8Array): PublicKey {
+  const { programId } = getSolanaRuntime();
   return PublicKey.findProgramAddressSync(
     [Buffer.from("relay_job"), Buffer.from(jobId)],
-    config.programId,
+    programId,
   )[0];
 }
 
 export function badgeClaimPda(wallet: PublicKey, badgeCode: BadgeCode): PublicKey {
+  const { programId } = getSolanaRuntime();
   return PublicKey.findProgramAddressSync(
     [Buffer.from("badge_claim"), wallet.toBuffer(), Buffer.from([badgeCode])],
-    config.programId,
+    programId,
   )[0];
 }
 
 export function tipReceiptPda(tipId: Uint8Array): PublicKey {
+  const { programId } = getSolanaRuntime();
   return PublicKey.findProgramAddressSync(
     [Buffer.from("tip_receipt"), Buffer.from(tipId)],
-    config.programId,
+    programId,
   )[0];
 }
 
 export async function fetchConfigAccount(): Promise<AnyRecord> {
+  const { program, configPda } = getSolanaRuntime();
   return (await program.account.config.fetch(configPda)) as AnyRecord;
 }
 
@@ -97,6 +124,7 @@ export async function ensureUserRegistered(input: {
   displayName: string;
   walletPublicKey: string;
 }) {
+  const { connection, program, sponsor, configPda } = getSolanaRuntime();
   const wallet = new PublicKey(input.walletPublicKey);
   const profilePda = userProfilePda(wallet);
   const profileInfo = await connection.getAccountInfo(profilePda);
@@ -153,6 +181,7 @@ export async function ensureUserRegistered(input: {
 }
 
 export async function fetchWalletState(appUserId: string) {
+  const { connection, program } = getSolanaRuntime();
   const row = db
     .prepare("SELECT app_user_id, display_name, wallet_public_key FROM users WHERE app_user_id = ?")
     .get(appUserId) as { app_user_id: string; display_name: string; wallet_public_key: string } | undefined;
@@ -446,6 +475,7 @@ export async function claimContribution(input: {
   confidence?: number | null;
   photoUri?: string | null;
 }) {
+  const { program, sponsor, attestor, configPda } = getSolanaRuntime();
   const user = db.prepare("SELECT wallet_public_key FROM users WHERE app_user_id = ?").get(input.appUserId) as
     | { wallet_public_key: string }
     | undefined;
@@ -651,6 +681,7 @@ async function createRelayJobForSender(input: {
   rewardAmount: number;
   nonce: number;
 }) {
+  const { connection, program, sponsor, configPda } = getSolanaRuntime();
   const existingJob = db
     .prepare(`
       SELECT status, open_tx_signature, fulfill_tx_signature
@@ -752,6 +783,7 @@ export async function fulfillRelayJob(input: {
   jobIdHex: string;
   proofRef: string;
 }) {
+  const { program, sponsor, attestor, configPda } = getSolanaRuntime();
   const user = db.prepare("SELECT wallet_public_key FROM users WHERE app_user_id = ?").get(input.appUserId) as
     | { wallet_public_key: string }
     | undefined;
@@ -879,6 +911,7 @@ export async function submitTip(input: {
   signedMessageBase64: string;
   signatureBase64: string;
 }) {
+  const { connection, program, sponsor, configPda } = getSolanaRuntime();
   const user = db.prepare("SELECT wallet_public_key FROM users WHERE app_user_id = ?").get(input.appUserId) as
     | { wallet_public_key: string }
     | undefined;
@@ -961,6 +994,7 @@ export async function submitTip(input: {
 }
 
 export async function fetchRelayJob(jobIdHex: string) {
+  const { program } = getSolanaRuntime();
   const row = db.prepare("SELECT * FROM relay_jobs WHERE job_id = ?").get(jobIdHex) as AnyRecord | undefined;
   if (row) return row;
   const pda = relayJobPda(Buffer.from(jobIdHex, "hex"));
@@ -981,6 +1015,7 @@ async function maybeClaimMilestoneBadge(wallet: PublicKey, appUserId: string, ev
 }
 
 async function maybeClaimBadge(wallet: PublicKey, appUserId: string, badgeCode: BadgeCode) {
+  const { connection, program, sponsor, configPda } = getSolanaRuntime();
   const cfg = await fetchConfigAccount();
   const badgeMintKey = badgeMintForCode(cfg, badgeCode);
   const badgeMint = new PublicKey(String(badgeMintKey));

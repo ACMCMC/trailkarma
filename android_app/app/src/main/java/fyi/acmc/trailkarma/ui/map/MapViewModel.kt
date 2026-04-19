@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import fyi.acmc.trailkarma.api.WalletStateResponse
 import fyi.acmc.trailkarma.db.AppDatabase
+import fyi.acmc.trailkarma.models.BiodiversityContribution
 import fyi.acmc.trailkarma.models.LocationUpdate
 import fyi.acmc.trailkarma.models.Trail
 import fyi.acmc.trailkarma.models.TrailReport
@@ -29,6 +30,7 @@ class MapViewModel(app: Application) : AndroidViewModel(app) {
     private val rewardsRepository = RewardsRepository(app, db)
 
     val reports: Flow<List<TrailReport>> = db.trailReportDao().getAll()
+    val biodiversity: Flow<List<BiodiversityContribution>> = db.biodiversityContributionDao().getSaved()
     val userLocation: Flow<LocationUpdate?> = db.locationUpdateDao().getLatest()
     val trails: Flow<List<Trail>> = db.trailDao().getAll()
     val walletState = MutableStateFlow<WalletStateResponse?>(null)
@@ -69,8 +71,9 @@ class MapViewModel(app: Application) : AndroidViewModel(app) {
     // Combined markers for the map
     val mapMarkers: Flow<List<MapMarker>> = combine(
         reports,
+        biodiversity,
         userLocation
-    ) { reports, location ->
+    ) { reports, biodiversity, location ->
         val markers = mutableListOf<MapMarker>()
 
         // User location marker
@@ -103,6 +106,20 @@ class MapViewModel(app: Application) : AndroidViewModel(app) {
                 )
             )
         }
+
+        biodiversity
+            .filter { it.savedLocally && it.lat != null && it.lon != null && !it.finalLabel.isNullOrBlank() }
+            .forEach { observation ->
+                markers.add(
+                    MapMarker(
+                        id = observation.observationId,
+                        geoPoint = GeoPoint(observation.lat!!, observation.lon!!),
+                        type = "species",
+                        title = observation.collectibleName ?: observation.finalLabel!!,
+                        description = observation.explanation ?: "Saved biodiversity observation"
+                    )
+                )
+            }
 
         markers
     }

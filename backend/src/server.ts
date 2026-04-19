@@ -1,6 +1,11 @@
 import cors from "cors";
 import express from "express";
 import { z } from "zod";
+import {
+  biodiversityUpload,
+  handleAudioSync,
+  handlePhotoLink,
+} from "./biodiversity.js";
 import { config } from "./config.js";
 import { db } from "./db.js";
 import {
@@ -29,6 +34,22 @@ app.use(express.json({ limit: "1mb" }));
 app.get("/health", (_req, res) => {
   res.json({ ok: true, network: "devnet" });
 });
+
+app.post(
+  "/api/biodiversity/audio-sync",
+  biodiversityUpload.single("audio"),
+  (req, res) => {
+    void handleAudioSync(req, res);
+  },
+);
+
+app.post(
+  "/api/biodiversity/photo-link",
+  biodiversityUpload.single("photo"),
+  (req, res) => {
+    void handlePhotoLink(req, res);
+  },
+);
 
 app.post("/v1/users/register", async (req, res) => {
   const schema = z.object({

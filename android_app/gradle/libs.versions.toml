@@ -22,7 +22,7 @@ playServicesLocation = "21.3.0"
 moshi = "1.15.2"
 securityCrypto = "1.1.0"
 bouncycastle = "1.84"
-tflite = "2.16.1"
+tflite = "1.4.2"
 tfliteSelectOps = "2.16.1"
 
 [libraries]
@@ -76,7 +76,7 @@ play-services-location = { group = "com.google.android.gms", name = "play-servic
 osmdroid-android = { group = "org.osmdroid", name = "osmdroid-android", version.ref = "osmdroid" }
 
 # ML
-tensorflow-lite = { group = "org.tensorflow", name = "tensorflow-lite", version.ref = "tflite" }
+tensorflow-lite = { group = "com.google.ai.edge.litert", name = "litert", version.ref = "tflite" }
 tensorflow-lite-select-tf-ops = { group = "org.tensorflow", name = "tensorflow-lite-select-tf-ops", version.ref = "tfliteSelectOps" }
 
 # Test

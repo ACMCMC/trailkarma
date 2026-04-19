@@ -18,7 +18,7 @@ import {
 } from "@solana/spl-token";
 import bs58 from "bs58";
 import fs from "node:fs";
-import { config } from "./config.js";
+import { config, requireSolanaEnv } from "./config.js";
 
 function keypairFromEnv(name: string, fallback?: string): Keypair {
   const value = process.env[name] ?? fallback;
@@ -29,13 +29,15 @@ function keypairFromEnv(name: string, fallback?: string): Keypair {
 }
 
 async function main() {
+  const required = requireSolanaEnv();
+  const programId = new PublicKey(required.programId);
   const connection = new Connection(config.solanaRpcUrl, "confirmed");
   const sponsor = keypairFromEnv("SPONSOR_SECRET_KEY");
   const attestor = keypairFromEnv("ATTESTOR_SECRET_KEY");
   const admin = keypairFromEnv("ADMIN_SECRET_KEY", process.env.SPONSOR_SECRET_KEY);
 
   const idl = JSON.parse(fs.readFileSync(config.idlPath, "utf8")) as anchor.Idl & { address?: string };
-  idl.address = config.programId.toBase58();
+  idl.address = programId.toBase58();
   const provider = new anchor.AnchorProvider(
     connection,
     new anchor.Wallet(admin),
@@ -43,7 +45,7 @@ async function main() {
   );
   const program = new anchor.Program(idl, provider) as any;
 
-  const configPda = PublicKey.findProgramAddressSync([Buffer.from("config")], config.programId)[0];
+  const configPda = PublicKey.findProgramAddressSync([Buffer.from("config")], programId)[0];
 
   const karmaMint = await createMint({
     connection,
