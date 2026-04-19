@@ -62,6 +62,7 @@ class DatabricksSyncRepository(context: Context, private val db: AppDatabase) {
                     '${report.description}' AS description,
                     ${report.lat}         AS lat,
                     ${report.lng}         AS lng,
+                    ${if (report.h3Cell != null) "'${report.h3Cell}'" else "NULL"} AS h3_cell,
                     '${report.timestamp}' AS timestamp,
                     $species              AS species_name,
                     $confVal              AS confidence,
@@ -95,7 +96,12 @@ class DatabricksSyncRepository(context: Context, private val db: AppDatabase) {
 
         try {
             val api = DatabricksApiClient.create(databricksUrl, databricksToken)
-            val selectSql = "SELECT report_id, user_id, type, title, description, lat, lng, timestamp, species_name, confidence, source FROM workspace.trailkarma.trail_reports ORDER BY timestamp DESC"
+            val selectSql = """
+                SELECT report_id, user_id, type, title, description, lat, lng, h3_cell,
+                       timestamp, species_name, confidence, source
+                FROM workspace.trailkarma.trail_reports
+                ORDER BY timestamp DESC
+            """.trimIndent()
             val request = DatabricksSyncRequest(warehouseId, selectSql)
             val response = api.executeSql(request)
 
@@ -116,35 +122,37 @@ class DatabricksSyncRepository(context: Context, private val db: AppDatabase) {
             var pulledCount = 0
             for (row in rows) {
                 try {
-                    if (row.size < 11) continue
+                    if (row.size < 12) continue
 
-                    val reportId = row.getOrNull(0) as? String ?: continue
-                    val userId = row.getOrNull(1) as? String ?: continue
-                    val typeStr = row.getOrNull(2) as? String ?: "hazard"
-                    val type = try { ReportType.valueOf(typeStr) } catch (e: Exception) { ReportType.hazard }
-                    val title = row.getOrNull(3)?.toString() ?: ""
-                    val description = row.getOrNull(4)?.toString() ?: ""
-                    val lat = row.getOrNull(5)?.toString()?.toDoubleOrNull() ?: 0.0
-                    val lng = row.getOrNull(6)?.toString()?.toDoubleOrNull() ?: 0.0
-                    val timestamp = row.getOrNull(7)?.toString() ?: ""
-                    val speciesName = row.getOrNull(8)?.toString()
-                    val confidence = row.getOrNull(9)?.toString()?.toFloatOrNull()
-                    val sourceStr = row.getOrNull(10)?.toString() ?: "self"
-                    val source = try { ReportSource.valueOf(sourceStr) } catch (e: Exception) { ReportSource.self }
+                    val reportId     = row.getOrNull(0) as? String ?: continue
+                    val userId       = row.getOrNull(1) as? String ?: continue
+                    val typeStr      = row.getOrNull(2) as? String ?: "hazard"
+                    val type         = try { ReportType.valueOf(typeStr) } catch (e: Exception) { ReportType.hazard }
+                    val title        = row.getOrNull(3)?.toString() ?: ""
+                    val description  = row.getOrNull(4)?.toString() ?: ""
+                    val lat          = row.getOrNull(5)?.toString()?.toDoubleOrNull() ?: 0.0
+                    val lng          = row.getOrNull(6)?.toString()?.toDoubleOrNull() ?: 0.0
+                    val h3Cell       = row.getOrNull(7)?.toString()
+                    val timestamp    = row.getOrNull(8)?.toString() ?: ""
+                    val speciesName  = row.getOrNull(9)?.toString()
+                    val confidence   = row.getOrNull(10)?.toString()?.toFloatOrNull()
+                    val sourceStr    = row.getOrNull(11)?.toString() ?: "self"
+                    val source       = try { ReportSource.valueOf(sourceStr) } catch (e: Exception) { ReportSource.self }
 
                     val report = TrailReport(
-                        reportId = reportId,
-                        userId = userId,
-                        type = type,
-                        title = title,
+                        reportId    = reportId,
+                        userId      = userId,
+                        type        = type,
+                        title       = title,
                         description = description,
-                        lat = lat,
-                        lng = lng,
-                        timestamp = timestamp,
+                        lat         = lat,
+                        lng         = lng,
+                        h3Cell      = h3Cell,
+                        timestamp   = timestamp,
                         speciesName = speciesName,
-                        confidence = confidence,
-                        source = source,
-                        synced = true
+                        confidence  = confidence,
+                        source      = source,
+                        synced      = true
                     )
 
                     db.trailReportDao().insert(report)
@@ -179,7 +187,8 @@ class DatabricksSyncRepository(context: Context, private val db: AppDatabase) {
                     '${location.userId}'    AS user_id,
                     '${location.timestamp}' AS timestamp,
                     ${location.lat}         AS lat,
-                    ${location.lng}         AS lng
+                    ${location.lng}         AS lng,
+                    ${if (location.h3Cell != null) "'${location.h3Cell}'" else "NULL"} AS h3_cell
                 ) AS source ON target.id = source.id
                 WHEN NOT MATCHED THEN INSERT *
             """.trimIndent()

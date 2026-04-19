@@ -121,6 +121,9 @@ dependencies {
     // Location
     implementation(libs.play.services.location)
 
+    // H3 Spatial Indexing (Uber)
+    implementation("com.uber.h3core:h3-java:4.1.1")
+
     // OSMDroid
     implementation(libs.osmdroid.android)
 

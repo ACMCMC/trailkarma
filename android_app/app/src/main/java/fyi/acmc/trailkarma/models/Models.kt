@@ -18,6 +18,7 @@ data class LocationUpdate(
     val timestamp: String,
     val lat: Double,
     val lng: Double,
+    val h3Cell: String? = null,   // H3 res-9 cell, e.g. "89283082837ffff"
     val synced: Boolean = false
 )
 
@@ -33,6 +34,7 @@ data class TrailReport(
     val description: String,
     val lat: Double,
     val lng: Double,
+    val h3Cell: String? = null,   // H3 res-9 cell, e.g. "89283082837ffff"
     val timestamp: String,
     val speciesName: String? = null,
     val confidence: Float? = null,

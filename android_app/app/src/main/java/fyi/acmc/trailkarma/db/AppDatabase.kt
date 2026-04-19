@@ -25,7 +25,7 @@ class DatabaseCallback : RoomDatabase.Callback() {
 // The cloud (Databricks) is the source of truth; local DB re-syncs on next launch.
 @Database(
     entities = [User::class, TrailReport::class, LocationUpdate::class, RelayPacket::class, Trail::class],
-    version = 4,
+    version = 5, // h3Cell added to TrailReport + LocationUpdate
     exportSchema = false
 )
 @TypeConverters(Converters::class)

@@ -3,8 +3,27 @@
 
 import os
 import uuid
+import json
 import requests
 from datetime import datetime, timedelta
+
+try:
+    import h3
+    HAS_H3 = True
+except ImportError:
+    HAS_H3 = False
+    print("⚠️  h3 library not installed. Install with: pip install h3")
+    print("   H3 cells will be stored as NULL in seed data.\n")
+
+def latlng_to_h3(lat, lng, resolution=9):
+    """Convert lat/lng to H3 cell string at given resolution."""
+    if HAS_H3:
+        return h3.latlng_to_cell(lat, lng, resolution)
+    return None
+
+def sql_str(val):
+    """Wrap a value in SQL quotes or return NULL."""
+    return f"'{val}'" if val is not None else "NULL"
 
 def load_env():
     config = {}
@@ -48,20 +67,23 @@ def main():
 
     base_lat, base_lng = 32.88, -117.24
 
-    # Reports
+    # Pre-compute H3 cells for seed data (resolution 9 ~= 174m hexagons)
+    base_h3 = latlng_to_h3(base_lat, base_lng)
+
+    # Reports — now include h3_cell
     reports = [
-        ('mock-1', 'hazard', 'Rockslide ahead', 'Section near mile 24 has debris', base_lat, base_lng, 'self', None, None),
-        ('mock-2', 'hazard', 'Rattlesnake spotted', 'Stay alert near water', base_lat - 0.01, base_lng - 0.01, 'relayed', None, None),
-        ('mock-3', 'water', 'Water source confirmed', 'Spring flowing, fresh water', base_lat + 0.01, base_lng - 0.01, 'self', None, None),
-        ('mock-4', 'species', 'Mule deer herd', '6-8 deer at sunrise', base_lat + 0.005, base_lng + 0.005, 'self', 'Mule Deer', 0.92),
-        ('mock-5', 'species', 'California quail', 'Small covey', base_lat - 0.005, base_lng + 0.005, 'relayed', 'California Quail', 0.87),
+        ('mock-1', 'hazard', 'Rockslide ahead',    'Section near mile 24 has debris', base_lat,         base_lng,         'self',    None,              None,  latlng_to_h3(base_lat,         base_lng)),
+        ('mock-2', 'hazard', 'Rattlesnake spotted','Stay alert near water',           base_lat - 0.01,  base_lng - 0.01,  'relayed', None,              None,  latlng_to_h3(base_lat - 0.01,  base_lng - 0.01)),
+        ('mock-3', 'water',  'Water source confirmed','Spring flowing, fresh water',  base_lat + 0.01,  base_lng - 0.01,  'self',    None,              None,  latlng_to_h3(base_lat + 0.01,  base_lng - 0.01)),
+        ('mock-4', 'species','Mule deer herd',     '6-8 deer at sunrise',             base_lat + 0.005, base_lng + 0.005, 'self',    'Mule Deer',       0.92,  latlng_to_h3(base_lat + 0.005, base_lng + 0.005)),
+        ('mock-5', 'species','California quail',   'Small covey',                     base_lat - 0.005, base_lng + 0.005, 'relayed', 'California Quail',0.87,  latlng_to_h3(base_lat - 0.005, base_lng + 0.005)),
     ]
 
-    # Locations
+    # Locations — now include h3_cell
     locations = [
-        (str(uuid.uuid4()), now.isoformat() + 'Z', base_lat, base_lng),
-        (str(uuid.uuid4()), (now - timedelta(minutes=30)).isoformat() + 'Z', base_lat + 0.002, base_lng - 0.002),
-        (str(uuid.uuid4()), (now - timedelta(minutes=60)).isoformat() + 'Z', base_lat - 0.002, base_lng + 0.002),
+        (str(uuid.uuid4()), now.isoformat() + 'Z',                           base_lat,         base_lng,         latlng_to_h3(base_lat,         base_lng)),
+        (str(uuid.uuid4()), (now - timedelta(minutes=30)).isoformat() + 'Z', base_lat + 0.002, base_lng - 0.002, latlng_to_h3(base_lat + 0.002, base_lng - 0.002)),
+        (str(uuid.uuid4()), (now - timedelta(minutes=60)).isoformat() + 'Z', base_lat - 0.002, base_lng + 0.002, latlng_to_h3(base_lat - 0.002, base_lng + 0.002)),
     ]
 
     # Relay Packets
@@ -71,132 +93,173 @@ def main():
 
     sql_statements = [
         f"CREATE SCHEMA IF NOT EXISTS {full_schema}",
-        
-        # WIPE OUT EXISTING TABLES
+
+        # WIPE OUT EXISTING TABLES (order matters for FK constraints)
         f"DROP TABLE IF EXISTS {full_schema}.user_contacts",
         f"DROP TABLE IF EXISTS {full_schema}.location_updates",
         f"DROP TABLE IF EXISTS {full_schema}.relay_packets",
         f"DROP TABLE IF EXISTS {full_schema}.trail_reports",
-        f"DROP TABLE IF EXISTS {full_schema}.users",
+        f"DROP TABLE IF EXISTS {full_schema}.trail_segments",
         f"DROP TABLE IF EXISTS {full_schema}.trail_waypoints",
+        f"DROP TABLE IF EXISTS {full_schema}.users",
         f"DROP TABLE IF EXISTS {full_schema}.trails",
-        f"DROP TABLE IF EXISTS {full_schema}.relay_packets",
         
         # RECREATE FULL STRUCTURE
         f"""CREATE TABLE {full_schema}.trails (
-            trail_id STRING NOT NULL PRIMARY KEY,
-            name STRING NOT NULL,
-            description STRING,
+            trail_id          STRING    NOT NULL PRIMARY KEY,
+            name              STRING    NOT NULL,
+            description       STRING,
             total_length_miles DOUBLE,
-            region STRING,
-            geometry_json STRING,
-            created_at TIMESTAMP,
-            updated_at TIMESTAMP
+            region            STRING,
+            geometry_json     STRING,
+            -- H3: JSON array of all res-9 cells that cover this trail
+            -- populated by Qianqian's PCT script via h3_longlatash3
+            h3_cells          STRING,
+            created_at        TIMESTAMP,
+            updated_at        TIMESTAMP
         ) USING DELTA""",
-        
+
+        # trail_segments: one row per H3 cell covering the trail line.
+        # Enables O(1) "is this hiker on this trail?" via h3_cell equality.
+        f"""CREATE TABLE {full_schema}.trail_segments (
+            segment_id  STRING NOT NULL PRIMARY KEY,
+            trail_id    STRING NOT NULL,
+            h3_cell     STRING NOT NULL,  -- res-9 H3 cell (~174m hexagon)
+            sequence    INT,              -- vertex order along trail
+            lat         DOUBLE,           -- centroid of vertex (for display)
+            lng         DOUBLE,
+            created_at  TIMESTAMP
+        ) USING DELTA""",
+
         f"""CREATE TABLE {full_schema}.trail_waypoints (
-            waypoint_id STRING NOT NULL PRIMARY KEY,
-            trail_id STRING NOT NULL,
-            name STRING NOT NULL,
-            type STRING NOT NULL,
-            lat DOUBLE NOT NULL,
-            lng DOUBLE NOT NULL,
+            waypoint_id STRING    NOT NULL PRIMARY KEY,
+            trail_id    STRING    NOT NULL,
+            name        STRING    NOT NULL,
+            type        STRING    NOT NULL,
+            lat         DOUBLE    NOT NULL,
+            lng         DOUBLE    NOT NULL,
+            h3_cell     STRING,           -- res-9 cell for fast spatial lookup
             description STRING,
-            created_at TIMESTAMP,
-            updated_at TIMESTAMP,
+            created_at  TIMESTAMP,
+            updated_at  TIMESTAMP,
             CONSTRAINT fk_waypoint_trail FOREIGN KEY (trail_id) REFERENCES {full_schema}.trails(trail_id)
         ) USING DELTA""",
 
         f"""CREATE TABLE {full_schema}.users (
-            user_id STRING NOT NULL PRIMARY KEY, 
-            display_name STRING NOT NULL,
-            wallet_address STRING,
-            karma_points INT,
+            user_id           STRING    NOT NULL PRIMARY KEY,
+            display_name      STRING    NOT NULL,
+            wallet_address    STRING,
+            karma_points      INT,
             profile_image_url STRING,
-            active_trail_id STRING,
-            created_at TIMESTAMP,
-            updated_at TIMESTAMP,
+            active_trail_id   STRING,
+            created_at        TIMESTAMP,
+            updated_at        TIMESTAMP,
             CONSTRAINT fk_users_trail FOREIGN KEY (active_trail_id) REFERENCES {full_schema}.trails(trail_id)
         ) USING DELTA""",
-        
+
         f"""CREATE TABLE {full_schema}.trail_reports (
-            report_id STRING NOT NULL PRIMARY KEY, 
-            user_id STRING NOT NULL,
-            type STRING NOT NULL, 
-            title STRING NOT NULL,
-            description STRING, 
-            lat DOUBLE NOT NULL, 
-            lng DOUBLE NOT NULL, 
-            timestamp STRING NOT NULL,
-            image_url STRING,
-            species_name STRING, 
-            confidence DOUBLE, 
-            source STRING NOT NULL, 
-            upvotes INT,
-            synced BOOLEAN,
-            created_at TIMESTAMP,
-            updated_at TIMESTAMP,
+            report_id    STRING    NOT NULL PRIMARY KEY,
+            user_id      STRING    NOT NULL,
+            type         STRING    NOT NULL,
+            title        STRING    NOT NULL,
+            description  STRING,
+            lat          DOUBLE    NOT NULL,
+            lng          DOUBLE    NOT NULL,
+            h3_cell      STRING,           -- res-9 H3 cell: h3_longlatash3(lng, lat, 9)
+            timestamp    STRING    NOT NULL,
+            image_url    STRING,
+            species_name STRING,
+            confidence   DOUBLE,
+            source       STRING    NOT NULL,
+            upvotes      INT,
+            synced       BOOLEAN,
+            created_at   TIMESTAMP,
+            updated_at   TIMESTAMP,
             CONSTRAINT fk_reports_user FOREIGN KEY (user_id) REFERENCES {full_schema}.users(user_id)
         ) USING DELTA""",
-        
+
         f"""CREATE TABLE {full_schema}.location_updates (
-            id STRING NOT NULL PRIMARY KEY, 
-            user_id STRING NOT NULL,
-            timestamp STRING NOT NULL, 
-            lat DOUBLE NOT NULL,
-            lng DOUBLE NOT NULL, 
-            synced BOOLEAN,
+            id        STRING    NOT NULL PRIMARY KEY,
+            user_id   STRING    NOT NULL,
+            timestamp STRING    NOT NULL,
+            lat       DOUBLE    NOT NULL,
+            lng       DOUBLE    NOT NULL,
+            h3_cell   STRING,             -- res-9 H3 cell: h3_longlatash3(lng, lat, 9)
+            synced    BOOLEAN,
             created_at TIMESTAMP,
             updated_at TIMESTAMP,
             CONSTRAINT fk_locations_user FOREIGN KEY (user_id) REFERENCES {full_schema}.users(user_id)
         ) USING DELTA""",
-        
+
         f"""CREATE TABLE {full_schema}.user_contacts (
-            contact_id STRING NOT NULL PRIMARY KEY,
-            user_id STRING NOT NULL,
+            contact_id      STRING NOT NULL PRIMARY KEY,
+            user_id         STRING NOT NULL,
             contact_user_id STRING NOT NULL,
-            status STRING NOT NULL,
-            created_at TIMESTAMP,
-            updated_at TIMESTAMP,
-            CONSTRAINT fk_contacts_user1 FOREIGN KEY (user_id) REFERENCES {full_schema}.users(user_id),
+            status          STRING NOT NULL,
+            created_at      TIMESTAMP,
+            updated_at      TIMESTAMP,
+            CONSTRAINT fk_contacts_user1 FOREIGN KEY (user_id)         REFERENCES {full_schema}.users(user_id),
             CONSTRAINT fk_contacts_user2 FOREIGN KEY (contact_user_id) REFERENCES {full_schema}.users(user_id)
         ) USING DELTA""",
-        
+
         f"""CREATE TABLE {full_schema}.relay_packets (
-            packet_id STRING NOT NULL, 
-            payload_json STRING NOT NULL, 
-            received_at STRING NOT NULL,
-            sender_device STRING, 
-            uploaded BOOLEAN,
-            created_at TIMESTAMP,
-            updated_at TIMESTAMP
-        ) USING DELTA"""
+            packet_id    STRING NOT NULL PRIMARY KEY,
+            payload_json STRING NOT NULL,
+            received_at  STRING NOT NULL,
+            sender_device STRING,
+            uploaded     BOOLEAN,
+            created_at   TIMESTAMP,
+            updated_at   TIMESTAMP
+        ) USING DELTA""",
+
+        # --- H3 SPATIAL OPTIMIZATION ---
+        # ZORDER physically clusters Delta files by h3_cell so spatial queries
+        # ("find all reports in this hex") skip irrelevant files entirely.
+        f"OPTIMIZE {full_schema}.trail_reports   ZORDER BY (h3_cell)",
+        f"OPTIMIZE {full_schema}.location_updates ZORDER BY (h3_cell)",
+        f"OPTIMIZE {full_schema}.trail_segments   ZORDER BY (h3_cell)",
     ]
 
     # PUT IN ALL THE DATA SO WE START FRESH
     
-    # Trails
+    # Seed: Trails (h3_cells populated by Qianqian's PCT script; NULL for now)
     mock_geojson = '{"type": "LineString", "coordinates": [[-117.24, 32.88], [-117.23, 32.89]]}'
-    sql_statements.append(f"INSERT INTO {full_schema}.trails VALUES ('{pct_trail_id}', 'Pacific Crest Trail', 'A long-distance hiking and equestrian trail closely aligned with the highest portion of the Cascade and Sierra Nevada mountain ranges.', 2650.0, 'West Coast USA', '{mock_geojson}', current_timestamp(), current_timestamp())")
-    sql_statements.append(f"INSERT INTO {full_schema}.trail_waypoints VALUES ('{str(uuid.uuid4())}', '{pct_trail_id}', 'Southern Terminus', 'trailhead', 32.5896, -116.4669, 'The official start of the PCT at the US-Mexico border.', current_timestamp(), current_timestamp())")
-    
-    for user_id, name, wallet, karma, trail_id in users:
-        sql_statements.append(f"INSERT INTO {full_schema}.users VALUES ('{user_id}', '{name}', '{wallet}', {karma}, NULL, '{trail_id}', current_timestamp(), current_timestamp())")
+    sql_statements.append(
+        f"INSERT INTO {full_schema}.trails VALUES "
+        f"('{pct_trail_id}', 'Pacific Crest Trail', "
+        f"'A long-distance hiking and equestrian trail closely aligned with the highest portion of the Cascade and Sierra Nevada mountain ranges.', "
+        f"2650.0, 'West Coast USA', '{mock_geojson}', NULL, current_timestamp(), current_timestamp())"
+    )
+    sql_statements.append(
+        f"INSERT INTO {full_schema}.trail_waypoints VALUES "
+        f"('{str(uuid.uuid4())}', '{pct_trail_id}', 'Southern Terminus', 'trailhead', "
+        f"32.5896, -116.4669, {sql_str(latlng_to_h3(32.5896, -116.4669))}, "
+        f"'The official start of the PCT at the US-Mexico border.', current_timestamp(), current_timestamp())"
+    )
 
-    for i, (rid, rtype, title, desc, lat, lng, source, species, conf) in enumerate(reports):
-        user_id = users[i % len(users)][0]
-        species_val = f"'{species}'" if species else "NULL"
-        conf_val = conf if conf is not None else "NULL"
-        ts = (now - timedelta(hours=i*2)).isoformat() + 'Z'
+    for user_id, name, wallet, karma, trail_id in users:
         sql_statements.append(
-            f"INSERT INTO {full_schema}.trail_reports VALUES ('{rid}', '{user_id}', '{rtype}', '{title}', '{desc}', "
-            f"{lat}, {lng}, '{ts}', NULL, {species_val}, {conf_val}, '{source}', 0, true, current_timestamp(), current_timestamp())"
+            f"INSERT INTO {full_schema}.users VALUES "
+            f"('{user_id}', '{name}', '{wallet}', {karma}, NULL, '{trail_id}', current_timestamp(), current_timestamp())"
         )
 
-    for i, (loc_id, ts, lat, lng) in enumerate(locations):
+    for i, (rid, rtype, title, desc, lat, lng, source, species, conf, h3_cell) in enumerate(reports):
         user_id = users[i % len(users)][0]
-        sql_statements.append(f"INSERT INTO {full_schema}.location_updates VALUES ('{loc_id}', '{user_id}', '{ts}', {lat}, {lng}, true, current_timestamp(), current_timestamp())")
+        ts = (now - timedelta(hours=i*2)).isoformat() + 'Z'
+        sql_statements.append(
+            f"INSERT INTO {full_schema}.trail_reports VALUES "
+            f"('{rid}', '{user_id}', '{rtype}', '{title}', '{desc}', "
+            f"{lat}, {lng}, {sql_str(h3_cell)}, '{ts}', NULL, "
+            f"{sql_str(species)}, {conf if conf is not None else 'NULL'}, "
+            f"'{source}', 0, true, current_timestamp(), current_timestamp())"
+        )
 
+    for i, (loc_id, ts, lat, lng, h3_cell) in enumerate(locations):
+        user_id = users[i % len(users)][0]
+        sql_statements.append(
+            f"INSERT INTO {full_schema}.location_updates VALUES "
+            f"('{loc_id}', '{user_id}', '{ts}', {lat}, {lng}, {sql_str(h3_cell)}, true, current_timestamp(), current_timestamp())"
+        )
     for packet_id, payload, ts, device in relay_packets:
         sql_statements.append(f"INSERT INTO {full_schema}.relay_packets VALUES ('{packet_id}', '{payload}', '{ts}', '{device}', true, current_timestamp(), current_timestamp())")
 
