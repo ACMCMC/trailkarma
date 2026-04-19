@@ -47,9 +47,9 @@ class BleRepository(
     private var advertiser: BluetoothLeAdvertiser? = null
     private var advertiseCallback: AdvertiseCallback? = null
 
-    // Track devices we've already initiated a GATT sync with this session
-    // so we don't spam-connect to the same phone every scan cycle.
-    private val syncedDevices = mutableSetOf<String>()
+    // Track last sync time per device (map of address -> epochSecond)
+    // Allow re-sync every 10 seconds to handle data updates
+    private val lastSyncTime = mutableMapOf<String, Long>()
 
     private val gattClient by lazy {
         GattClient(
@@ -180,13 +180,16 @@ class BleRepository(
                         )
                     }
 
-                    if (address !in syncedDevices) {
-                        syncedDevices.add(address)
-                        val msg2 = "🔗 Initiating report sync with $hikerId ($address)…"
+                    val now = Instant.now().epochSecond
+                    val lastSync = lastSyncTime[address] ?: 0L
+                    if (now - lastSync >= 10) {
+                        lastSyncTime[address] = now
+                        val msg2 = "🔗 Syncing reports with $hikerId ($address)…"
                         log(msg2); Log.i(TAG, msg2)
                         gattClient.syncWithPeer(device)
                     } else {
-                        Log.d(TAG, "Already synced with $address this session, skipping GATT connect")
+                        val remaining = 10 - (now - lastSync)
+                        Log.d(TAG, "Recently synced with $address (cooldown $remaining seconds), skipping")
                     }
                 } else {
                     val msg = "Found TrailKarma device $address with no service data (rawData=${rawData?.let { it.size.toString() + " bytes" } ?: "null"})"
@@ -220,7 +223,7 @@ class BleRepository(
 
     fun stopScan() {
         scanCallback?.let { scanner?.stopScan(it) }
-        syncedDevices.clear()
+        lastSyncTime.clear()
         log("Scan stopped"); Log.d(TAG, "Scan stopped")
     }
 
