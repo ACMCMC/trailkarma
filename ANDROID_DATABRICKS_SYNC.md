@@ -1,169 +1,163 @@
-# Android App - Databricks Sync Setup
+# Android Sync, BLE, And Test Loop
 
-The TrailKarma Android app now syncs trail reports and location data to Databricks when online, with offline-first caching.
+This document describes the current Android data flow in the `datahacks26` repo. It focuses on the implemented offline-first behavior rather than the older setup notes.
 
-## How It Works
+## Current Android Sync Model
 
-1. **Offline Mode**: Data is stored locally in Room database.
-2. **Online Mode**: When network is available, the app PUSHES unsynced offline data to Databricks and PULLS the latest community data down to the device.
-3. **Cache**: The most recent synced data remains available offline.
+The Android app treats local state as the source of truth and sync as a background reconciliation step.
 
-## Setup Instructions
+Current local data includes:
 
-### 1. Configure Databricks in Your App
+- trail reports
+- biodiversity contributions
+- relay packets
+- relay job intents
+- relay inbox messages
+- location updates
+- trail metadata
+- wallet / profile state
 
-Add this to `MainActivity.kt` after checking user login:
+The app uses three main background workers:
 
-```kotlin
-import fyi.acmc.trailkarma.repository.DatabricksSyncRepository
-import fyi.acmc.trailkarma.db.AppDatabase
+- [android_app/app/src/main/java/fyi/acmc/trailkarma/sync/SyncWorker.kt](/Users/suraj/Desktop/dhacks/datahacks26/android_app/app/src/main/java/fyi/acmc/trailkarma/sync/SyncWorker.kt)
+- [android_app/app/src/main/java/fyi/acmc/trailkarma/sync/BiodiversityLocalInferenceWorker.kt](/Users/suraj/Desktop/dhacks/datahacks26/android_app/app/src/main/java/fyi/acmc/trailkarma/sync/BiodiversityLocalInferenceWorker.kt)
+- [android_app/app/src/main/java/fyi/acmc/trailkarma/sync/BiodiversitySyncWorker.kt](/Users/suraj/Desktop/dhacks/datahacks26/android_app/app/src/main/java/fyi/acmc/trailkarma/sync/BiodiversitySyncWorker.kt)
 
-// After login is confirmed
-val db = AppDatabase.get(this)
-val syncRepo = DatabricksSyncRepository(this, db)
-syncRepo.setDatabricksConfig(
-    url = "https://dbc-f1d1578e-8435.cloud.databricks.com",
-    token = "dapi...",  // Your Databricks personal access token
-    warehouse = "5fa7bca37483870e"  // Current SQL warehouse ID
-)
+## What `SyncWorker` Does
 
-// Initial sync on app startup
-if (syncRepo.isOnline()) {
-    syncRepo.syncReports() // Push offline data
-    syncRepo.pullReportsFromCloud() // Pull community updates
-}
+When connectivity is available, `SyncWorker` currently:
+
+- pushes unsynced trail reports to Databricks
+- pushes unsynced location updates to Databricks
+- pushes unsynced relay packets to Databricks
+- pulls recent trail reports from Databricks
+- pulls trail geometry / metadata from Databricks
+- syncs the current user registration to the rewards backend
+- claims pending rewards for trail reports
+- opens pending relay jobs
+- opens pending voice relay jobs
+- syncs mesh relay replies
+- syncs the relay inbox
+
+Databricks sync logic lives in:
+
+- [android_app/app/src/main/java/fyi/acmc/trailkarma/repository/DatabricksSyncRepository.kt](/Users/suraj/Desktop/dhacks/datahacks26/android_app/app/src/main/java/fyi/acmc/trailkarma/repository/DatabricksSyncRepository.kt)
+
+Rewards / relay sync logic lives in:
+
+- [android_app/app/src/main/java/fyi/acmc/trailkarma/repository/RewardsRepository.kt](/Users/suraj/Desktop/dhacks/datahacks26/android_app/app/src/main/java/fyi/acmc/trailkarma/repository/RewardsRepository.kt)
+
+## Databricks Behavior
+
+The current Android app syncs against Databricks SQL Warehouse using SQL statements generated on-device.
+
+Implemented behavior:
+
+- `MERGE INTO` for `trail_reports`
+- `MERGE INTO` for `location_updates`
+- `MERGE INTO` for `relay_packets`
+- pull of recent community reports back into Room
+- pull of trail metadata / geometry back into Room
+- server-side H3 computation using Databricks functions
+
+Important current detail:
+
+- Android sends raw coordinates.
+- Databricks computes H3 cells on ingest.
+- H3 is not computed on-device.
+
+## BLE Mesh Behavior
+
+The BLE system runs through a foreground service and GATT-based sync.
+
+Important files:
+
+- [android_app/app/src/main/java/fyi/acmc/trailkarma/ble/BleService.kt](/Users/suraj/Desktop/dhacks/datahacks26/android_app/app/src/main/java/fyi/acmc/trailkarma/ble/BleService.kt)
+- [android_app/app/src/main/java/fyi/acmc/trailkarma/ble/BleRepository.kt](/Users/suraj/Desktop/dhacks/datahacks26/android_app/app/src/main/java/fyi/acmc/trailkarma/ble/BleRepository.kt)
+- [android_app/app/src/main/java/fyi/acmc/trailkarma/ble/GattClient.kt](/Users/suraj/Desktop/dhacks/datahacks26/android_app/app/src/main/java/fyi/acmc/trailkarma/ble/GattClient.kt)
+- [android_app/app/src/main/java/fyi/acmc/trailkarma/ble/GattServer.kt](/Users/suraj/Desktop/dhacks/datahacks26/android_app/app/src/main/java/fyi/acmc/trailkarma/ble/GattServer.kt)
+
+Current BLE responsibilities:
+
+- discover nearby TrailKarma devices
+- exchange trail reports
+- exchange relay packets
+- carry voice relay intents between phones
+- carry relay replies back toward the sender
+
+The repo is clearly built around BLE carriage, but full multi-phone field validation is still less mature than the local code surface.
+
+## Android Configuration
+
+Important build-time properties in [android_app/app/build.gradle.kts](/Users/suraj/Desktop/dhacks/datahacks26/android_app/app/build.gradle.kts):
+
+- `api.baseUrl`
+  Biodiversity backend base URL. Falls back to `TRAILKARMA_API_BASE_URL`, then `http://10.0.2.2:3000`.
+- `rewards.url`
+  Rewards / relay backend base URL. Falls back to `REWARDS_BASE_URL`, then `api.baseUrl`.
+- `databricks.url`
+- `databricks.token`
+- `databricks.warehouse`
+
+These can come from:
+
+- Gradle properties
+- environment variables
+- `android_app/local.properties`
+
+## Preferred Emulator Loop
+
+Use the scripted loop from `AGENTS.md` instead of manual Android Studio clicking:
+
+```bash
+scripts/android-sdk-bootstrap.sh
+scripts/android-avd-create.sh
+scripts/android-emulator-start.sh
+scripts/android-install-debug.sh
+scripts/android-smoke-loop.sh
 ```
 
-### 2. Get Your Databricks Credentials
+Useful artifacts after a smoke-loop failure:
 
-From your Databricks workspace:
+- `.artifacts/android-smoke/launch-logcat.txt`
+- `.artifacts/android-smoke/ui/window_dump.xml`
+- `.artifacts/android-smoke/ui/screen.png`
 
-- **URL**: Your workspace URL (e.g., `https://adb-1234567890.cloud.databricks.com`)
-- **Token**: 
-  - Click your username → Personal settings
-  - Click "Access tokens" → Generate new token
-  - Copy the token (keep it secret!)
-- **Warehouse ID**:
-  - Click "SQL" → "Warehouses"
-  - Click your warehouse → Copy the ID from the URL bar
+## Preferred Physical-Device Loop
 
-### 3. What Gets Synced
+With a USB-connected Android phone:
 
-When online, the app automatically syncs in both directions:
-
-- **Pushes Trail Reports**: Pushes locally generated reports (type, title, description, lat, lng) to Databricks.
-- **Pulls Trail Reports**: Pulls the most recent global reports from Databricks (idempotent deduplication via UUID).
-- **Pushes Location Updates**: Pushes GPS pings with ID-based `MERGE INTO` protection.
-- **Pushes Relay Packets**: Synchronizes encounter logs and relayed data from the BLE mesh.
-- **Status**: Records show an animated orange spinner while pending, and a green badge once synced.
-- **Server-Side H3**: The app sends raw coordinates; Databricks computes the `h3_cell` index automatically during ingestion.
-
-### 4. Sync Behavior
-
-- **Automatic**: WorkManager triggers sync when network becomes available.
-- **Manual**: Triggered via `DatabricksSyncRepository` in the ViewModel.
-- **Retry**: If sync fails, WorkManager will retry on next network change.
-- **Offline**: All data remains accessible locally until sync succeeds.
-- **GATT Mesh**: Data from nearby hikers is exchanged via a GATT server/client protocol. Devices "diff" manifests to sync missing reports phone-to-phone.
-
-## 📡 BLE Mesh Networking (The "Wild" Sync)
-The app uses a persistent BLE foreground service (`BleService`) to synchronize data between hikers in zero-signal areas.
-
-- **Persistent Mesh**: Running as a Foreground Service with a custom notification, it ensures you are always "connected" to the trail community even when the app is in your pocket.
-- **Manifest Diffing**: When two hikers meet, their phones exchange "manifests" (lists of report IDs). They then pull only the missing reports from each other.
-- **GATT Sync**: Data is streamed over BLE GATT characteristics using a chunked protocol to handle reports larger than the standard 512-byte MTU.
-- **Relay Logs**: Every peer encounter is logged as a `RelayPacket` and uploaded to Databricks to visualize the "gossiped" path of a report through the mesh.
-
-## 📱 User Interface Updates
-
-### Full-Screen Report Detail
-Tapping any marker on the map or an item in the history list launches the **Full-Screen Report Detail**. This view provides a rich card layout with:
-- Color-coded hero banners (Red for Hazards, Teal for Water, Green for Species).
-- Species identification confidence badges.
-- Explicit sync status (Animated spinner vs. Green "✓ synced" badge).
-- "via BLE relay" indicator for data that traveled through the mesh.
-
-### Hiker Nickname (Login)
-The initial login screen asks for your **"Hiker Nickname (Trail Name)"**. This is your personal alias in the TrailKarma community (e.g., "Strider").
-
-### Dynamic Trail Selection
-You can select your active trail (e.g., PCT) from the Map Screen. The list is pulled live from Databricks, with spatial data optimized via H3 for the current region.
-
-
-## Code Examples
-
-### In CreateReportViewModel
-```kotlin
-val syncRepo = DatabricksSyncRepository(context, db)
-if (syncRepo.isOnline()) {
-    // Can show "syncing..." indicator
-    syncRepo.syncReports()
-}
+```bash
+SESSION_NAME=my-session scripts/android-physical-debug-loop.sh
 ```
 
-### In MapViewModel
-```kotlin
-// Show synced status in UI
-reports.collectAsState().value.forEach { report ->
-    if (report.synced) {
-        // Show green checkmark
-    } else {
-        // Show orange sync pending indicator
-    }
-}
-```
+This loop:
 
-## Testing
+- checks the local backend health endpoint
+- installs the debug build
+- sets up `adb reverse tcp:3000 tcp:3000`
+- starts background `logcat` capture
 
-1. Create a report while **offline** (airplane mode)
-   - Report saves to local database
-   - Shows orange "pending sync" badge
+Related helpers:
 
-2. Go **online**
-   - WorkManager syncs automatically (may take a few seconds)
-   - Report shows green "synced" checkmark
+- `scripts/android-physical-install-debug.sh`
+- `scripts/android-physical-logcat.sh`
+- `scripts/android-physical-capture.sh`
 
-3. Verify in Databricks:
-   ```sql
-   SELECT * FROM workspace.trailkarma.trail_reports WHERE synced = true;
-   ```
+## Current Instrumentation Coverage
 
-## Architecture Diagram
+Current Android smoke tests:
 
-```
-Mobile App (offline-first)
-├── Local Room DB
-│   ├── reports (animated spinner until synced)
-│   ├── locations (synced=false until upload)
-│   └── relay_packets (BLE mesh encounter logs)
-└── Databricks Sync (WorkManager)
-    ├── ExecuteSql API (idempotent MERGE INTO)
-    ├── PUSH: Reports, Locations, RelayLogs
-    └── PULL: Global Reports (Manifest diffing)
-        ↓
-    Databricks SQL Warehouse (H3 Spatial Cluster)
-    └── workspace.trailkarma.trail_reports (H3 computed on ingest)
-```
+- [android_app/app/src/androidTest/java/fyi/acmc/trailkarma/SmokeNavigationTest.kt](/Users/suraj/Desktop/dhacks/datahacks26/android_app/app/src/androidTest/java/fyi/acmc/trailkarma/SmokeNavigationTest.kt)
+- [android_app/app/src/androidTest/java/fyi/acmc/trailkarma/BiodiversityFlowSmokeTest.kt](/Users/suraj/Desktop/dhacks/datahacks26/android_app/app/src/androidTest/java/fyi/acmc/trailkarma/BiodiversityFlowSmokeTest.kt)
 
-## 🛠 Android 15 & 16KB Alignment
-The app is fully optimized for **Android 15**. We have upgraded to **CameraX 1.4.1** and **NDK r27** to ensure that all native libraries are 16KB page-aligned, preventing "ELF alignment" warnings on modern hardware.
+Coverage today is strongest around launch/navigation and the biodiversity capture flow. It is not yet a full end-to-end automated mesh / relay / rewards test suite.
 
+## Current Gaps
 
-## Troubleshooting
+Still missing or incomplete in this area:
 
-**Sync Not Working?**
-- Check: Is the warehouse running? (green checkmark in Databricks)
-- Check: Is the token valid? (Settings → Access tokens)
-- Check: Is network connectivity available?
-
-**Data Not in Databricks?**
-- Check Reports: `SELECT COUNT(*) FROM workspace.trailkarma.trail_reports;`
-- Check Logs: Look for network errors in Android Studio logcat
-- Check Status: Is `synced` column true or false?
-
-## Next Steps
-
-- Implement settings UI to let users enter Databricks credentials
-- Add sync status notifications
-- Implement selective sync (sync only hazards, etc.)
-- Add conflict resolution if same report uploaded from multiple devices
+- more complete automated end-to-end testing for relay carrier flows
+- stronger physical multi-phone BLE validation
+- a user-facing settings surface for changing backend endpoints at runtime
+- deeper sync observability and failure reporting inside the app

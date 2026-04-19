@@ -1,47 +1,218 @@
 # TrailKarma
 
-A community-powered hiking app that socially rewards hikers for helping one another and contributing to the trail ecosystem.
+TrailKarma is an offline-first hiking app prototype built for DataHacks 2026. The current repository contains a working Android client, a hybrid Solana rewards layer, a TypeScript relay/rewards backend, a Python biodiversity backend, Databricks sync utilities, and a small React web demo.
 
-## Core Idea
+## What Exists Today
 
-The app is offline-first, letting hikers log their location, hazards, water conditions, and wildlife sightings, relay that information phone-to-phone over BLE when there is no signal, and sync it to the cloud later. It also incentivizes altruistic contribution through Solana-based karma points and digital collectibles awarded for verified actions, whether that is reporting hazards for other travelers, sharing trail conditions, relaying delayed emergency or check-in messages, or contributing biodiversity data. For biodiversity monitoring, the app can run an on-device audio classification model to detect likely species from environmental sounds and pair those detections with location, while also allowing users to upload photos of species they encounter for identification and verification. Together, this creates a social, safety, and citizen-science network for hikers, where helping the community also generates meaningful data for biodiversity researchers.
+The current hackathon build implements the following end-to-end pieces:
 
-## 🚀 Project Status (DataHacks 2026)
+- Offline-first Android app built with Kotlin, Jetpack Compose, Room, WorkManager, BLE, CameraX, and OSMDroid.
+- Local trail reporting for hazards, water, and species observations.
+- Continuous local location logging plus online sync of reports, locations, trails, and relay packets to Databricks SQL.
+- BLE packet exchange for reports and relay packets so nearby phones can carry data without internet.
+- Hybrid Solana rewards flow with app-managed wallets, KARMA balances, badge claims, relay jobs, and KARMA tipping.
+- Voice relay jobs that are signed on-device, carried offline, then opened and fulfilled through the backend when connectivity returns.
+- Offline biodiversity audio capture with on-device inference, optional photo attachment, local ledgering, and backend mirroring.
+- Android smoke-test scripts for emulator and physical-device loops.
+- A React/Vite landing-page demo that shows the product concept with mock data.
 
-We have built a production-ready, offline-first Android application integrated with a Databricks Lakehouse backend, featuring a resilient BLE mesh networking system and advanced H3 spatial indexing.
+This is an integrated prototype, not a finished production system. Some parts are live and connected, while a few of the original product goals are still represented as scaffolding, demo logic, or next-step work.
 
-### ✅ Completed Features
-- **Offline-First Reporting**: Hikers can log hazards, water sources, and wildlife sightings without cellular signal.
-- **Bi-directional Cloud Sync**: Automated background synchronization with Databricks SQL Warehouse using idempotent `MERGE INTO` operations.
-- **H3 Spatial Intelligence**: Databricks natively computes H3 hexagonal cells (Resolution 9) for every report and GPS ping, enabling high-speed spatial aggregations and heatmaps.
-- **BLE Mesh Networking**: A robust, persistent foreground service for phone-to-phone discovery and GATT-based data synchronization. Hikers "sync" missing reports with each other in the wild.
-- **Voice Relay Jobs**: Offline-signed relay intents can now be carried over BLE and later turned into ElevenLabs outbound calls once any carrier hiker regains connectivity.
-- **Dynamic Trail Engine**: Trail metadata (PCT, etc.) is pulled dynamically from Databricks, with O(1) trail-line snapping via `trail_segments`.
-- **Modern UI/UX**: Polished Jetpack Compose interface with animated sync spinners, full-screen report details, and interactive OSM maps.
-- **Android 15 Ready**: Fully compliant with the new 16KB memory page alignment requirements (NDK r27/CameraX 1.4.1).
+## Current Architecture
 
-### 🛠 Tech Stack
-- **Android**: Kotlin, Jetpack Compose, Room DB, WorkManager, CameraX 1.4.1.
-- **Backend**: Databricks (SQL Warehouse, Delta Lake, H3 Spatial Functions).
-- **Communication**: Bluetooth Low Energy (Persistent Mesh, GATT Server/Client).
-- **Spatial**: Uber H3 (Server-side indexing for O(1) clustering and Z-Ordering).
+TrailKarma is intentionally hybrid:
 
-## 📂 Documentation
-- [Databricks Setup Guide](DATABRICKS_SETUP.md) - How to initialize the cloud backend with H3 support.
-- [Android Sync & BLE Guide](ANDROID_DATABRICKS_SYNC.md) - How the GATT mesh and Databricks sync pipeline works.
-- [Rewards Architecture](docs/REWARDS.md) - Solana KARMA, badges, PDAs, sponsor flow, and attestation-backed claims.
-- [App Vision](AGENTS.md) - The core philosophy and social reward system.
+- `android_app/`
+  Android remains the source of truth for offline activity. It stores reports, biodiversity observations, relay jobs, relay inbox messages, location updates, and wallet state locally in Room.
+- `backend/`
+  Contains two services:
+  - a TypeScript sponsor/attestor backend for Solana rewards and voice relay jobs
+  - a Python FastAPI biodiversity backend for audio/photo ingestion and Databricks mirroring
+- `solana/`
+  Anchor program for reward state, uniqueness, relay-job settlement, KARMA issuance, badge ownership, and tipping.
+- `web/`
+  React/Vite demo site with mock trail-tracker and map views.
+- `scripts/`
+  Android emulator, install, smoke-test, and physical-device helper scripts.
 
-## Solana Layer
+## Implemented Android Features
 
-The Solana integration is intentionally hybrid. Real-world events still happen off-chain in the app, over BLE, or through backend providers. On-chain state is used for the parts Solana is good at: uniqueness, first-fulfiller settlement for relay jobs, KARMA issuance, and badge ownership.
+- Local user profile with trail name, callback number, relay defaults, and trusted contacts.
+- Compose navigation for map, report creation, report history, biodiversity capture, rewards, profile, relay hub, and status screens.
+- Offline storage for:
+  - trail reports
+  - biodiversity contributions
+  - relay packets
+  - relay job intents
+  - relay inbox replies
+  - location updates
+  - trails
+- BLE foreground service plus GATT client/server exchange.
+- On-device Solana wallet generation and signing.
+- Rewards screen with KARMA balance, badge progress, collectible UI, and activity feed.
+- Relay Hub screen for voice relay mission creation, sync, and inbox review.
+- Biodiversity capture flow for 5-second audio recording, local inference, save-to-ledger, and photo attachment.
 
-- `solana/`: Anchor program for user profiles, contribution receipts, relay jobs, badge claims, and sponsored KARMA transfers.
-- `backend/`: TypeScript attestor + sponsor service that verifies claims and submits Devnet transactions.
-- `android_app/`: app-managed wallets, offline relay intent signing, BLE packet carrying, reward claim sync, and wallet/badge UI.
+## Implemented Backend Features
 
-## 🌲 How to Run
-1. **Cloud**: Run `python setup_databricks.py` to initialize the Databricks schema and demo data. This script requires the `h3` Python package.
-2. **Rewards**: Start the backend in `backend/` after setting the Solana sponsor/attestor environment variables.
-3. **Mobile**: Build the Android app using Android Studio with local Databricks and backend settings in your Gradle properties.
-4. **Sync**: Login with a hiker nickname, select a trail, and start hiking.
+### TypeScript rewards / voice-relay service
+
+- Registers app users on-chain and tracks wallet state.
+- Claims contribution rewards for hazard, water, and species reports.
+- Opens and fulfills relay jobs on Solana Devnet.
+- Prepares and submits signed KARMA tips.
+- Stores audit and relay state in local SQLite.
+- Integrates with ElevenLabs/Twilio for outbound relay calling when configured.
+- Exposes mobile-facing endpoints under `/v1/...`.
+
+### Python biodiversity service
+
+- Accepts audio observations and photo attachments.
+- Stores observation artifacts locally.
+- Runs backend acoustic inference when using `/api/biodiversity/audio`.
+- Accepts already-classified on-device observations through `/api/biodiversity/audio-sync`.
+- Mirrors biodiversity observations into Databricks when credentials are configured.
+
+## Solana Scope
+
+The on-chain layer is intentionally narrow. Hiking workflows are not moved wholesale to Solana.
+
+Solana is currently used for:
+
+- user registration
+- contribution reward receipts
+- KARMA minting
+- badge eligibility and badge ownership
+- relay-job uniqueness and first-fulfiller settlement
+- signed KARMA tipping
+
+Off-chain systems still own:
+
+- report capture
+- biodiversity capture
+- BLE exchange
+- delayed message authoring
+- outbound voice delivery
+- Databricks analytics
+
+## Repo Layout
+
+- `android_app/`: Android app and tests
+- `backend/`: TypeScript rewards backend and Python biodiversity API
+- `solana/`: Anchor program and workspace
+- `web/`: React/Vite demo
+- `docs/`: feature-specific documentation
+- `scripts/`: Android automation and helper scripts
+- `data/`: sample trail and observation data used by setup scripts
+
+## Running The Project
+
+### 1. Databricks setup
+
+Initialize the Databricks schema and demo data:
+
+```bash
+python setup_databricks.py
+```
+
+See [DATABRICKS_SETUP.md](DATABRICKS_SETUP.md) for details.
+
+### 2. Rewards / voice backend
+
+```bash
+cd backend
+npm install
+npm run build
+npm run dev
+```
+
+Required environment variables are documented in [backend/README.md](backend/README.md).
+
+### 3. Biodiversity backend
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r backend/requirements.txt
+uvicorn backend.app:app --reload --port 3000
+```
+
+If you run both backends locally, use different ports or separate sessions and point the Android build to the appropriate base URLs.
+
+### 4. Android app
+
+Preferred local loop:
+
+```bash
+scripts/android-sdk-bootstrap.sh
+scripts/android-avd-create.sh
+scripts/android-smoke-loop.sh
+```
+
+Useful scripts:
+
+- `scripts/android-install-debug.sh`
+- `scripts/android-ui-dump.sh`
+- `scripts/android-physical-debug-loop.sh`
+- `scripts/android-physical-capture.sh`
+
+Android build configuration:
+
+- `api.baseUrl` or `TRAILKARMA_API_BASE_URL` controls the biodiversity API base URL.
+- `rewards.url` or `REWARDS_BASE_URL` controls the rewards backend base URL.
+- Databricks values can come from `android_app/local.properties`, Gradle properties, or environment variables.
+
+### 5. Web demo
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+The current web app is a concept/demo surface and uses mock data.
+
+## Testing
+
+Current Android instrumentation coverage includes:
+
+- `SmokeNavigationTest`
+  Verifies launch and navigation to Rewards, Profile, and Relay Hub.
+- `BiodiversityFlowSmokeTest`
+  Verifies biodiversity capture-screen rendering and the audio-record flow.
+- `RewardsRepositoryIntegrationTest`
+  Covers reward repository behavior against the current app/backend contract.
+
+Preferred Android verification loop after app changes:
+
+```bash
+scripts/android-smoke-loop.sh
+```
+
+For physical-device testing:
+
+```bash
+SESSION_NAME=my-session scripts/android-physical-debug-loop.sh
+```
+
+## Documentation
+
+- [ANDROID_DATABRICKS_SYNC.md](ANDROID_DATABRICKS_SYNC.md): Android offline sync, Databricks, BLE, and test loop notes
+- [backend/README.md](backend/README.md): TypeScript rewards backend and Python biodiversity backend
+- [docs/REWARDS.md](docs/REWARDS.md): hybrid Solana rewards architecture and current API surface
+- [docs/bioacoustics.md](docs/bioacoustics.md): biodiversity feature status, model-pack flow, and current limitations
+- [android_app/LOCAL_BIODIVERSITY_MODEL_PACK.md](android_app/LOCAL_BIODIVERSITY_MODEL_PACK.md): on-device model-pack layout
+- [web/README.md](web/README.md): web demo status and scope
+
+## What Is Still Missing From The Original Product Vision
+
+The current implementation already covers the main offline-first Android flow, BLE carriage, Solana rewards, voice-relay settlement, and audio-based biodiversity capture. The largest remaining gaps are:
+
+- photo-based species identification and verification, rather than only photo attachment/upload
+- a real moderation or attestation pipeline for biodiversity verification instead of mostly local/demo collectible bookkeeping
+- generalized backend-to-backend or partner-facing biodiversity export workflows for researchers
+- more mature multi-phone BLE validation for full relay-carrier flows in the wild
+- stronger trust / anti-abuse logic around what counts as a verified real-world action
+- a web experience backed by live project data instead of mock/demo data
+
+Those gaps are discussed in more detail in the feature docs and summarized in the final response for this task.

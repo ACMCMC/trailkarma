@@ -1,221 +1,95 @@
-# Bioacoustics Branch Notes
+# Bioacoustics Status
 
-This document captures the bioacoustics work implemented on the `bioacoustics-ai` branch for the TrailKarma hiking app. It is written as an engineering handoff for demo, testing, and follow-on development.
+This document describes the biodiversity and bioacoustics work that is implemented in the current `datahacks26` repository. It replaces the older branch-handoff notes and focuses on what exists now.
 
-## Goal
+## What Is Implemented
 
-The feature adds an offline-first biodiversity contribution flow to the hiking app:
+The current build supports an offline-first biodiversity contribution flow:
 
-- record a five-second environmental audio clip on Android
-- classify the clip locally first
-- persist the event locally with contributor identity, time, and coordinates
-- save a biodiversity contribution entry that can later sync to the backend
-- optionally attach a photo to the same observation for later verification
-- expose a compact, BLE-relayable metadata view without sending raw files
-- preserve enough state for later verification, collectibles, rewards, and partner data sharing
+- record a 5-second environmental audio clip on Android
+- save the observation immediately to Room
+- capture best-available location metadata when present
+- run on-device classification through the local inference stack
+- show a label, confidence band, and short explanation in the app
+- optionally attach a photo to the same observation
+- save the observation into the local biodiversity ledger
+- sync the already-classified event and optional photo to the Python backend later
+- generate a compact BLE-relayable metadata payload without sending raw files
 
-This follows the product idea in `AGENTS.md`: a community-powered, offline-first hiking app where helpful contributions become trail intelligence, future research data, and rewardable user actions.
+## Android Implementation
 
-## Branch Scope
+Main files:
 
-The branch is anchored by these main commits:
+- [android_app/app/src/main/java/fyi/acmc/trailkarma/ui/biodiversity/BiodiversityCaptureScreen.kt](/Users/suraj/Desktop/dhacks/datahacks26/android_app/app/src/main/java/fyi/acmc/trailkarma/ui/biodiversity/BiodiversityCaptureScreen.kt)
+- [android_app/app/src/main/java/fyi/acmc/trailkarma/ui/biodiversity/BiodiversityCaptureViewModel.kt](/Users/suraj/Desktop/dhacks/datahacks26/android_app/app/src/main/java/fyi/acmc/trailkarma/ui/biodiversity/BiodiversityCaptureViewModel.kt)
+- [android_app/app/src/main/java/fyi/acmc/trailkarma/audio/TrailAudioRecorder.kt](/Users/suraj/Desktop/dhacks/datahacks26/android_app/app/src/main/java/fyi/acmc/trailkarma/audio/TrailAudioRecorder.kt)
+- [android_app/app/src/main/java/fyi/acmc/trailkarma/inference/LocalBiodiversityInference.kt](/Users/suraj/Desktop/dhacks/datahacks26/android_app/app/src/main/java/fyi/acmc/trailkarma/inference/LocalBiodiversityInference.kt)
+- [android_app/app/src/main/java/fyi/acmc/trailkarma/repository/BiodiversityRepository.kt](/Users/suraj/Desktop/dhacks/datahacks26/android_app/app/src/main/java/fyi/acmc/trailkarma/repository/BiodiversityRepository.kt)
+- [android_app/app/src/main/java/fyi/acmc/trailkarma/sync/BiodiversityLocalInferenceWorker.kt](/Users/suraj/Desktop/dhacks/datahacks26/android_app/app/src/main/java/fyi/acmc/trailkarma/sync/BiodiversityLocalInferenceWorker.kt)
+- [android_app/app/src/main/java/fyi/acmc/trailkarma/sync/BiodiversitySyncWorker.kt](/Users/suraj/Desktop/dhacks/datahacks26/android_app/app/src/main/java/fyi/acmc/trailkarma/sync/BiodiversitySyncWorker.kt)
+- [android_app/app/src/main/java/fyi/acmc/trailkarma/models/Models.kt](/Users/suraj/Desktop/dhacks/datahacks26/android_app/app/src/main/java/fyi/acmc/trailkarma/models/Models.kt)
+- [android_app/LOCAL_BIODIVERSITY_MODEL_PACK.md](../android_app/LOCAL_BIODIVERSITY_MODEL_PACK.md)
 
-- `9db96a5` `Add offline biodiversity audio pipeline`
-- `054412c` `Harden biodiversity location records and UX`
+### Current Android Flow
 
-The work spans Android, the Python backend, Brev-side training/export utilities, model assets, and UX integration into the rest of the app.
+1. The user records a 5-second clip.
+2. The app stores the audio file locally and creates a `BiodiversityContribution` row.
+3. A local worker runs on-device inference.
+4. The app stores top-K candidates, final label, taxonomic level, confidence, explanation, and model metadata.
+5. The user can save the observation locally and optionally attach a photo.
+6. A sync worker uploads the already-classified observation and photo once connectivity is available.
 
-## What Was Built
+### Local Data Model
 
-### 1. Android biodiversity capture flow
+`BiodiversityContribution` currently stores:
 
-Primary screen:
-
-- [android_app/app/src/main/java/fyi/acmc/trailkarma/ui/biodiversity/BiodiversityCaptureScreen.kt](/Users/suraj/Desktop/dhacks/bioacoustics-ai/android_app/app/src/main/java/fyi/acmc/trailkarma/ui/biodiversity/BiodiversityCaptureScreen.kt)
-
-View model:
-
-- [android_app/app/src/main/java/fyi/acmc/trailkarma/ui/biodiversity/BiodiversityCaptureViewModel.kt](/Users/suraj/Desktop/dhacks/bioacoustics-ai/android_app/app/src/main/java/fyi/acmc/trailkarma/ui/biodiversity/BiodiversityCaptureViewModel.kt)
-
-Core flow:
-
-1. User taps `Record Trail Sound`.
-2. App records a five-second mono WAV clip through `TrailAudioRecorder`.
-3. App captures timestamp and best-available fused last-known location.
-4. App creates a local `BiodiversityContribution` row immediately.
-5. App schedules local inference on the device using WorkManager.
-6. App schedules eventual cloud sync if network becomes available.
-7. App shows the classification, explanation, reward status, and photo action.
-8. User can attach a photo to the same `observationId`.
-9. User can save the observation into the local biodiversity ledger.
-
-Important implementation details:
-
-- Audio is stored locally under app files first.
-- The capture flow does not block on network.
-- Classification is driven by `BiodiversityLocalInferenceWorker`, not the backend.
-- The screen was refactored to match the rest of the app’s card, hero, and ledger visual language rather than looking like an isolated prototype.
-
-### 2. Local-first biodiversity persistence model
-
-The local database entity is:
-
-- [android_app/app/src/main/java/fyi/acmc/trailkarma/models/Models.kt](/Users/suraj/Desktop/dhacks/bioacoustics-ai/android_app/app/src/main/java/fyi/acmc/trailkarma/models/Models.kt)
-
-`BiodiversityContribution` stores:
-
-- contribution identity
-- `observationId`
-- `userId`
-- `observerDisplayName`
-- `observerWalletPublicKey`
-- `createdAt`
-- `lat`
-- `lon`
-- `locationAccuracyMeters`
-- `locationSource`
-- `audioUri`
-- `photoUri`
-- `topKJson`
-- `finalLabel`
-- `finalTaxonomicLevel`
-- `confidence`
-- `confidenceBand`
-- `explanation`
-- `verificationStatus`
-- `relayable`
-- `karmaStatus`
-- `inferenceState`
-- `cloudSyncState`
-- `photoSyncState`
-- `safeForRewarding`
-- `savedLocally`
-- `synced`
-- `modelMetadataJson`
-- `classificationSource`
-- `localModelVersion`
+- observation identity
+- user and wallet attribution
+- timestamp
+- latitude / longitude when available
+- location accuracy and source
+- audio URI
+- optional photo URI
+- classification outputs
 - verification and collectible bookkeeping fields
-- org-sharing status fields
+- cloud/photo sync state
+- data-sharing status
 
-Additional reward-tracking state is stored in `KarmaEvent`, which was extended so biodiversity events can carry:
+`KarmaEvent` is also extended so biodiversity observations can carry reward and collectible bookkeeping state.
 
-- `userId`
-- `walletPublicKey`
-- `collectibleStatus`
-- `collectibleId`
-- `verificationTxSignature`
-- `verifiedAt`
+### Location Integrity
 
-Room setup:
+The current code avoids fabricating biodiversity coordinates.
 
-- [android_app/app/src/main/java/fyi/acmc/trailkarma/db/AppDatabase.kt](/Users/suraj/Desktop/dhacks/bioacoustics-ai/android_app/app/src/main/java/fyi/acmc/trailkarma/db/AppDatabase.kt)
-- [android_app/app/src/main/java/fyi/acmc/trailkarma/db/Daos.kt](/Users/suraj/Desktop/dhacks/bioacoustics-ai/android_app/app/src/main/java/fyi/acmc/trailkarma/db/Daos.kt)
+- If a usable location exists, the observation stores `lat`, `lon`, accuracy, and source metadata.
+- If location is missing, `lat` and `lon` remain `null`.
+- Observations without usable coordinates are not marked relayable.
+- Missing-location observations can still be stored locally and synced, but they are downgraded in data-sharing quality.
 
-Current DB version is `11`.
+## On-Device Inference
 
-Important note:
+The app supports bundled or sideloaded biodiversity model packs.
 
-- The app currently uses `fallbackToDestructiveMigration()`. This is acceptable for the hackathon branch but means schema changes can wipe local state on upgrade.
+Model-pack expectations are documented in:
 
-### 3. Location integrity hardening
+- [android_app/LOCAL_BIODIVERSITY_MODEL_PACK.md](../android_app/LOCAL_BIODIVERSITY_MODEL_PACK.md)
 
-One of the most important fixes in this branch was removing fake biodiversity coordinates.
+Current runtime behavior:
 
-Previous prototype behavior could fall back to `0.0, 0.0`, which is unacceptable for biodiversity data because latitude and longitude are part of the scientific value of the record.
+- If the full pack exists, Android runs TFLite embedding plus a linear head and prototype retrieval.
+- If the pack is missing, Android falls back to a lightweight heuristic path so the capture flow still works.
+- Final labels and explanations are currently deterministic on device for demo stability.
+- The optional explainer-pack path exists as export scaffolding, but it is not the main runtime requirement.
 
-Current behavior:
+The repo already includes a bundled biodiversity asset pack under:
 
-- location is requested from fused last-known location
-- if location exists, store `lat`, `lon`, `accuracyMeters`, and `locationSource = fused_last_known`
-- if location is unavailable, store `lat = null`, `lon = null`, and `locationSource = missing`
-- records with missing coordinates are not marked relayable
-- data-sharing state is downgraded to reflect missing location quality
+- [android_app/app/src/main/assets/biodiversity](../android_app/app/src/main/assets/biodiversity)
 
-This affects:
+## BLE Behavior
 
-- what gets stored locally
-- whether BLE metadata is created
-- whether the record is treated as export-ready biodiversity data
-- what sync payload is sent to the backend
+BLE relay for biodiversity is intentionally metadata-only.
 
-This is one of the highest-value correctness changes in the branch.
-
-### 4. On-device acoustic inference
-
-The Android app now supports bundled or sideloaded biodiversity model packs:
-
-- [android_app/LOCAL_BIODIVERSITY_MODEL_PACK.md](/Users/suraj/Desktop/dhacks/bioacoustics-ai/android_app/LOCAL_BIODIVERSITY_MODEL_PACK.md)
-- [android_app/app/src/main/java/fyi/acmc/trailkarma/inference/LocalBiodiversityInference.kt](/Users/suraj/Desktop/dhacks/bioacoustics-ai/android_app/app/src/main/java/fyi/acmc/trailkarma/inference/LocalBiodiversityInference.kt)
-
-Runtime search order for model bundles:
-
-- `filesDir/biodiversity_model/`
-- `getExternalFilesDir(null)/biodiversity_model/`
-- `app/src/main/assets/biodiversity/`
-
-Pack contents support:
-
-- `perch_encoder.tflite`
-- linear head weights and bias
-- classifier class labels
-- prototype bank
-- prototype embeddings
-- label metadata
-- optional future explainer assets
-
-Current inference stack on Android:
-
-- TFLite Perch encoder when a full pack is present
-- linear classification head over embeddings
-- prototype retrieval against the exported prototype bank
-- deterministic open-world decision logic
-- deterministic one-sentence explanation generation on device
-
-Important current behavior:
-
-- the app no longer requires backend classification to complete the main capture flow
-- if the full model bundle is missing, Android falls back to a lightweight heuristic path so the UX still works
-- final labels remain constrained by deterministic rules on device
-- the optional on-device LLM explainer pack is documented/exportable, but not the primary runtime path for demo stability
-
-### 5. Local inference worker and sync worker
-
-Workers:
-
-- [android_app/app/src/main/java/fyi/acmc/trailkarma/sync/BiodiversityLocalInferenceWorker.kt](/Users/suraj/Desktop/dhacks/bioacoustics-ai/android_app/app/src/main/java/fyi/acmc/trailkarma/sync/BiodiversityLocalInferenceWorker.kt)
-- [android_app/app/src/main/java/fyi/acmc/trailkarma/sync/BiodiversitySyncWorker.kt](/Users/suraj/Desktop/dhacks/bioacoustics-ai/android_app/app/src/main/java/fyi/acmc/trailkarma/sync/BiodiversitySyncWorker.kt)
-
-Local inference worker responsibilities:
-
-- find pending biodiversity clips
-- load the local audio clip
-- run on-device inference
-- build top-K candidate payload
-- store final decision, confidence, explanation, and metadata
-- queue cloud sync afterward
-
-Sync worker responsibilities:
-
-- upload already-classified observations to backend using `POST /api/biodiversity/audio-sync`
-- upload attached photos using `POST /api/biodiversity/photo-link`
-- preserve the local-first model by retrying later when offline
-
-Important separation:
-
-- `BiodiversityLocalInferenceWorker` does classification
-- `BiodiversitySyncWorker` mirrors the resulting record to backend
-
-This means the core UX remains operational offline.
-
-### 6. BLE behavior
-
-BLE relay behavior is intentionally compact and file-free.
-
-Relay payload is built in:
-
-- [android_app/app/src/main/java/fyi/acmc/trailkarma/repository/BiodiversityRepository.kt](/Users/suraj/Desktop/dhacks/bioacoustics-ai/android_app/app/src/main/java/fyi/acmc/trailkarma/repository/BiodiversityRepository.kt)
-
-Relayable biodiversity payload includes:
+Relayable biodiversity packets can include:
 
 - `observation_id`
 - `lat`
@@ -228,261 +102,71 @@ Relayable biodiversity payload includes:
 - `confidenceBand`
 - `verificationStatus`
 
-Non-negotiable constraints enforced by implementation:
+Current constraints:
 
 - raw audio is not relayed over BLE
 - photos are not relayed over BLE
-- events without usable coordinates are not marked relayable
+- observations without usable coordinates are not marked relayable
 
-### 7. Reward and collectible bookkeeping
+## Python Backend
 
-The branch adds the database shape and UI plumbing needed for biodiversity rewards and future collectibles.
+Main files:
 
-Current app behavior:
+- [backend/app.py](/Users/suraj/Desktop/dhacks/datahacks26/backend/app.py)
+- [backend/acoustic.py](/Users/suraj/Desktop/dhacks/datahacks26/backend/acoustic.py)
+- [backend/postprocess.py](/Users/suraj/Desktop/dhacks/datahacks26/backend/postprocess.py)
+- [backend/storage.py](/Users/suraj/Desktop/dhacks/datahacks26/backend/storage.py)
+- [backend/databricks_mirror.py](/Users/suraj/Desktop/dhacks/datahacks26/backend/databricks_mirror.py)
 
-- if an observation is classified as safe for rewarding, saving it creates a local `KarmaEvent`
-- biodiversity contributions carry verification and collectible lifecycle fields
-- UI surfaces pending, verified, or ineligible collectible state
-- profile and history surfaces now summarize biodiversity reward progress
+Current endpoints:
 
-Important limitation:
+- `POST /api/biodiversity/audio`
+  Accepts raw audio and runs backend inference.
+- `POST /api/biodiversity/photo-link`
+  Links a photo or photo URI to an existing observation.
+- `POST /api/biodiversity/audio-sync`
+  Accepts an already-classified on-device observation and stores/mirrors it without re-running inference.
 
-- the branch stores the lifecycle state needed for blockchain-backed verification and collectibles, but it does not complete a full production on-chain biodiversity mint/verification flow from this screen
-- the current feature is ready to store, display, sync, and later update those records when verification occurs
+In practice, the Android app now relies primarily on `/api/biodiversity/audio-sync` for the main offline-first path.
 
-### 8. UX integration across the app
+## Databricks Mirroring
 
-The biodiversity feature is no longer a sidecar screen. It is integrated into the broader app experience.
+When `DATABRICKS_HOST`, `DATABRICKS_TOKEN`, and `DATABRICKS_WAREHOUSE` are configured, the Python backend mirrors biodiversity observations into `workspace.trailkarma.biodiversity_events`.
 
-Integrated UI surfaces include:
+If those variables are not set, the backend still works and skips mirroring.
 
-- biodiversity capture screen
-- map entry points
-- history view
-- profile statistics
-- status chips for local save, sync, photo, reward, and collectible progress
+## Training And Export Tooling
 
-Relevant files:
+The repo still contains the Brev-oriented training and export scripts that were used to generate the Android model artifacts.
 
-- [android_app/app/src/main/java/fyi/acmc/trailkarma/ui/biodiversity/BiodiversityCaptureScreen.kt](/Users/suraj/Desktop/dhacks/bioacoustics-ai/android_app/app/src/main/java/fyi/acmc/trailkarma/ui/biodiversity/BiodiversityCaptureScreen.kt)
-- [android_app/app/src/main/java/fyi/acmc/trailkarma/ui/history/ReportHistoryScreen.kt](/Users/suraj/Desktop/dhacks/bioacoustics-ai/android_app/app/src/main/java/fyi/acmc/trailkarma/ui/history/ReportHistoryScreen.kt)
-- [android_app/app/src/main/java/fyi/acmc/trailkarma/ui/profile/ProfileScreen.kt](/Users/suraj/Desktop/dhacks/bioacoustics-ai/android_app/app/src/main/java/fyi/acmc/trailkarma/ui/profile/ProfileScreen.kt)
-- [android_app/app/src/main/java/fyi/acmc/trailkarma/ui/BiodiversityUiLabels.kt](/Users/suraj/Desktop/dhacks/bioacoustics-ai/android_app/app/src/main/java/fyi/acmc/trailkarma/ui/BiodiversityUiLabels.kt)
+Important scripts:
 
-Notable UX improvements:
+- [backend/training/train_open_world_head.py](/Users/suraj/Desktop/dhacks/datahacks26/backend/training/train_open_world_head.py)
+- [backend/training/finetune_local_llm.py](/Users/suraj/Desktop/dhacks/datahacks26/backend/training/finetune_local_llm.py)
+- [backend/training/export_android_model_pack.py](/Users/suraj/Desktop/dhacks/datahacks26/backend/training/export_android_model_pack.py)
+- [backend/training/export_perch_checkpoint_to_tflite.py](/Users/suraj/Desktop/dhacks/datahacks26/backend/training/export_perch_checkpoint_to_tflite.py)
+- [backend/training/export_android_explainer_pack.sh](/Users/suraj/Desktop/dhacks/datahacks26/backend/training/export_android_explainer_pack.sh)
 
-- clearer single entry point for recording
-- stronger “offline first” messaging
-- explicit lifecycle/status presentation
-- visible contributor identity
-- visible location quality and missing-location warnings
-- visible collectible and partner-sharing state
-- local biodiversity ledger section for saved observations
+## Testing
 
-### 9. Backend endpoints and cloud mirror
+Current Android instrumentation coverage includes:
 
-Primary backend files:
+- [android_app/app/src/androidTest/java/fyi/acmc/trailkarma/BiodiversityFlowSmokeTest.kt](/Users/suraj/Desktop/dhacks/datahacks26/android_app/app/src/androidTest/java/fyi/acmc/trailkarma/BiodiversityFlowSmokeTest.kt)
 
-- [backend/app.py](/Users/suraj/Desktop/dhacks/bioacoustics-ai/backend/app.py)
-- [backend/acoustic.py](/Users/suraj/Desktop/dhacks/bioacoustics-ai/backend/acoustic.py)
-- [backend/postprocess.py](/Users/suraj/Desktop/dhacks/bioacoustics-ai/backend/postprocess.py)
-- [backend/storage.py](/Users/suraj/Desktop/dhacks/bioacoustics-ai/backend/storage.py)
-- [backend/databricks_mirror.py](/Users/suraj/Desktop/dhacks/bioacoustics-ai/backend/databricks_mirror.py)
-- [backend/README.md](/Users/suraj/Desktop/dhacks/bioacoustics-ai/backend/README.md)
+Preferred loop after Android biodiversity edits:
 
-Implemented endpoints:
+```bash
+scripts/android-smoke-loop.sh
+```
 
-`POST /api/biodiversity/audio`
+## What Is Still Missing
 
-- upload raw clip
-- run backend acoustic inference
-- run backend post-processing
-- return top-K acoustic candidates, final label, taxonomic level, confidence band, explanation, reward safety, and metadata
+The biodiversity stack is real, but it is not fully complete relative to the original product vision.
 
-`POST /api/biodiversity/photo-link`
+Still missing or incomplete:
 
-- attach a photo to an existing `observation_id`
-- keep that link for later verification
-
-`POST /api/biodiversity/audio-sync`
-
-- ingest an already-classified local observation from the Android app
-- store raw audio plus local classification fields
-- mirror the event to Databricks-compatible storage
-
-Current cloud-side mirror behavior:
-
-- audio and event JSON are stored locally by the backend
-- event data is mirrored to Databricks through `DatabricksMirror`
-- the mirror logic was updated to tolerate `NULL` location fields rather than failing on missing coordinates
-
-### 10. Training and export workflow on Brev
-
-Training/export scripts live under:
-
-- [backend/training](/Users/suraj/Desktop/dhacks/bioacoustics-ai/backend/training)
-
-Implemented workflow covers:
-
-- Brev instance bootstrap
-- Perch-Hoplite and Perch setup
-- public wildlife audio download and curation
-- negative example manifest generation
-- audio normalization to mono 16 kHz five-second windows
-- embedding generation
-- prototype-bank and linear-head training
-- local LLM dataset generation
-- local fine-tuning support
-- Android model pack export
-- checkpoint-to-TFLite fallback export path
-
-Notable scripts:
-
-- `brev_bootstrap.sh`
-- `brev_instance_setup.sh`
-- `prepare_reference_audio.py`
-- `embed_reference_audio.py`
-- `train_open_world_head.py`
-- `generate_impulse_jsonl.py`
-- `finetune_local_llm.py`
-- `export_android_model_pack.py`
-- `export_perch_checkpoint_to_tflite.py`
-- `export_android_model_pack_brev.sh`
-- `export_android_explainer_pack.sh`
-
-Current artifact summary from the backend docs:
-
-- `796` reference windows embedded
-- `169` learned classes in the linear head
-- `700` prototype-bank entries
-
-### 11. LLM / explanation path status
-
-The original intended stack included an Impulse-hosted fine-tuned LLM. That was blocked operationally, so the branch shifted toward Brev-hosted or deterministic alternatives while preserving the architecture boundary.
-
-What exists now:
-
-- backend post-processing abstraction in [backend/postprocess.py](/Users/suraj/Desktop/dhacks/bioacoustics-ai/backend/postprocess.py)
-- local fine-tuning scripts and training-data generation
-- deterministic rules when the local model is not configured
-- deterministic one-sentence on-device wording for Android stability
-
-Important current truth:
-
-- the LLM is not the primary classifier
-- labels remain bounded by acoustic candidates and deterministic logic
-- explanation wording can be generated locally on backend or deterministically on device
-- the mobile demo path does not depend on a remote LLM service
-
-### 12. Databricks and biodiversity data-sharing posture
-
-The branch now preserves the fields needed for future biodiversity data products:
-
-- who contributed the event
-- where it was observed
-- when it was observed
-- what was likely detected
-- confidence and taxonomic level
-- whether a photo was linked
-- whether a collectible or verification event was attached
-- whether the record has been mirrored and whether it is ready for partner sharing
-
-This is important because biodiversity data is only useful to outside orgs if provenance and location integrity are preserved. The current data model supports that.
-
-Current `dataShareStatus` states used by the flow include:
-
-- `local_only`
-- `captured_local`
-- `classification_ready`
-- `ready_local`
-- `location_missing`
-- `mirrored_cloud`
-- `mirrored_cloud_missing_location`
-
-### 13. Known limitations
-
-These are the main deliberate shortcuts or still-open items in the branch:
-
-- no production on-chain biodiversity verification or mint pipeline from the capture flow yet
-- no production migration strategy for Room schema changes
-- on-device explainer LLM pack is optional and not the primary mobile runtime
-- backend `POST /api/biodiversity/audio` still expects required `lat` and `lon`, while Android’s main happy path now prefers local classification and nullable location for sync
-- fused last-known location is used, not an active fresh location request
-- photo attachment is link-only today and does not run image classification
-- end-to-end scientific validation is demo-grade, not benchmark-grade
-
-### 14. Demo-ready story
-
-As of this branch, the demo story is:
-
-1. Record a trail sound in the Android app.
-2. Store the clip immediately on device.
-3. Classify locally on the phone with the bundled biodiversity model pack when available.
-4. Show a species/genus/family decision with confidence wording and a one-sentence explanation.
-5. Save the event into the local biodiversity ledger.
-6. Attach a photo to the same `observationId`.
-7. Show pending reward and collectible-related state in the UI.
-8. Sync the full record later when network exists.
-9. Relay only compact metadata over BLE.
-
-### 15. Files worth reading first
-
-### 15. Android validation on 2026-04-19
-
-The Android biodiversity flow was exercised on the local emulator using the repo’s Android testing workflow.
-
-Automated signal that passed:
-
-- `./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=fyi.acmc.trailkarma.BiodiversityFlowSmokeTest`
-
-What that smoke covers:
-
-- app launch
-- navigation into the biodiversity screen
-- biodiversity screen rendering
-- tapping the `Record Trail Sound` CTA
-- observing the recording state transition
-- confirming the screen remains alive after the recording cycle
-
-Runtime issues found during testing and fixed in this branch:
-
-- `BiodiversityRepository` crashed when constructing a Moshi adapter for the Kotlin `RelayableBiodiversityPayload` data class because it used a plain `Moshi.Builder().build()` without `KotlinJsonAdapterFactory`
-- `LocalBiodiversityInferenceEngine` failed for the same reason when parsing `ModelManifest`
-- the biodiversity smoke test itself was stabilized using `UiAutomator` waits for the record-button state transition, because Compose-only idling around background workers was too brittle for this flow
-
-Files changed as a direct result of testing:
-
-- [android_app/app/src/main/java/fyi/acmc/trailkarma/repository/BiodiversityRepository.kt](/Users/suraj/Desktop/dhacks/bioacoustics-ai/android_app/app/src/main/java/fyi/acmc/trailkarma/repository/BiodiversityRepository.kt)
-- [android_app/app/src/main/java/fyi/acmc/trailkarma/inference/LocalBiodiversityInference.kt](/Users/suraj/Desktop/dhacks/bioacoustics-ai/android_app/app/src/main/java/fyi/acmc/trailkarma/inference/LocalBiodiversityInference.kt)
-- [android_app/app/build.gradle.kts](/Users/suraj/Desktop/dhacks/bioacoustics-ai/android_app/app/build.gradle.kts)
-- [android_app/app/src/androidTest/java/fyi/acmc/trailkarma/BiodiversityFlowSmokeTest.kt](/Users/suraj/Desktop/dhacks/bioacoustics-ai/android_app/app/src/androidTest/java/fyi/acmc/trailkarma/BiodiversityFlowSmokeTest.kt)
-
-Artifacts collected during Android testing:
-
-- `.artifacts/android-smoke/failure1/`
-- `.artifacts/android-smoke/final/`
-
-One broader existing test remains flaky:
-
-- `fyi.acmc.trailkarma.SmokeNavigationTest`
-
-Observed failure:
-
-- `No compose hierarchies found in the app`
-
-That failure does not point directly at the biodiversity code path and should be handled separately from the bioacoustics branch-specific runtime fixes above.
-
-### 16. Files worth reading first
-
-If someone needs to continue the feature, start here:
-
-- [android_app/app/src/main/java/fyi/acmc/trailkarma/ui/biodiversity/BiodiversityCaptureScreen.kt](/Users/suraj/Desktop/dhacks/bioacoustics-ai/android_app/app/src/main/java/fyi/acmc/trailkarma/ui/biodiversity/BiodiversityCaptureScreen.kt)
-- [android_app/app/src/main/java/fyi/acmc/trailkarma/ui/biodiversity/BiodiversityCaptureViewModel.kt](/Users/suraj/Desktop/dhacks/bioacoustics-ai/android_app/app/src/main/java/fyi/acmc/trailkarma/ui/biodiversity/BiodiversityCaptureViewModel.kt)
-- [android_app/app/src/main/java/fyi/acmc/trailkarma/inference/LocalBiodiversityInference.kt](/Users/suraj/Desktop/dhacks/bioacoustics-ai/android_app/app/src/main/java/fyi/acmc/trailkarma/inference/LocalBiodiversityInference.kt)
-- [android_app/app/src/main/java/fyi/acmc/trailkarma/repository/BiodiversityRepository.kt](/Users/suraj/Desktop/dhacks/bioacoustics-ai/android_app/app/src/main/java/fyi/acmc/trailkarma/repository/BiodiversityRepository.kt)
-- [android_app/app/src/main/java/fyi/acmc/trailkarma/sync/BiodiversityLocalInferenceWorker.kt](/Users/suraj/Desktop/dhacks/bioacoustics-ai/android_app/app/src/main/java/fyi/acmc/trailkarma/sync/BiodiversityLocalInferenceWorker.kt)
-- [android_app/app/src/main/java/fyi/acmc/trailkarma/sync/BiodiversitySyncWorker.kt](/Users/suraj/Desktop/dhacks/bioacoustics-ai/android_app/app/src/main/java/fyi/acmc/trailkarma/sync/BiodiversitySyncWorker.kt)
-- [android_app/app/src/main/java/fyi/acmc/trailkarma/models/Models.kt](/Users/suraj/Desktop/dhacks/bioacoustics-ai/android_app/app/src/main/java/fyi/acmc/trailkarma/models/Models.kt)
-- [backend/app.py](/Users/suraj/Desktop/dhacks/bioacoustics-ai/backend/app.py)
-- [backend/README.md](/Users/suraj/Desktop/dhacks/bioacoustics-ai/backend/README.md)
-- [backend/training/export_android_model_pack.py](/Users/suraj/Desktop/dhacks/bioacoustics-ai/backend/training/export_android_model_pack.py)
+- automatic photo-based species identification rather than photo attachment only
+- a richer backend verification pipeline for biodiversity rewards and collectibles
+- full partner-facing biodiversity export and review workflows
+- stronger anti-abuse logic for determining when a biodiversity observation is rewardable
+- more field validation of the BLE relay path between multiple physical phones

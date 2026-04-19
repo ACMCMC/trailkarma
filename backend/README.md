@@ -1,147 +1,178 @@
-# TrailKarma Biodiversity Backend
+# Backend Services
 
-FastAPI service for the hackathon biodiversity audio feature.
+The `backend/` folder currently contains two separate services:
 
-## Endpoints
+- a TypeScript rewards / relay backend used by the Android app for Solana-backed flows
+- a Python FastAPI biodiversity backend used for audio and photo ingestion
 
-- `POST /api/biodiversity/audio`
-  - multipart fields: `audio`, `lat`, `lon`, `timestamp`, `observation_id`
-  - stores the clip locally
-  - runs acoustic inference first
-  - sends structured candidate JSON to a local post-processor model when configured
-  - returns final label, confidence wording, explanation, and model metadata
+They serve different purposes and can be run independently.
 
-- `POST /api/biodiversity/photo-link`
-  - multipart fields: `observation_id` plus either `photo` or `photo_uri`
-  - links a photo to the same event for later verification
+## 1. TypeScript Rewards And Voice-Relay Backend
 
-- `POST /api/biodiversity/audio-sync`
-  - multipart fields: raw `audio` plus local classification fields from the phone
-  - stores an already-classified on-device observation without re-running backend inference
+This service is the sponsor / attestor bridge between the Android app and the Anchor program in `solana/`.
 
-## Run locally
+### What It Does
+
+- registers app users on-chain
+- returns wallet state and reward activity
+- claims contribution rewards for hazard, water, and species trail reports
+- opens and fulfills relay jobs
+- prepares and submits signed KARMA tips
+- persists audit state in SQLite
+- optionally opens outbound voice relay calls through ElevenLabs/Twilio
+- stores relay replies for later delivery back through the mesh
+
+### Main Entrypoints
+
+- [src/server.ts](/Users/suraj/Desktop/dhacks/datahacks26/backend/src/server.ts)
+- [src/solana/client.ts](/Users/suraj/Desktop/dhacks/datahacks26/backend/src/solana/client.ts)
+- [src/voiceRelay.ts](/Users/suraj/Desktop/dhacks/datahacks26/backend/src/voiceRelay.ts)
+- [src/config.ts](/Users/suraj/Desktop/dhacks/datahacks26/backend/src/config.ts)
+- [src/db.ts](/Users/suraj/Desktop/dhacks/datahacks26/backend/src/db.ts)
+
+### Required Environment Variables
+
+- `PROGRAM_ID`
+- `SPONSOR_SECRET_KEY`
+- `ATTESTOR_SECRET_KEY`
+
+### Common Optional Environment Variables
+
+- `PORT`
+- `SOLANA_RPC_URL`
+- `ANCHOR_IDL_PATH`
+- `SQLITE_PATH`
+- `ELEVENLABS_API_KEY`
+- `ELEVENLABS_AGENT_ID`
+- `ELEVENLABS_PHONE_NUMBER_ID`
+- `TWILIO_ACCOUNT_SID`
+- `TWILIO_AUTH_TOKEN`
+- `TWILIO_PHONE_NUMBER`
+- `PUBLIC_BASE_URL`
+
+### Run Locally
 
 ```bash
-cd /path/to/bioacoustics-ai
+cd /Users/suraj/Desktop/dhacks/datahacks26/backend
+npm install
+npm run build
+npm run dev
+```
+
+The dev server listens on `PORT`, defaulting to `3000`.
+
+### API Surface
+
+- `GET /health`
+- `POST /v1/users/register`
+- `POST /v1/profile/upsert`
+- `GET /v1/profile/:appUserId`
+- `GET /v1/users/:appUserId/wallet`
+- `GET /v1/users/:appUserId/rewards/activity`
+- `POST /v1/contributions/claim`
+- `POST /v1/relay-jobs/open`
+- `POST /v1/relay-jobs/fulfill`
+- `GET /v1/relay-jobs/:jobIdHex`
+- `POST /v1/voice-relay/jobs/open`
+- `GET /v1/voice-relay/jobs/:appUserId`
+- `GET /v1/voice-relay/inbox/:appUserId`
+- `GET /v1/voice-relay/mesh/:appUserId`
+- `POST /v1/voice-relay/inbox/:replyId/ack`
+- `POST /v1/karma/tip/prepare`
+- `POST /v1/karma/tip/submit`
+
+### Current Notes
+
+- The service is wired to Solana Devnet by default.
+- Voice relay is functional only when the ElevenLabs/Twilio credentials are present.
+- The backend expects the Anchor IDL to exist at `solana/target/idl/trail_karma_rewards.json` unless overridden.
+- SQLite is used as a local operational store, not as the source of truth for hiking reports.
+
+## 2. Python Biodiversity Backend
+
+This service powers the biodiversity ingestion path. It can run full backend inference, or it can accept already-classified on-device observations from Android.
+
+### What It Does
+
+- receives audio clips and photo attachments
+- stores observation artifacts locally
+- runs acoustic inference through `AcousticPipeline`
+- optionally post-processes inference results with a local model
+- mirrors observations to Databricks when credentials are configured
+- accepts already-classified observations from Android via `/api/biodiversity/audio-sync`
+
+### Main Entrypoints
+
+- [app.py](/Users/suraj/Desktop/dhacks/datahacks26/backend/app.py)
+- [acoustic.py](/Users/suraj/Desktop/dhacks/datahacks26/backend/acoustic.py)
+- [postprocess.py](/Users/suraj/Desktop/dhacks/datahacks26/backend/postprocess.py)
+- [storage.py](/Users/suraj/Desktop/dhacks/datahacks26/backend/storage.py)
+- [databricks_mirror.py](/Users/suraj/Desktop/dhacks/datahacks26/backend/databricks_mirror.py)
+
+### Endpoints
+
+- `GET /health`
+- `POST /api/biodiversity/audio`
+- `POST /api/biodiversity/photo-link`
+- `POST /api/biodiversity/audio-sync`
+
+### Run Locally
+
+```bash
+cd /Users/suraj/Desktop/dhacks/datahacks26
 python -m venv .venv
 source .venv/bin/activate
 pip install -r backend/requirements.txt
 uvicorn backend.app:app --reload --port 3000
 ```
 
-## Run on Brev GPU
+### Optional Databricks Mirroring
 
-On the Brev instance, serve the trained open-world acoustic pipeline with:
+Set these if you want biodiversity observations mirrored into Databricks:
 
-```bash
-cd /home/ubuntu/bioacoustics-ai
-bash backend/training/run_brev_backend.sh
-```
+- `DATABRICKS_HOST`
+- `DATABRICKS_TOKEN`
+- `DATABRICKS_WAREHOUSE`
 
-From your laptop, forward the instance port so the Android emulator can reach it through `10.0.2.2`:
+If they are unset, the backend still works and simply skips mirroring.
 
-```bash
-brev port-forward trailkarma-bio -p 3000:3000
-```
+### Local LLM Post-Processor
 
-## Local LLM configuration
+The backend can optionally use a local post-processor model. The current code paths still work without it.
 
-Set these environment variables on the Brev instance to use the fine-tuned local model:
+Relevant environment variables:
 
-```bash
-export TRAILKARMA_LLM_BACKEND=local
-export TRAILKARMA_LLM_MODEL_ID=unsloth/Llama-3.2-1B-Instruct
-export TRAILKARMA_LLM_ADAPTER=/path/to/lora-adapter
-export TRAILKARMA_LLM_DEVICE=auto
-```
+- `TRAILKARMA_LLM_BACKEND`
+- `TRAILKARMA_LLM_MODEL_ID`
+- `TRAILKARMA_LLM_ADAPTER`
+- `TRAILKARMA_LLM_DEVICE`
 
-If they are missing, the backend falls back to deterministic wording over the acoustic candidates.
+If these are missing, the service falls back to deterministic wording.
 
-To synthesize a Brev-side training set from the acoustic artifact inventory and fine-tune a local adapter:
+## Training And Model-Pack Export
 
-```bash
-cd /home/ubuntu/bioacoustics-ai
-export HUGGINGFACE_HUB_TOKEN=...
-bash backend/training/finetune_local_llm_brev.sh
-```
+The `training/` folder contains the Brev-oriented scripts used to build and export the biodiversity model artifacts that end up in `android_app/app/src/main/assets/biodiversity/`.
 
-After training, point the backend at the adapter:
+Important scripts include:
 
-```bash
-export TRAILKARMA_LLM_BACKEND=local
-export TRAILKARMA_LLM_MODEL_ID=unsloth/Llama-3.2-1B-Instruct
-export TRAILKARMA_LLM_ADAPTER=/home/ubuntu/bioacoustics-ai/backend/artifacts/local_llm/adapter
-export TRAILKARMA_LLM_DEVICE=auto
-bash backend/training/run_brev_backend.sh
-```
+- `training/brev_bootstrap.sh`
+- `training/brev_instance_setup.sh`
+- `training/train_open_world_head.py`
+- `training/finetune_local_llm.py`
+- `training/export_android_model_pack.py`
+- `training/export_perch_checkpoint_to_tflite.py`
+- `training/export_android_explainer_pack.sh`
 
-## Brev / training workflow
+See [../docs/bioacoustics.md](../docs/bioacoustics.md) and [../android_app/LOCAL_BIODIVERSITY_MODEL_PACK.md](../android_app/LOCAL_BIODIVERSITY_MODEL_PACK.md) for the Android-side expectations.
 
-The `training/` folder contains the hackathon-side scripts:
+## Practical Local Setup
 
-1. `brev_bootstrap.sh` clones Perch-Hoplite, Perch, and the hackathon repo on a Brev GPU instance.
-2. `brev_instance_setup.sh` installs ffmpeg, Python envs, backend deps, LLM fine-tuning deps, and the TensorFlow CUDA extras needed for Perch GPU inference.
-3. `download_xeno_canto.py` pulls a small demo-oriented reference set from xeno-canto.
-4. `build_negative_manifest.py` converts curated background-noise folders into manifest rows.
-5. `prepare_reference_audio.py` normalizes reference audio to mono 16 kHz 5 second WAV windows.
-6. `source backend/training/brev_gpu_env.sh` before any TensorFlow/Perch embedding or inference command on Brev so TensorFlow can resolve the pip-installed CUDA libraries.
-7. Use the Perch-Hoplite embedding notebook or `embed_reference_audio.py` on those windows.
-8. `train_open_world_head.py` builds prototype-bank metadata and a logistic-regression head artifact set.
-9. `generate_impulse_jsonl.py` converts classifier outputs into JSONL conversations for local LLM fine-tuning.
-10. `finetune_local_llm.py` trains a LoRA adapter for the local post-processor model.
-11. `export_android_model_pack.py` packages the trained acoustic artifacts into the Android asset format and can attempt a TFLite export of the Perch encoder.
-12. `export_perch_checkpoint_to_tflite.py` is the fallback path when the published Perch SavedModel cannot be converted directly. It expects a real Perch classifier training workdir checkpoint plus the matching config module and re-exports with non-XLA `jax2tf`.
-13. `export_android_explainer_pack.sh` merges the local LoRA adapter and, if `llama.cpp` is present, converts it into a GGUF explainer pack for mobile experiments.
+If you are working on Android end-to-end, the most useful split is:
 
-Current trained artifact footprint on Brev:
+- run the TypeScript rewards backend on one port
+- run the Python biodiversity backend on another port
+- point:
+  - `api.baseUrl` at the biodiversity service
+  - `rewards.url` at the TypeScript service
 
-- `796` reference windows embedded with `perch_v2_gpu`
-- `169` learned classes in the linear head
-- `700` prototype-bank entries for retrieval
-
-## Android pack export
-
-After acoustic training finishes on Brev:
-
-```bash
-cd /home/ubuntu/bioacoustics-ai
-python backend/training/export_android_model_pack.py \
-  --artifact-dir backend/artifacts \
-  --output-dir android_app/app/src/main/assets/biodiversity
-```
-
-If the Perch graph needs unsupported TFLite ops, rerun with:
-
-```bash
-python backend/training/export_android_model_pack.py \
-  --artifact-dir backend/artifacts \
-  --output-dir android_app/app/src/main/assets/biodiversity \
-  --allow-select-tf-ops
-```
-
-If the published Perch SavedModel still fails because it contains `tf.XlaCallModule`, use a real Perch training checkpoint instead:
-
-```bash
-cd /home/ubuntu/bioacoustics-ai
-python backend/training/export_perch_checkpoint_to_tflite.py \
-  --perch-repo /home/ubuntu/perch \
-  --workdir /path/to/perch_workdir \
-  --config-module chirp.configs.baseline \
-  --output android_app/model_exports/perch_checkpoint_encoder.tflite
-```
-
-Notes:
-
-- This path requires the original Perch JAX checkpoint workdir, not just the published Kaggle SavedModel.
-- The exporter forces CPU, disables XLA in `jax2tf`, and leaves `jit_compile` off by default to avoid recreating an XLA-backed graph.
-- Once the `.tflite` file is produced, copy it into the Android biodiversity model pack as `perch_encoder.tflite`.
-
-To package the optional local explainer into GGUF, first train the local adapter and then:
-
-```bash
-cd /home/ubuntu/bioacoustics-ai
-export TRAILKARMA_LLM_MODEL_ID=unsloth/Llama-3.2-1B-Instruct
-export TRAILKARMA_LLM_ADAPTER_DIR=/home/ubuntu/bioacoustics-ai/backend/artifacts/local_llm/adapter
-export TRAILKARMA_LLAMA_CPP_DIR=$HOME/llama.cpp
-bash backend/training/export_android_explainer_pack.sh
-```
+For physical-device debugging, the provided scripts expect the backend to be reachable via `http://127.0.0.1:3000` through `adb reverse`, so adjust ports accordingly or run one service at a time during the loop.

@@ -2,6 +2,7 @@ package fyi.acmc.trailkarma.inference
 
 import android.content.Context
 import android.content.res.AssetManager
+import android.util.Log
 import android.util.Half
 import com.squareup.moshi.Json
 import com.squareup.moshi.Moshi
@@ -107,6 +108,10 @@ private data class LoadedModelBundle(
 )
 
 class LocalBiodiversityInferenceEngine(private val context: Context) {
+    companion object {
+        private const val TAG = "LocalBiodiversity"
+    }
+
     private val moshi = Moshi.Builder()
         .add(KotlinJsonAdapterFactory())
         .build()
@@ -136,16 +141,30 @@ class LocalBiodiversityInferenceEngine(private val context: Context) {
         val (sampleRate, signal) = WavReader.readMonoPcm16(audioFile)
         val features = extractFeatures(signal, sampleRate)
         val modelBundle = bundle
+        val modelFailureMessage = mutableListOf<String>()
         val payload = if (modelBundle != null) {
-            val embedding = embedAudio(signal, sampleRate, modelBundle)
-            buildStructuredPayloadFromBundle(modelBundle, embedding, features, observationId, lat, lon, timestamp)
+            runCatching {
+                val embedding = embedAudio(signal, sampleRate, modelBundle)
+                buildStructuredPayloadFromBundle(modelBundle, embedding, features, observationId, lat, lon, timestamp)
+            }.getOrElse { failure ->
+                val reason = failure.message ?: failure::class.java.simpleName
+                modelFailureMessage += reason
+                Log.w(TAG, "Falling back to heuristic biodiversity inference: $reason", failure)
+                heuristicPayload(features, observationId, lat, lon, timestamp)
+            }
         } else {
+            modelFailureMessage += "Bundled TFLite model pack unavailable."
             heuristicPayload(features, observationId, lat, lon, timestamp)
         }
 
         val decision = DeterministicDecisionPolicy.decide(payload)
+        val provider = if (modelBundle != null && modelFailureMessage.isEmpty()) {
+            "local_tflite_perch"
+        } else {
+            "heuristic_fallback"
+        }
         val modelMetadata = mutableMapOf<String, Any?>(
-            "provider" to if (modelBundle != null) "local_tflite_perch" else "heuristic_fallback",
+            "provider" to provider,
             "model_version" to modelBundle?.manifest?.modelVersion,
             "model_source" to modelBundle?.source,
             "sample_rate_hz" to (modelBundle?.manifest?.windowSampleRateHz ?: sampleRate),
@@ -153,6 +172,9 @@ class LocalBiodiversityInferenceEngine(private val context: Context) {
             "background_flags" to payload.backgroundFlags,
             "llm_provider" to "deterministic_only"
         )
+        if (modelFailureMessage.isNotEmpty()) {
+            modelMetadata["fallback_reason"] = modelFailureMessage.joinToString("; ")
+        }
         return LocalInferenceResult(
             topCandidates = payload.topCandidates,
             rawConfidence = payload.rawConfidence,
