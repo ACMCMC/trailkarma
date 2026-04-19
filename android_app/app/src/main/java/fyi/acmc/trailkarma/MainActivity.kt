@@ -114,8 +114,11 @@ class MainActivity : ComponentActivity() {
             true
         }
         if (blePermsGranted) {
-            Log.i("TrailKarma/Main", "BLE permissions already granted — starting BleService eagerly")
+            Log.i("TrailKarma/Main", "✓ BLE permissions already granted — calling BleService.start()")
             BleService.start(this)
+            Log.i("TrailKarma/Main", "✓ BleService.start() returned")
+        } else {
+            Log.w("TrailKarma/Main", "❌ BLE permissions NOT granted, skipping BleService start")
         }
         if (hasPermission(Manifest.permission.ACCESS_FINE_LOCATION)) {
             startService(Intent(this, LocationService::class.java))
