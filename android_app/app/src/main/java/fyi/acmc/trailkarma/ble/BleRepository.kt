@@ -151,13 +151,15 @@ class BleRepository(
                 val rawData  = result.scanRecord?.serviceData?.get(ParcelUuid(GATT_SERVICE_UUID))
 
                 Log.d(TAG, "onScanResult: address=$address rssi=$rssi hasServiceData=${rawData != null} serviceDataLen=${rawData?.size ?: 0}")
-                val updated = nearbyDevices.value + address
-                Log.d(TAG, "nearbyDevices.value updated: ${nearbyDevices.value.size} -> ${updated.size} devices")
-                nearbyDevices.value = updated
 
                 if (rawData != null && rawData.isNotEmpty()) {
                     val version = rawData[0]
                     val hikerId = if (rawData.size > 1) String(rawData.copyOfRange(1, rawData.size), Charsets.UTF_8) else "unknown"
+
+                    // Store hikerId (hiker name) not the MAC address
+                    val updated = nearbyDevices.value + hikerId
+                    Log.d(TAG, "nearbyDevices.value updated: ${nearbyDevices.value.size} -> ${updated.size} devices")
+                    nearbyDevices.value = updated
 
                     val msg = "📡 Hiker found: $hikerId @ $address (RSSI: $rssi dBm)"
                     log(msg); Log.i(TAG, msg)

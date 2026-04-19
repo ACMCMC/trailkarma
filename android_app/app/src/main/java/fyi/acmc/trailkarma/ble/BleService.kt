@@ -15,6 +15,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import fyi.acmc.trailkarma.ble.BleRepositoryHolder
 
 private const val TAG = "TrailKarma/BleService"
 
@@ -46,14 +47,15 @@ class BleService : Service() {
         serviceScope.launch {
             val db = AppDatabase.get(applicationContext)
             val userRepo = UserRepository(applicationContext, db.userDao())
-            val userId = userRepo.currentUserId.first() ?: "unknown"
-            Log.i(TAG, "BLE stack starting for userId=$userId")
+            val user = userRepo.ensureLocalUser()
+            val hikerName = user.displayName.ifBlank { user.userId }
+            Log.i(TAG, "BLE stack starting for hiker: $hikerName")
 
             bleRepo = BleRepositoryHolder.getInstance(applicationContext)
             gattServer = GattServer(applicationContext, db.trailReportDao(), db.relayPacketDao())
 
             gattServer.start()
-            bleRepo.startAdvertising(userId)
+            bleRepo.startAdvertising(hikerName)
             bleRepo.startScan()
 
             Log.i(TAG, "BLE stack fully started — advertising + scanning + GATT server running")

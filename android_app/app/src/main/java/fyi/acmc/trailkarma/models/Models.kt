@@ -71,7 +71,8 @@ data class TrailReport(
     val metadataHash: String? = null,
     val photoUri: String? = null,
     val audioUri: String? = null,
-    val highConfidenceBonus: Boolean = false
+    val highConfidenceBonus: Boolean = false,
+    val lastUpdatedAt: String? = null  // tracks when this record was last changed (locally or from cloud)
 )
 
 @Entity(tableName = "biodiversity_contributions")

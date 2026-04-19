@@ -73,6 +73,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import fyi.acmc.trailkarma.ble.BleRepository
+import fyi.acmc.trailkarma.ble.BleRepositoryHolder
 import fyi.acmc.trailkarma.db.AppDatabase
 import fyi.acmc.trailkarma.models.RelayInboxMessage
 import fyi.acmc.trailkarma.models.RelayJobIntent

@@ -110,7 +110,7 @@ class DatabricksSyncRepository(context: Context, private val db: AppDatabase) {
             // Android stores lat/lng; Databricks computes h3_cell during MERGE INTO.
             val selectSql = """
                 SELECT report_id, user_id, type, title, description, lat, lng,
-                       timestamp, species_name, confidence, source
+                       timestamp, species_name, confidence, source, updated_at
                 FROM workspace.trailkarma.trail_reports
                 ORDER BY timestamp DESC
                 LIMIT 500
@@ -132,11 +132,14 @@ class DatabricksSyncRepository(context: Context, private val db: AppDatabase) {
             }
 
             Log.d("DatabricksSync", "Pulling ${rows.size} reports from Databricks")
+            Log.d("DatabricksSync", "Local DB already has ${db.trailReportDao().getIds().size} reports")
 
             var pulledCount = 0
+            var updatedCount = 0
+            var skippedCount = 0
             for (row in rows) {
                 try {
-                    if (row.size < 11) continue
+                    if (row.size < 12) continue
 
                     val reportId     = row.getOrNull(0) as? String ?: continue
                     val userId       = row.getOrNull(1) as? String ?: continue
@@ -151,13 +154,37 @@ class DatabricksSyncRepository(context: Context, private val db: AppDatabase) {
                     val confidence   = row.getOrNull(9)?.toString()?.toFloatOrNull()
                     val sourceStr    = row.getOrNull(10)?.toString() ?: "self"
                     val source       = try { ReportSource.valueOf(sourceStr) } catch (e: Exception) { ReportSource.self }
+                    val cloudUpdatedAt = row.getOrNull(11)?.toString()
 
-                    // Skip if we already have this reportId — preserves local state (synced, rewards, verification)
-                    if (db.trailReportDao().exists(reportId) > 0) {
-                        Log.d("DatabricksSync", "⊘ Already have reportId=$reportId, skipping")
+                    val localReport = db.trailReportDao().getById(reportId)
+
+                    // If we have this report locally, check if cloud version is newer
+                    if (localReport != null) {
+                        if (cloudUpdatedAt != null && (localReport.lastUpdatedAt == null || cloudUpdatedAt > localReport.lastUpdatedAt)) {
+                            Log.d("DatabricksSync", "🔄 Updating reportId=$reportId (cloud is newer: $cloudUpdatedAt vs local: ${localReport.lastUpdatedAt})")
+                            // Update the report with cloud data, preserving local-only fields
+                            val updated = localReport.copy(
+                                title = title,
+                                description = description,
+                                lat = lat,
+                                lng = lng,
+                                timestamp = timestamp,
+                                speciesName = speciesName,
+                                confidence = confidence,
+                                source = source,
+                                synced = true,
+                                lastUpdatedAt = cloudUpdatedAt
+                            )
+                            db.trailReportDao().insert(updated)
+                            updatedCount++
+                        } else {
+                            Log.d("DatabricksSync", "⊘ Local version of $reportId is current, skipping")
+                            skippedCount++
+                        }
                         continue
                     }
 
+                    // New report from cloud
                     val report = TrailReport(
                         reportId    = reportId,
                         userId      = userId,
@@ -171,11 +198,12 @@ class DatabricksSyncRepository(context: Context, private val db: AppDatabase) {
                         speciesName = speciesName,
                         confidence  = confidence,
                         source      = source,
-                        synced      = true
+                        synced      = true,
+                        lastUpdatedAt = cloudUpdatedAt
                     )
 
                     db.trailReportDao().insert(report)
-                    Log.d("DatabricksSync", "✓ Synced: $title")
+                    Log.d("DatabricksSync", "✓ New report: $title")
                     pulledCount++
                 } catch (e: Exception) {
                     Log.w("DatabricksSync", "Failed to parse row", e)

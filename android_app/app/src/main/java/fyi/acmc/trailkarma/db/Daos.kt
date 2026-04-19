@@ -17,6 +17,9 @@ interface UserDao {
 
     @Query("UPDATE users SET solanaRegistered = :registered, lastWalletSyncAt = :timestamp, walletPublicKey = :walletPublicKey WHERE userId = :userId")
     suspend fun updateWalletRegistration(userId: String, walletPublicKey: String, registered: Boolean, timestamp: String)
+
+    @Query("UPDATE users SET displayName = :displayName WHERE userId = :userId")
+    suspend fun updateDisplayName(userId: String, displayName: String)
 }
 
 @Dao
