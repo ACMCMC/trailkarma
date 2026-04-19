@@ -9,12 +9,25 @@ import fyi.acmc.trailkarma.models.User
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import java.util.UUID
 
 private val Context.dataStore by preferencesDataStore("user_prefs")
 private val KEY_USER_ID = stringPreferencesKey("user_id")
 
 class UserRepository(private val context: Context, private val dao: UserDao) {
     val currentUserId: Flow<String?> = context.dataStore.data.map { it[KEY_USER_ID] }
+
+    suspend fun ensureLocalUser(): User {
+        currentUser()?.let { return it }
+
+        val userId = UUID.randomUUID().toString()
+        val user = User(
+            userId = userId,
+            displayName = "Trail Hiker ${userId.take(4).uppercase()}",
+        )
+        saveUser(user)
+        return user
+    }
 
     suspend fun saveUser(user: User) {
         dao.insert(user)

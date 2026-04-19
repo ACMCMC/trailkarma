@@ -82,8 +82,8 @@ class MainActivity : ComponentActivity() {
                 LaunchedEffect(Unit) {
                     val db = AppDatabase.get(applicationContext)
                     val repo = UserRepository(applicationContext, db.userDao())
-                    val userId = repo.currentUserId.first()
-                    startDest = if (userId != null) Routes.MAP else Routes.LOGIN
+                    repo.ensureLocalUser()
+                    startDest = Routes.MAP
                 }
 
                 startDest?.let {

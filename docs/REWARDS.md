@@ -490,11 +490,33 @@ This is a strong MVP, not the final production design.
 Current limitations:
 
 - contribution verification is backend-trusted, not externally attested
-- relay fulfillment currently uses a mock proof string, not a real carrier/provider delivery receipt
-- there is no hosted backend URL yet for physical phone testing
-- map wallet state refreshes after local state changes, but there is no push channel or background polling strategy yet
-- the Android app still has a simplified relay demo flow rather than full encrypted traveler messaging UX
-- the Android app does not yet have a full collectibles gallery, wallet history screen, or in-app tipping UI
+- there is no deployed backend URL yet for off-emulator / physical-phone testing
+- we still need physical multi-phone BLE testing for the real carrier flow, reply redistribution path, and live connectivity transitions
+- foreground UX feedback is now in place, but background notification behavior for relay completion and inbox replies still needs real-device validation
+- map wallet state refreshes after local state changes, but there is still no long-lived push channel or continuous background polling strategy
+- relay messaging is still a hackathon-friendly guided flow rather than a full encrypted traveler messaging product
+
+## Remaining Validation
+
+The remaining work is mostly validation and deployment, not missing Solana architecture.
+
+Still to verify end-to-end:
+
+- physical Android-to-Android BLE carry on the trail flow
+- creating a relay while offline on phone A, carrying it over BLE to phone B, and having phone B open and fulfill it once phone B regains service
+- immediate send behavior when the sender already has internet
+- recipient reply capture and redistribution back through the mesh on physical devices
+- background / resumed-app user feedback for relay completion, badge unlocks, and inbox delivery
+
+Still to set up:
+
+- a backend deployment or otherwise stable LAN-accessible backend URL for real phones outside the emulator loopback path
+
+Nice-to-have follow-up polish after hackathon-critical testing:
+
+- richer collectibles gallery progression and collectible-detail presentation
+- optional dedicated wallet / transaction history screen beyond the rewards activity feed
+- stronger background sync / notification strategy for long-running relay jobs
 
 ## Planned Relay Upgrade
 

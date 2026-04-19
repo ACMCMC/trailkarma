@@ -56,6 +56,7 @@ fun MapScreen(
     val userLocation by vm.userLocation.collectAsState(initial = null)
     val trails by vm.trails.collectAsState(initial = emptyList())
     val walletState by vm.walletState.collectAsState()
+    val isOnline by vm.isOnline.collectAsState(initial = false)
 
     var mapView: MapView? by remember { mutableStateOf(null) }
     var currentMapStyle by remember { mutableStateOf(TileSourceFactory.MAPNIK) }
@@ -79,6 +80,8 @@ fun MapScreen(
     }
 
     val displayReports = reports
+    val offlineReportCount = reports.count { !it.synced }
+    val pendingRewardCount = reports.count { !it.rewardClaimed && it.verificationStatus != "rejected" }
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
@@ -327,23 +330,48 @@ fun MapScreen(
                     style = MaterialTheme.typography.labelSmall,
                     fontSize = 10.sp
                 )
+                Text(
+                    if (isOnline) "Online now" else "Offline safe mode",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontSize = 10.sp,
+                    color = if (isOnline) Color(0xFF1B5E20) else Color(0xFF8D6E63)
+                )
+                if (offlineReportCount > 0 || pendingRewardCount > 0) {
+                    Text(
+                        buildString {
+                            if (offlineReportCount > 0) append("$offlineReportCount local")
+                            if (offlineReportCount > 0 && pendingRewardCount > 0) append(" • ")
+                            if (pendingRewardCount > 0) append("$pendingRewardCount reward pending")
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        fontSize = 10.sp
+                    )
+                }
             }
         }
 
-        walletState?.let { state ->
-            Card(
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(WindowInsets.systemBars.asPaddingValues())
-                    .padding(start = 56.dp, top = 100.dp)
-                    .clickable(onClick = onNavigateToRewards),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-            ) {
-                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("REWARDS", style = MaterialTheme.typography.labelSmall, fontSize = 10.sp)
-                    Text(state.karmaBalance, style = MaterialTheme.typography.titleMedium)
+        Card(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(WindowInsets.systemBars.asPaddingValues())
+                .padding(start = 56.dp, top = 100.dp)
+                .clickable(onClick = onNavigateToRewards),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+        ) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("REWARDS", style = MaterialTheme.typography.labelSmall, fontSize = 10.sp)
+                if (walletState != null) {
+                    Text(walletState!!.karmaBalance, style = MaterialTheme.typography.titleMedium)
                     Text(
-                        if (state.badges.isEmpty()) "Tap to open collectibles" else state.badges.joinToString(" • "),
+                        if (walletState!!.badges.isEmpty()) "Tap to open collectibles" else walletState!!.badges.joinToString(" • "),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontSize = 9.sp,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                } else {
+                    Text("Wallet syncing", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        if (isOnline) "Registering rewards state now" else "Will register when service returns",
                         style = MaterialTheme.typography.labelSmall,
                         fontSize = 9.sp,
                         color = MaterialTheme.colorScheme.onPrimaryContainer

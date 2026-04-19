@@ -38,7 +38,7 @@ class RewardsRepository(context: Context, private val db: AppDatabase) {
 
     suspend fun syncCurrentUserRegistration(): WalletStateResponse? {
         if (!networkUtil.isOnlineNow()) return null
-        val current = currentUser() ?: return null
+        val current = currentUser() ?: userRepository.ensureLocalUser()
         val user = ensureLocalWallet(current)
         api.upsertProfile(
             UpsertProfileRequest(
@@ -65,7 +65,7 @@ class RewardsRepository(context: Context, private val db: AppDatabase) {
 
     suspend fun fetchWalletState(): WalletStateResponse? {
         if (!networkUtil.isOnlineNow()) return null
-        val user = currentUser() ?: return null
+        val user = currentUser() ?: userRepository.ensureLocalUser()
         if (user.walletPublicKey.isBlank()) return syncCurrentUserRegistration()
         val response = api.getWallet(user.userId)
         return if (response.isSuccessful) response.body() else null
@@ -73,7 +73,7 @@ class RewardsRepository(context: Context, private val db: AppDatabase) {
 
     suspend fun fetchRewardsActivity(): List<RewardActivityItemResponse> {
         if (!networkUtil.isOnlineNow()) return emptyList()
-        val user = currentUser() ?: return emptyList()
+        val user = currentUser() ?: userRepository.ensureLocalUser()
         val response = api.getRewardsActivity(user.userId)
         return if (response.isSuccessful) {
             response.body()?.items.orEmpty()
@@ -83,7 +83,7 @@ class RewardsRepository(context: Context, private val db: AppDatabase) {
     }
 
     suspend fun fetchTrustedContacts(): List<TrustedContact> {
-        val user = currentUser() ?: return emptyList()
+        val user = currentUser() ?: userRepository.ensureLocalUser()
         return db.trustedContactDao().getForUser(user.userId).first()
     }
 
@@ -122,7 +122,7 @@ class RewardsRepository(context: Context, private val db: AppDatabase) {
     }
 
     suspend fun createRelayIntent(destinationLabel: String, payloadReference: String): RelayJobIntent? {
-        val baseUser = currentUser() ?: return null
+        val baseUser = currentUser() ?: userRepository.ensureLocalUser()
         val user = ensureLocalWallet(baseUser)
         val jobId = CryptoUtil.sha256Hex("${user.userId}:${UUID.randomUUID()}:${System.currentTimeMillis()}")
         val destinationHash = CryptoUtil.sha256Hex(destinationLabel)
@@ -165,7 +165,7 @@ class RewardsRepository(context: Context, private val db: AppDatabase) {
         shareRealName: Boolean,
         shareCallbackNumber: Boolean
     ): RelayJobIntent? {
-        val baseUser = currentUser() ?: return null
+        val baseUser = currentUser() ?: userRepository.ensureLocalUser()
         val user = ensureLocalWallet(baseUser)
         val jobId = CryptoUtil.sha256Hex("${user.userId}:${UUID.randomUUID()}:${System.currentTimeMillis()}")
         val destinationHash = CryptoUtil.sha256Hex(recipientPhoneNumber)
@@ -304,11 +304,33 @@ class RewardsRepository(context: Context, private val db: AppDatabase) {
         }
     }
 
-    suspend fun syncRelayInbox() {
-        if (!networkUtil.isOnlineNow()) return
-        val user = currentUser() ?: return
+    suspend fun refreshVoiceRelayJobs(): List<VoiceRelayJobResponse> {
+        if (!networkUtil.isOnlineNow()) return emptyList()
+        val user = currentUser() ?: userRepository.ensureLocalUser()
+        val response = api.getVoiceRelayJobs(user.userId)
+        if (!response.isSuccessful) return emptyList()
+        val items = response.body()?.items.orEmpty()
+        for (item in items) {
+            db.relayJobIntentDao().updateVoiceRelayStatus(
+                jobId = item.jobId,
+                status = item.status,
+                openedTxSignature = item.openedTxSignature,
+                fulfilledTxSignature = item.fulfilledTxSignature,
+                callSid = item.callSid,
+                conversationId = item.conversationId,
+                transcriptSummary = item.transcriptSummary,
+                replyJobId = item.replyJobId
+            )
+        }
+        return items
+    }
+
+    suspend fun syncRelayInbox(): Int {
+        if (!networkUtil.isOnlineNow()) return 0
+        val user = currentUser() ?: userRepository.ensureLocalUser()
+        val previousIds = db.relayInboxMessageDao().getForUser(user.userId).first().map { it.replyId }.toSet()
         val response = api.getRelayInbox(user.userId)
-        if (!response.isSuccessful) return
+        if (!response.isSuccessful) return 0
         val items = response.body()?.items.orEmpty()
         db.relayInboxMessageDao().insertAll(
             items.map {
@@ -326,11 +348,18 @@ class RewardsRepository(context: Context, private val db: AppDatabase) {
                 )
             }
         )
+        items.forEach {
+            if (it.status != "delivered") {
+                api.acknowledgeRelayInbox(it.replyId)
+                db.relayInboxMessageDao().markAcknowledged(it.replyId)
+            }
+        }
+        return items.count { it.replyId !in previousIds }
     }
 
     suspend fun syncMeshRelayReplies() {
         if (!networkUtil.isOnlineNow()) return
-        val carrier = currentUser() ?: return
+        val carrier = currentUser() ?: userRepository.ensureLocalUser()
         val response = api.getMeshRelayReplies(carrier.userId)
         if (!response.isSuccessful) return
         val now = Instant.now().toString()
@@ -362,7 +391,7 @@ class RewardsRepository(context: Context, private val db: AppDatabase) {
 
     suspend fun fulfillRelayJob(jobId: String, proofRef: String): Boolean {
         if (!networkUtil.isOnlineNow()) return false
-        val user = currentUser() ?: return false
+        val user = currentUser() ?: userRepository.ensureLocalUser()
         val response = api.fulfillRelayJob(
             FulfillRelayJobRequest(
                 appUserId = user.userId,
@@ -377,14 +406,14 @@ class RewardsRepository(context: Context, private val db: AppDatabase) {
     }
 
     suspend fun prepareTip(recipientWallet: String, amount: Int): PrepareTipResponse? {
-        val user = currentUser() ?: return null
+        val user = currentUser() ?: userRepository.ensureLocalUser()
         if (!networkUtil.isOnlineNow()) return null
         val response = api.prepareTip(PrepareTipRequest(user.userId, recipientWallet, amount))
         return if (response.isSuccessful) response.body() else null
     }
 
     suspend fun submitTip(prepared: PrepareTipResponse): Boolean {
-        val user = currentUser() ?: return false
+        val user = currentUser() ?: userRepository.ensureLocalUser()
         val signature = walletManager.sign(
             user.userId,
             Base64.decode(prepared.signedMessageBase64, Base64.NO_WRAP)

@@ -32,6 +32,7 @@ class MapViewModel(app: Application) : AndroidViewModel(app) {
     val userLocation: Flow<LocationUpdate?> = db.locationUpdateDao().getLatest()
     val trails: Flow<List<Trail>> = db.trailDao().getAll()
     val walletState = MutableStateFlow<WalletStateResponse?>(null)
+    val isOnline = NetworkUtil(app).isOnline
 
     init {
         viewModelScope.launch {

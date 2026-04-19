@@ -1,222 +1,251 @@
 package fyi.acmc.trailkarma.ui.report
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.Route
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuAnchorType
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import fyi.acmc.trailkarma.models.ReportType
+import fyi.acmc.trailkarma.ui.design.TrailHeroCard
+import fyi.acmc.trailkarma.ui.design.TrailInfoChip
+import fyi.acmc.trailkarma.ui.design.TrailKarmaAppTheme
+import fyi.acmc.trailkarma.ui.design.TrailSectionCard
+import fyi.acmc.trailkarma.ui.feedback.TrailOperationCard
+import fyi.acmc.trailkarma.ui.rewards.RewardsPalette
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CreateReportScreen(onReportSaved: () -> Unit, vm: CreateReportViewModel = viewModel()) {
+fun CreateReportScreen(
+    onReportSaved: () -> Unit,
+    vm: CreateReportViewModel = viewModel()
+) {
     var type by remember { mutableStateOf(ReportType.hazard) }
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var speciesName by remember { mutableStateOf("") }
     var typeExpanded by remember { mutableStateOf(false) }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Add Report", fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = onReportSaved) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    titleContentColor = Color.White,
-                    navigationIconContentColor = Color.White
-                )
-            )
+    val saving by vm.saving.collectAsState()
+    val operation by vm.operation.collectAsState()
+    val saveCompleted by vm.saveCompleted.collectAsState()
+
+    LaunchedEffect(saveCompleted) {
+        if (saveCompleted) {
+            vm.consumeSaveCompleted()
+            onReportSaved()
         }
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            // Type Selection Section
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-            ) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(
-                        "What are you reporting?",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    ExposedDropdownMenuBox(expanded = typeExpanded, onExpandedChange = { typeExpanded = it }) {
-                        OutlinedTextField(
-                            value = type.name.replaceFirstChar { it.uppercase() },
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text("Report Type") },
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(typeExpanded) },
-                            modifier = Modifier
-                                .menuAnchor(MenuAnchorType.PrimaryNotEditable)
-                                .fillMaxWidth()
+    }
+
+    TrailKarmaAppTheme {
+        Scaffold(
+            containerColor = MaterialTheme.colorScheme.background,
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Column {
+                            Text("Field report")
+                            Text(
+                                "Save first, sync later, and let verified reports earn KARMA.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onReportSaved) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        }
+                    }
+                )
+            }
+        ) { padding ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(Color(0xFFF8FBF7), MaterialTheme.colorScheme.background)
                         )
-                        ExposedDropdownMenu(expanded = typeExpanded, onDismissRequest = { typeExpanded = false }) {
-                            ReportType.entries.forEach { t ->
-                                DropdownMenuItem(
-                                    text = { Text(t.name.replaceFirstChar { it.uppercase() }) },
-                                    onClick = { type = t; typeExpanded = false }
+                    )
+                    .padding(padding)
+            ) {
+                LazyColumn(
+                    contentPadding = PaddingValues(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    item {
+                        TrailHeroCard(
+                            title = "Log what the next hiker should know",
+                            subtitle = "Hazards, water, and species notes are always saved on this phone first, then synced and rewarded when the network path is available.",
+                            accent = when (type) {
+                                ReportType.hazard -> RewardsPalette.Clay
+                                ReportType.water -> RewardsPalette.Sky
+                                ReportType.species -> RewardsPalette.Moss
+                            },
+                            supporting = {
+                                TrailInfoChip(
+                                    icon = Icons.Default.Route,
+                                    label = when (type) {
+                                        ReportType.hazard -> "Hazards earn 10 KARMA"
+                                        ReportType.water -> "Water reports earn 10 KARMA"
+                                        ReportType.species -> "Species reports earn 8-13 KARMA"
+                                    },
+                                    accent = RewardsPalette.Gold
                                 )
+                            }
+                        )
+                    }
+
+                    operation?.let { state ->
+                        item {
+                            TrailOperationCard(state = state)
+                        }
+                    }
+
+                    item {
+                        TrailSectionCard(title = "Report type", accent = RewardsPalette.Sand) {
+                            ExposedDropdownMenuBox(
+                                expanded = typeExpanded,
+                                onExpandedChange = { typeExpanded = it }
+                            ) {
+                                OutlinedTextField(
+                                    value = type.name.replaceFirstChar { it.uppercase() },
+                                    onValueChange = {},
+                                    readOnly = true,
+                                    label = { Text("Category") },
+                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = typeExpanded) },
+                                    modifier = Modifier
+                                        .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                                        .fillMaxWidth()
+                                )
+                                ExposedDropdownMenu(
+                                    expanded = typeExpanded,
+                                    onDismissRequest = { typeExpanded = false }
+                                ) {
+                                    ReportType.entries.forEach { option ->
+                                        DropdownMenuItem(
+                                            text = { Text(option.name.replaceFirstChar { it.uppercase() }) },
+                                            onClick = {
+                                                type = option
+                                                typeExpanded = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    item {
+                        TrailSectionCard(title = "Details", accent = RewardsPalette.Forest) {
+                            OutlinedTextField(
+                                value = title,
+                                onValueChange = { title = it },
+                                label = { Text("Title") },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true
+                            )
+                            OutlinedTextField(
+                                value = description,
+                                onValueChange = { description = it },
+                                label = { Text("Description") },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(150.dp)
+                            )
+                            if (type == ReportType.species) {
+                                OutlinedTextField(
+                                    value = speciesName,
+                                    onValueChange = { speciesName = it },
+                                    label = { Text("Species name") },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    singleLine = true
+                                )
+                            }
+                        }
+                    }
+
+                    item {
+                        TrailSectionCard(title = "What happens next", accent = RewardsPalette.Gold) {
+                            TrailInfoChip(
+                                icon = Icons.Default.Info,
+                                label = "Saved offline immediately",
+                                accent = RewardsPalette.Forest
+                            )
+                            TrailInfoChip(
+                                icon = Icons.Default.Info,
+                                label = "Synced when service is available",
+                                accent = RewardsPalette.Sky
+                            )
+                            TrailInfoChip(
+                                icon = Icons.Default.Info,
+                                label = "Verified reports mint KARMA on Solana",
+                                accent = RewardsPalette.Gold
+                            )
+                        }
+                    }
+
+                    item {
+                        Button(
+                            onClick = {
+                                if (title.isNotBlank()) {
+                                    vm.save(type, title, description, speciesName.takeIf { it.isNotBlank() })
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(54.dp),
+                            enabled = !saving && title.isNotBlank()
+                        ) {
+                            if (saving) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.height(18.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.onPrimary
+                                )
+                            } else {
+                                Text("Save report")
                             }
                         }
                     }
                 }
             }
-
-            // Details Section
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-            ) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(
-                        "Details",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    OutlinedTextField(
-                        value = title,
-                        onValueChange = { title = it },
-                        label = { Text("Title (required)") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors()
-                    )
-                    OutlinedTextField(
-                        value = description,
-                        onValueChange = { description = it },
-                        label = { Text("Description") },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 100.dp),
-                        minLines = 4,
-                        colors = OutlinedTextFieldDefaults.colors()
-                    )
-                }
-            }
-
-            // Species Section (if type == species)
-            if (type == ReportType.species) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                ) {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text(
-                            "Species Information",
-                            style = MaterialTheme.typography.labelLarge,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        OutlinedTextField(
-                            value = speciesName,
-                            onValueChange = { speciesName = it },
-                            label = { Text("Species Name (optional)") },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            colors = OutlinedTextFieldDefaults.colors()
-                        )
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(
-                                    Color(0xFF007ACC).copy(alpha = 0.1f),
-                                    RoundedCornerShape(8.dp)
-                                )
-                                .padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(Icons.Default.Info, contentDescription = null, tint = Color(0xFF007ACC), modifier = Modifier.size(20.dp))
-                            Text("Describe distinguishing features to help others identify this species", fontSize = 10.sp)
-                        }
-                    }
-                }
-            }
-
-            // Location Info
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-            ) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        "Location",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(
-                                MaterialTheme.colorScheme.tertiary.copy(alpha = 0.1f),
-                                RoundedCornerShape(8.dp)
-                            )
-                            .padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(20.dp))
-                        Text("Your current location will be saved with this report", fontSize = 10.sp, style = MaterialTheme.typography.labelSmall)
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(8.dp))
-
-            // Save Button
-            Button(
-                onClick = {
-                    if (title.isNotBlank()) {
-                        vm.save(type, title, description, speciesName.takeIf { it.isNotBlank() })
-                        onReportSaved()
-                    }
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                shape = RoundedCornerShape(8.dp)
-            ) {
-                Text("Save Report Offline", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-            }
-
-            Spacer(Modifier.height(16.dp))
         }
     }
 }
