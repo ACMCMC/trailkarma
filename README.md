@@ -52,6 +52,18 @@ TrailKarma is intentionally hybrid:
 - `scripts/`
   Android emulator, install, smoke-test, and physical-device helper scripts.
 
+## On-Device Audio ML
+
+The motivation for the audio ML stack is simple: hikers often capture biodiversity signals where there is no service, so species detection has to work on the edge rather than depend on a cloud round-trip. That also lets us pair the acoustic detection with local location data immediately, preserve the offline-first experience, and later contribute useful biodiversity records to the broader research community.
+
+The current implementation records a 5-second audio clip on Android, stores it locally in Room, and runs inference on-device through a bundled biodiversity model pack. The phone uses a TensorFlow Lite Perch encoder to generate an embedding, then applies a lightweight trained classifier head and prototype-retrieval bank locally to score likely species. A deterministic decision layer converts the top candidates into the final label, confidence band, explanation, and reward-safety flag. If the full pack is unavailable, the app falls back to a lightweight heuristic path so capture still works. The result is stored locally first and then synced later through the biodiversity backend and Databricks pipeline once connectivity returns.
+
+## Solana Rewards System
+
+The motivation for the Solana layer is not to put hiking on-chain. It is to make rewards, uniqueness, and ownership trustworthy while keeping the product usable for non-crypto-native hikers in offline environments. We use Solana where it is genuinely strong: preventing duplicate reward claims, settling relay jobs exactly once, minting KARMA, and giving users real ownership of badges and collectibles.
+
+The current implementation uses a custom Anchor program on Solana Devnet with PDA-backed state for user profiles, contribution receipts, relay jobs, badge claims, and tip receipts. The Android app creates an app-managed wallet locally, signs payloads on-device, and keeps normal hiking workflows offline-first. The backend acts as the sponsor and attestor: it verifies contribution or relay inputs, submits the Devnet transactions, and pays the fees so users never need SOL. In practice, real-world events stay off-chain, while Solana records who earned KARMA, which badge was claimed, whether a relay job is still open, and whether a contribution was already rewarded.
+
 ## Implemented Android Features
 
 - Local user profile with trail name, callback number, relay defaults, and trusted contacts.
