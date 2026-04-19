@@ -112,6 +112,7 @@ dependencies {
     implementation(libs.retrofit.converter.moshi)
     implementation(libs.okhttp.logging)
     implementation(libs.moshi.kotlin)
+    ksp(libs.moshi.kotlin.codegen)
     implementation(libs.androidx.security.crypto)
 
     // Coroutines
