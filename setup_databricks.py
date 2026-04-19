@@ -16,18 +16,22 @@ SPECIES_CSV = os.path.join(os.path.dirname(__file__), "data", "observations-7121
 
 SOCAL_LAT_MIN, SOCAL_LAT_MAX = 32.0, 35.0
 SOCAL_LNG_MIN, SOCAL_LNG_MAX = -118.0, -116.0
-INAT_SYSTEM_USER_ID = "inat-system-001"
+
 
 
 def _haversine_miles(coords):
     """Approximate total length of a LineString in miles."""
     total = 0.0
     for i in range(len(coords) - 1):
+        # Extract consecutive coordinate pairs
         lng1, lat1 = coords[i][0], coords[i][1]
         lng2, lat2 = coords[i+1][0], coords[i+1][1]
+        # Convert differences to radians
         dlat = math.radians(lat2 - lat1)
         dlng = math.radians(lng2 - lng1)
+        # Haversine formula: compute distance between two points
         a = math.sin(dlat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlng/2)**2
+        # Add distance in miles (Earth's radius ≈ 3958.8 miles)
         total += 3958.8 * 2 * math.asin(math.sqrt(a))
     return round(total, 2)
 
@@ -108,9 +112,10 @@ def load_species_report_statements(full_schema):
                 image_url = (row.get("image_url") or "").replace("'", "\\'")
                 species_name = (row.get("scientific_name") or "").replace("'", "\\'")
 
+                user_id = row.get("user_id", "unknown")
                 statements.append(
                     f"INSERT INTO {full_schema}.trail_reports VALUES ("
-                    f"'{report_id}', '{INAT_SYSTEM_USER_ID}', 'species', "
+                    f"'{report_id}', '{user_id}', 'species', "
                     f"'{title}', '{desc}', {lat}, {lng}, '{ts}', "
                     f"'{image_url}', '{species_name}', NULL, 'self', 0, true, "
                     f"current_timestamp(), current_timestamp())"
@@ -160,7 +165,6 @@ def main():
         (str(uuid.uuid4()), 'Qianqian', 'C9fe...2b', 320, pct_trail_id),
         (str(uuid.uuid4()), 'Suraj', 'A1bc...3c', 50, pct_trail_id),
         (str(uuid.uuid4()), 'Edith', 'D4de...4d', 420, pct_trail_id),
-        (INAT_SYSTEM_USER_ID, 'iNaturalist', None, 0, None),
     ]
 
     base_lat, base_lng = 32.88, -117.24
@@ -305,9 +309,7 @@ def main():
     sql_statements.append(f"INSERT INTO {full_schema}.trail_waypoints VALUES ('{str(uuid.uuid4())}', '{pct_trail_id}', 'Southern Terminus', 'trailhead', 32.5896, -116.4669, 'The official start of the PCT at the US-Mexico border.', current_timestamp(), current_timestamp())")
     
     for user_id, name, wallet, karma, trail_id in users:
-        wallet_val = f"'{wallet}'" if wallet else "NULL"
-        trail_val = f"'{trail_id}'" if trail_id else "NULL"
-        sql_statements.append(f"INSERT INTO {full_schema}.users VALUES ('{user_id}', '{name}', {wallet_val}, {karma}, NULL, {trail_val}, current_timestamp(), current_timestamp())")
+        sql_statements.append(f"INSERT INTO {full_schema}.users VALUES ('{user_id}', '{name}', '{wallet}', {karma}, NULL, '{trail_id}', current_timestamp(), current_timestamp())")
 
     for i, (rid, rtype, title, desc, lat, lng, source, species, conf) in enumerate(reports):
         user_id = users[i % len(users)][0]
