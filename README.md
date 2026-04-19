@@ -12,6 +12,7 @@ The current hackathon build implements the following end-to-end pieces:
 - BLE packet exchange for reports and relay packets so nearby phones can carry data without internet.
 - Hybrid Solana rewards flow with app-managed wallets, KARMA balances, badge claims, relay jobs, and KARMA tipping.
 - Voice relay jobs that are signed on-device, carried offline, then opened and fulfilled through the backend when connectivity returns.
+- End-to-Oracle Privacy: All relay payloads are ECIES-encrypted at the source so that intermediate mesh carriers cannot read the messages.
 - Offline biodiversity audio capture with on-device inference, optional photo attachment, local ledgering, and backend mirroring.
 - Android smoke-test scripts for emulator and physical-device loops.
 - A React/Vite landing-page demo that shows the product concept with mock data.
@@ -201,6 +202,7 @@ SESSION_NAME=my-session scripts/android-physical-debug-loop.sh
 - [backend/README.md](backend/README.md): TypeScript rewards backend and Python biodiversity backend
 - [docs/REWARDS.md](docs/REWARDS.md): hybrid Solana rewards architecture and current API surface
 - [docs/bioacoustics.md](docs/bioacoustics.md): biodiversity feature status, model-pack flow, and current limitations
+- [docs/RELAY_PRIVACY.md](docs/RELAY_PRIVACY.md): mesh relay privacy and non-interactive key exchange (NIKE) architecture
 - [android_app/LOCAL_BIODIVERSITY_MODEL_PACK.md](android_app/LOCAL_BIODIVERSITY_MODEL_PACK.md): on-device model-pack layout
 - [web/README.md](web/README.md): web demo status and scope
 

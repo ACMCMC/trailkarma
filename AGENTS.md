@@ -20,6 +20,7 @@ Contributors should preserve these constraints:
 - treat backend attestations as the bridge from real-world events to on-chain settlement
 - treat the current ElevenLabs voice relay as the preferred delayed-message transport instead of SMS
 - keep voice delivery hybrid: offline intent locally, carrier sync over BLE, outbound call/reply capture in the backend, settlement on-chain
+- enforce End-to-Oracle Privacy: sensitive relay payloads (recipient, message) must be ECIES-encrypted on-device for the backend; carriers should remain "blind" and anonymous
 
 ## Android Agent Loop
 
