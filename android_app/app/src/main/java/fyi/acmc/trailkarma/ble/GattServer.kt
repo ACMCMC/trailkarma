@@ -36,9 +36,18 @@ class GattServer(
     private val reportDao: TrailReportDao,
     private val relayPacketDao: RelayPacketDao
 ) {
+    private data class PendingNotification(
+        val device: BluetoothDevice,
+        val characteristicUuid: UUID,
+        val frame: ByteArray
+    )
+
     private val scope = CoroutineScope(Dispatchers.IO)
     private val btManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
     private var gattServer: BluetoothGattServer? = null
+    private val notificationLock = Any()
+    private val pendingNotifications = ArrayDeque<PendingNotification>()
+    private var notificationInFlight: PendingNotification? = null
 
     private val reportCache = mutableMapOf<String, String>()
     private val packetCache = mutableMapOf<String, String>()
@@ -50,6 +59,10 @@ class GattServer(
     }
 
     fun stop() {
+        synchronized(notificationLock) {
+            pendingNotifications.clear()
+            notificationInFlight = null
+        }
         gattServer?.close()
         gattServer = null
         Log.d(TAG, "GATT server stopped")
@@ -97,6 +110,15 @@ class GattServer(
         override fun onConnectionStateChange(device: BluetoothDevice, status: Int, newState: Int) {
             val state = if (newState == BluetoothProfile.STATE_CONNECTED) "CONNECTED" else "DISCONNECTED"
             Log.d(TAG, "Peer $state: ${device.address}")
+            if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                synchronized(notificationLock) {
+                    pendingNotifications.removeAll { it.device.address == device.address }
+                    if (notificationInFlight?.device?.address == device.address) {
+                        notificationInFlight = null
+                    }
+                }
+                drainNotificationQueue()
+            }
         }
 
         override fun onCharacteristicReadRequest(
@@ -164,6 +186,18 @@ class GattServer(
                 gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null)
             }
         }
+
+        override fun onNotificationSent(device: BluetoothDevice, status: Int) {
+            if (status != BluetoothGatt.GATT_SUCCESS) {
+                Log.w(TAG, "Notification failed for ${device.address} with status=$status")
+            }
+            synchronized(notificationLock) {
+                if (notificationInFlight?.device?.address == device.address) {
+                    notificationInFlight = null
+                }
+            }
+            drainNotificationQueue()
+        }
     }
 
     private suspend fun buildReportJson(reportId: String): String? {
@@ -206,26 +240,67 @@ class GattServer(
     }
 
     private fun notifyJson(device: BluetoothDevice, characteristicUuid: UUID, json: String) {
-        val characteristic = gattServer?.getService(GATT_SERVICE_UUID)?.getCharacteristic(characteristicUuid) ?: run {
-            Log.e(TAG, "✗ Characteristic $characteristicUuid not found for notification")
-            return
-        }
         val bytes = json.toByteArray(Charsets.UTF_8)
         val chunkSize = MAX_NOTIFY_CHUNK - 4
         val chunks = bytes.toList().chunked(chunkSize)
         Log.d(TAG, "🔔 Notifying ${chunks.size} chunks (total ${bytes.size} bytes) to ${device.address}")
 
-        for ((index, chunk) in chunks.withIndex()) {
-            val frame = ByteArray(4 + chunk.size)
-            frame[0] = (index shr 8).toByte()
-            frame[1] = (index and 0xFF).toByte()
-            frame[2] = (chunks.size shr 8).toByte()
-            frame[3] = (chunks.size and 0xFF).toByte()
-            chunk.toByteArray().copyInto(frame, 4)
-            characteristic.value = frame
-            Log.d(TAG, "  chunk $index/${chunks.size}: ${frame.size} bytes")
-            gattServer?.notifyCharacteristicChanged(device, characteristic, false)
+        synchronized(notificationLock) {
+            for ((index, chunk) in chunks.withIndex()) {
+                val frame = ByteArray(4 + chunk.size)
+                frame[0] = (index shr 8).toByte()
+                frame[1] = (index and 0xFF).toByte()
+                frame[2] = (chunks.size shr 8).toByte()
+                frame[3] = (chunks.size and 0xFF).toByte()
+                chunk.toByteArray().copyInto(frame, 4)
+                pendingNotifications.addLast(
+                    PendingNotification(
+                        device = device,
+                        characteristicUuid = characteristicUuid,
+                        frame = frame
+                    )
+                )
+            }
         }
-        Log.d(TAG, "✓ All notifications sent")
+        drainNotificationQueue()
+    }
+
+    private fun drainNotificationQueue() {
+        val next = synchronized(notificationLock) {
+            if (notificationInFlight != null) {
+                return
+            }
+            pendingNotifications.removeFirstOrNull()?.also {
+                notificationInFlight = it
+            }
+        } ?: return
+
+        val characteristic = gattServer?.getService(GATT_SERVICE_UUID)?.getCharacteristic(next.characteristicUuid)
+        if (characteristic == null) {
+            Log.e(TAG, "✗ Characteristic ${next.characteristicUuid} not found for notification")
+            synchronized(notificationLock) {
+                if (notificationInFlight == next) {
+                    notificationInFlight = null
+                }
+            }
+            drainNotificationQueue()
+            return
+        }
+
+        characteristic.value = next.frame
+        Log.d(TAG, "  sending chunk ${next.frame.size} bytes to ${next.device.address}")
+        val started = gattServer?.notifyCharacteristicChanged(next.device, characteristic, false) ?: false
+        if (!started) {
+            Log.e(TAG, "✗ notifyCharacteristicChanged returned false for ${next.device.address}")
+            synchronized(notificationLock) {
+                if (notificationInFlight == next) {
+                    notificationInFlight = null
+                }
+            }
+            drainNotificationQueue()
+            return
+        }
+
+        Log.d(TAG, "✓ Notification enqueued for ${next.device.address}")
     }
 }

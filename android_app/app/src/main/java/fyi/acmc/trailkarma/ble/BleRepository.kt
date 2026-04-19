@@ -191,8 +191,11 @@ class BleRepository(
                         log(msg2); Log.i(TAG, msg2)
                         syncInProgress = true
                         scope.launch {
-                            gattClient.syncWithPeer(device)
-                            syncInProgress = false
+                            try {
+                                gattClient.syncWithPeer(device)
+                            } finally {
+                                syncInProgress = false
+                            }
                         }
                     } else {
                         val remaining = 10 - (now - lastSync)
