@@ -2,6 +2,7 @@ package fyi.acmc.trailkarma.repository
 
 import android.content.Context
 import android.util.Base64
+import android.util.Log
 import fyi.acmc.trailkarma.BuildConfig
 import fyi.acmc.trailkarma.api.*
 import fyi.acmc.trailkarma.db.AppDatabase
@@ -22,12 +23,24 @@ import java.util.UUID
 import kotlinx.coroutines.flow.first
 
 class RewardsRepository(context: Context, private val db: AppDatabase) {
+    companion object {
+        private const val TAG = "RewardsRepository"
+    }
+
+    private val resolvedRewardsBaseUrl = DebugEndpointResolver.resolve(BuildConfig.REWARDS_BASE_URL)
+    private val api = RewardsApiClient.create(BuildConfig.REWARDS_BASE_URL)
     private val walletManager = WalletManager(context)
     private val networkUtil = NetworkUtil(context)
     private val userRepository = UserRepository(context, db.userDao())
 
     private suspend fun currentUser(): User? = userRepository.currentUser()
-    private suspend fun <T> safeApiCall(block: suspend () -> T): T? = runCatching { block() }.getOrNull()
+    private suspend fun <T> safeApiCall(operation: String, block: suspend () -> T): T? {
+        return runCatching { block() }
+            .onFailure { error ->
+                Log.e(TAG, "$operation failed: ${error.message}", error)
+            }
+            .getOrNull()
+    }
 
     suspend fun ensureLocalWallet(user: User): User {
         val wallet = walletManager.ensureWallet(user.userId)
@@ -38,24 +51,54 @@ class RewardsRepository(context: Context, private val db: AppDatabase) {
     }
 
     suspend fun syncCurrentUserRegistration(): WalletStateResponse? {
-        // Backend dependency removed. Registration is now local-only.
+        if (!networkUtil.isOnlineNow()) return null
         val current = currentUser() ?: userRepository.ensureLocalUser()
         val user = ensureLocalWallet(current)
-        db.userDao().updateWalletRegistration(user.userId, user.walletPublicKey, true, Instant.now().toString())
-        return WalletStateResponse(
-            displayName = user.displayName,
-            walletPublicKey = user.walletPublicKey
-        )
+        Log.d(TAG, "Syncing user registration for ${user.userId} via $resolvedRewardsBaseUrl")
+        safeApiCall("upsertProfile") {
+            api.upsertProfile(
+                UpsertProfileRequest(
+                    appUserId = user.userId,
+                    displayName = user.displayName,
+                    walletPublicKey = user.walletPublicKey,
+                    realName = user.realName,
+                    phoneNumber = user.phoneNumber.ifBlank { null },
+                    defaultRelayPhoneNumber = user.defaultRelayPhoneNumber.ifBlank { null }
+                )
+            )
+        } ?: return null
+        val response = safeApiCall("registerUser") {
+            api.registerUser(
+                RegisterUserRequest(
+                    appUserId = user.userId,
+                    displayName = user.displayName,
+                    walletPublicKey = user.walletPublicKey
+                )
+            )
+        } ?: return null
+        if (!response.isSuccessful) return null
+        val body = response.body() ?: return null
+        db.userDao().updateWalletRegistration(user.userId, body.walletPublicKey, true, Instant.now().toString())
+        return body
     }
 
     suspend fun fetchWalletState(): WalletStateResponse? {
-        // Backend dependency removed. Returning local state only.
-        return null 
+        if (!networkUtil.isOnlineNow()) return null
+        val user = currentUser() ?: userRepository.ensureLocalUser()
+        if (user.walletPublicKey.isBlank()) return syncCurrentUserRegistration()
+        val response = safeApiCall("getWallet") { api.getWallet(user.userId) } ?: return null
+        return if (response.isSuccessful) response.body() else null
     }
 
     suspend fun fetchRewardsActivity(): List<RewardActivityItemResponse> {
-        // Backend dependency removed. Returning empty list.
-        return emptyList()
+        if (!networkUtil.isOnlineNow()) return emptyList()
+        val user = currentUser() ?: userRepository.ensureLocalUser()
+        val response = safeApiCall("getRewardsActivity") { api.getRewardsActivity(user.userId) } ?: return emptyList()
+        return if (response.isSuccessful) {
+            response.body()?.items.orEmpty()
+        } else {
+            emptyList()
+        }
     }
 
     suspend fun fetchTrustedContacts(): List<TrustedContact> {
@@ -64,8 +107,37 @@ class RewardsRepository(context: Context, private val db: AppDatabase) {
     }
 
     suspend fun claimRewardsForPendingReports() {
-        // Backend dependency removed. Rewards are now tracked via Databricks sync.
-        // The RewardsRepository no longer handles direct on-chain claiming via the Node.js backend.
+        if (!networkUtil.isOnlineNow()) return
+        val walletState = syncCurrentUserRegistration() ?: return
+        val reports = db.trailReportDao().getPendingRewardClaims()
+        for (report in reports) {
+            runCatching {
+                val response = api.claimContribution(
+                    ClaimContributionRequest(
+                        appUserId = walletState.appUserId,
+                        reportId = report.reportId,
+                        title = report.title,
+                        description = report.description,
+                        type = report.type.name,
+                        lat = report.lat,
+                        lng = report.lng,
+                        timestamp = report.timestamp,
+                        speciesName = report.speciesName,
+                        confidence = report.confidence,
+                        photoUri = report.photoUri
+                    )
+                )
+                if (response.isSuccessful) {
+                    response.body()?.let {
+                        db.trailReportDao().markRewardClaimed(report.reportId, it.txSignature, it.verificationTier)
+                    }
+                } else if (response.code() in listOf(400, 409)) {
+                    db.trailReportDao().markRewardRejected(report.reportId)
+                }
+            }.onFailure { error ->
+                Log.e(TAG, "claimContribution:${report.reportId} failed: ${error.message}", error)
+            }
+        }
     }
 
     suspend fun createRelayIntent(destinationLabel: String, payloadReference: String): RelayJobIntent? {
@@ -193,40 +265,205 @@ class RewardsRepository(context: Context, private val db: AppDatabase) {
     }
 
     suspend fun openPendingRelayJobs() {
-        // Backend dependency removed. Relay jobs are now synced via Databricks.
+        if (!networkUtil.isOnlineNow()) return
+        syncCurrentUserRegistration() ?: return
+        val pendingJobs = db.relayJobIntentDao().getPendingToOpen()
+        for (job in pendingJobs) {
+            val response = safeApiCall("openRelayJob:${job.jobId}") {
+                api.openRelayJob(
+                    OpenRelayJobRequest(
+                        appUserId = job.userId,
+                        signedMessageBase64 = job.signedMessageBase64,
+                        signatureBase64 = job.signatureBase64,
+                        jobIdHex = job.jobId,
+                        destinationHashHex = job.destinationHash,
+                        payloadHashHex = job.payloadHash,
+                        expiryTs = job.expiryTs,
+                        rewardAmount = job.rewardAmount,
+                        nonce = job.nonce
+                    )
+                )
+            } ?: continue
+            if (response.isSuccessful) {
+                val tx = response.body()?.txSignature.orEmpty()
+                db.relayJobIntentDao().markOpened(job.jobId, "open", tx)
+            }
+        }
     }
 
     suspend fun openPendingVoiceRelayJobs() {
-        // Backend dependency removed. Voice relay jobs are now handled via the Oracle/Attestor service independent of direct app calls.
+        if (!networkUtil.isOnlineNow()) return
+        val carrier = syncCurrentUserRegistration() ?: return
+        val pendingJobs = db.relayJobIntentDao().getVoiceJobsToSync()
+        for (job in pendingJobs) {
+            val response = safeApiCall("openVoiceRelayJob:${job.jobId}") {
+                api.openVoiceRelayJob(
+                    OpenVoiceRelayJobRequest(
+                        appUserId = carrier.appUserId,
+                        senderWalletPublicKey = job.senderWallet,
+                        signedMessageBase64 = job.signedMessageBase64,
+                        signatureBase64 = job.signatureBase64,
+                        jobIdHex = job.jobId,
+                        destinationHashHex = job.destinationHash,
+                        payloadHashHex = job.payloadHash,
+                        expiryTs = job.expiryTs,
+                        rewardAmount = job.rewardAmount,
+                        nonce = job.nonce,
+                        encryptedBlob = job.encryptedBlob
+                            ?: throw IllegalStateException("Missing encrypted relay payload for voice job ${job.jobId}")
+                    )
+                )
+            } ?: continue
+            if (response.isSuccessful) {
+                response.body()?.let {
+                    db.relayJobIntentDao().updateVoiceRelayStatus(
+                        jobId = job.jobId,
+                        status = it.status,
+                        openedTxSignature = it.openedTxSignature,
+                        fulfilledTxSignature = it.fulfilledTxSignature,
+                        callSid = it.callSid,
+                        conversationId = it.conversationId,
+                        transcriptSummary = it.transcriptSummary,
+                        replyJobId = it.replyJobId
+                    )
+                }
+            }
+        }
     }
 
-    suspend fun refreshVoiceRelayJobs(): List<Any> {
-        // Backend dependency removed.
-        return emptyList()
+    suspend fun refreshVoiceRelayJobs(): List<VoiceRelayJobResponse> {
+        if (!networkUtil.isOnlineNow()) return emptyList()
+        val user = currentUser() ?: userRepository.ensureLocalUser()
+        val response = safeApiCall("getVoiceRelayJobs") { api.getVoiceRelayJobs(user.userId) } ?: return emptyList()
+        if (!response.isSuccessful) return emptyList()
+        val items = response.body()?.items.orEmpty()
+        for (item in items) {
+            db.relayJobIntentDao().updateVoiceRelayStatus(
+                jobId = item.jobId,
+                status = item.status,
+                openedTxSignature = item.openedTxSignature,
+                fulfilledTxSignature = item.fulfilledTxSignature,
+                callSid = item.callSid,
+                conversationId = item.conversationId,
+                transcriptSummary = item.transcriptSummary,
+                replyJobId = item.replyJobId
+            )
+        }
+        return items
     }
 
     suspend fun syncRelayInbox(): Int {
-        // Backend dependency removed.
-        return 0
+        if (!networkUtil.isOnlineNow()) return 0
+        val user = currentUser() ?: userRepository.ensureLocalUser()
+        val previousIds = db.relayInboxMessageDao().getForUser(user.userId).first().map { it.replyId }.toSet()
+        val response = safeApiCall("getRelayInbox") { api.getRelayInbox(user.userId) } ?: return 0
+        if (!response.isSuccessful) return 0
+        val items = response.body()?.items.orEmpty()
+        db.relayInboxMessageDao().insertAll(
+            items.map {
+                RelayInboxMessage(
+                    replyId = it.replyId,
+                    originalJobId = it.originalJobId,
+                    userId = user.userId,
+                    senderLabel = it.senderLabel,
+                    senderPhoneNumber = it.senderPhoneNumber,
+                    messageSummary = it.messageSummary,
+                    messageBody = it.messageBody,
+                    contextJson = it.contextJson,
+                    createdAt = it.createdAt,
+                    status = it.status
+                )
+            }
+        )
+        items.forEach {
+            if (it.status != "delivered") {
+                safeApiCall("ackRelayInbox:${it.replyId}") { api.acknowledgeRelayInbox(it.replyId) }
+                db.relayInboxMessageDao().markAcknowledged(it.replyId)
+            }
+        }
+        return items.count { it.replyId !in previousIds }
     }
 
     suspend fun syncMeshRelayReplies() {
-        // Backend dependency removed.
+        if (!networkUtil.isOnlineNow()) return
+        val carrier = currentUser() ?: userRepository.ensureLocalUser()
+        val response = safeApiCall("getMeshRelayReplies") { api.getMeshRelayReplies(carrier.userId) } ?: return
+        if (!response.isSuccessful) return
+        val now = Instant.now().toString()
+        for (item in response.body()?.items.orEmpty()) {
+            db.relayPacketDao().insert(
+                RelayPacket(
+                    packetId = "reply:${item.replyId}",
+                    payloadJson = JSONObject()
+                        .put("type", "relay_reply")
+                        .put("reply_id", item.replyId)
+                        .put("original_job_id", item.originalJobId)
+                        .put("user_id", item.targetUserId)
+                        .put("sender_label", item.senderLabel)
+                        .put("sender_phone_number", item.senderPhoneNumber)
+                        .put("message_summary", item.messageSummary)
+                        .put("message_body", item.messageBody)
+                        .put("context_json", JSONObject(item.contextJson))
+                        .put("created_at", item.createdAt)
+                        .put("status", item.status)
+                        .toString(),
+                    receivedAt = now,
+                    senderDevice = "cloud",
+                    hopCount = 0,
+                    uploaded = true
+                )
+            )
+        }
     }
 
     suspend fun fulfillRelayJob(jobId: String, proofRef: String): Boolean {
-        // Backend dependency removed.
-        return false
+        if (!networkUtil.isOnlineNow()) return false
+        val user = currentUser() ?: userRepository.ensureLocalUser()
+        val response = safeApiCall("fulfillRelayJob:$jobId") {
+            api.fulfillRelayJob(
+                FulfillRelayJobRequest(
+                    appUserId = user.userId,
+                    jobIdHex = jobId,
+                    proofRef = proofRef
+                )
+            )
+        } ?: return false
+        if (!response.isSuccessful) return false
+        val tx = response.body()?.txSignature.orEmpty()
+        db.relayJobIntentDao().markFulfilled(jobId, proofRef, tx)
+        return true
     }
 
-    suspend fun prepareTip(recipientWallet: String, amount: Int): Any? {
-        // Backend dependency removed.
-        return null
+    suspend fun prepareTip(recipientWallet: String, amount: Int): PrepareTipResponse? {
+        val user = currentUser() ?: userRepository.ensureLocalUser()
+        if (!networkUtil.isOnlineNow()) return null
+        val response = safeApiCall("prepareTip") {
+            api.prepareTip(PrepareTipRequest(user.userId, recipientWallet, amount))
+        } ?: return null
+        return if (response.isSuccessful) response.body() else null
     }
 
-    suspend fun submitTip(prepared: Any): Boolean {
-        // Backend dependency removed.
-        return false
+    suspend fun submitTip(prepared: PrepareTipResponse): Boolean {
+        val user = currentUser() ?: userRepository.ensureLocalUser()
+        if (!networkUtil.isOnlineNow()) return false
+        val signature = walletManager.sign(
+            user.userId,
+            Base64.decode(prepared.signedMessageBase64, Base64.NO_WRAP)
+        )
+        val response = safeApiCall("submitTip") {
+            api.submitTip(
+                SubmitTipRequest(
+                    appUserId = user.userId,
+                    recipientWallet = prepared.recipientWallet,
+                    amount = prepared.amount,
+                    nonce = prepared.nonce,
+                    tipIdHex = prepared.tipIdHex,
+                    signedMessageBase64 = prepared.signedMessageBase64,
+                    signatureBase64 = Base64.encodeToString(signature, Base64.NO_WRAP)
+                )
+            )
+        } ?: return false
+        return response.isSuccessful
     }
 
     private suspend fun buildVoiceRelayContext(

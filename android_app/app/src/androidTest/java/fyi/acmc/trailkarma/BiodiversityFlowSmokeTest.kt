@@ -38,8 +38,8 @@ class BiodiversityFlowSmokeTest {
 
     @Test
     fun biodiversityCaptureFlowRendersAndStoresAnObservation() {
-        waitForContentDescription("Record Trail Sound")
-        composeRule.onNodeWithContentDescription("Record Trail Sound").performClick()
+        waitForContentDescription("Audio")
+        composeRule.onNodeWithContentDescription("Audio").performClick()
 
         waitForText("Biodiversity audio")
         composeRule.onNodeWithText("Capture flow").assertIsDisplayed()

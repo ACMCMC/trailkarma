@@ -9,10 +9,6 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
@@ -64,18 +60,6 @@ class MainActivity : ComponentActivity() {
         BiodiversitySyncWorker.schedule(this)
     }
 
-    private fun requestBlePermissions() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            Log.i("TrailKarma/Main", "Requesting BLE permissions for Android 12+ (SCAN + ADVERTISE)...")
-            permissionLauncher.launch(arrayOf(
-                Manifest.permission.BLUETOOTH_SCAN,
-                Manifest.permission.BLUETOOTH_ADVERTISE
-            ))
-        } else {
-            Log.i("TrailKarma/Main", "Android 11: BLE permissions are install-time, already granted")
-        }
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -124,59 +108,16 @@ class MainActivity : ComponentActivity() {
             startService(Intent(this, LocationService::class.java))
         }
 
-        requestPermissions()
-
         setContent {
             TrailKarmaAppTheme {
                 val navController = rememberNavController()
                 var startDest by remember { mutableStateOf<String?>(null) }
-                var bleMissingDialog by remember { mutableStateOf(false) }
 
                 LaunchedEffect(Unit) {
                     val db = AppDatabase.get(applicationContext)
                     val repo = UserRepository(applicationContext, db.userDao())
                     repo.ensureLocalUser()
                     startDest = Routes.MAP
-
-                    // Show dialog if BLE permissions missing (Android 12+ only)
-                    val bleMissing = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                        val bleScan = ContextCompat.checkSelfPermission(
-                            this@MainActivity,
-                            Manifest.permission.BLUETOOTH_SCAN
-                        ) == PackageManager.PERMISSION_GRANTED
-                        val bleAdv = ContextCompat.checkSelfPermission(
-                            this@MainActivity,
-                            Manifest.permission.BLUETOOTH_ADVERTISE
-                        ) == PackageManager.PERMISSION_GRANTED
-                        !bleScan || !bleAdv
-                    } else {
-                        // On Android 11, BLE perms are install-time (assumed granted)
-                        false
-                    }
-                    if (bleMissing) {
-                        bleMissingDialog = true
-                    }
-                }
-
-                if (bleMissingDialog) {
-                    AlertDialog(
-                        onDismissRequest = { bleMissingDialog = false },
-                        title = { Text("Bluetooth Permission Required") },
-                        text = { Text("Grant \"Nearby devices\" permission so other hikers can find you on the mesh network.") },
-                        confirmButton = {
-                            Button(onClick = {
-                                requestBlePermissions()
-                                bleMissingDialog = false
-                            }) {
-                                Text("Grant")
-                            }
-                        },
-                        dismissButton = {
-                            TextButton(onClick = { bleMissingDialog = false }) {
-                                Text("Later")
-                            }
-                        }
-                    )
                 }
 
                 startDest?.let {
@@ -188,22 +129,4 @@ class MainActivity : ComponentActivity() {
 
     private fun hasPermission(permission: String) =
         ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
-
-    private fun requestPermissions() {
-        val perms = mutableListOf(
-            Manifest.permission.ACCESS_FINE_LOCATION,
-            Manifest.permission.ACCESS_COARSE_LOCATION,
-            Manifest.permission.RECORD_AUDIO,
-            Manifest.permission.CAMERA
-        )
-        // On Android 12+, request BLE permissions (install-time on 11, runtime on 12+)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            perms.add(Manifest.permission.BLUETOOTH_SCAN)
-            perms.add(Manifest.permission.BLUETOOTH_ADVERTISE)
-            perms.add(Manifest.permission.BLUETOOTH_CONNECT)
-        }
-        // On Android 11, BLUETOOTH + BLUETOOTH_ADMIN are install-time only; don't request at runtime
-        permissionLauncher.launch(perms.toTypedArray())
-    }
-
 }

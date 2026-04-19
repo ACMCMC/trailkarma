@@ -485,50 +485,39 @@ fun MapScreen(
                 }
             }
 
-        Card(
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(WindowInsets.systemBars.asPaddingValues())
-                .padding(start = 56.dp, top = 100.dp)
-                .clickable(onClick = onNavigateToRewards),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-        ) {
-            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("REWARDS", style = MaterialTheme.typography.labelSmall, fontSize = 10.sp)
-                if (walletState != null) {
-                    Text(walletState!!.karmaBalance ?: "0", style = MaterialTheme.typography.titleMedium)
-                    val badges = walletState!!.badgeDetails ?: emptyList()
-                    Text(
-                        if (badges.isEmpty()) "Tap to open collectibles" else badges.joinToString(" • ") { it.label },
-                        style = MaterialTheme.typography.labelSmall,
-                        fontSize = 9.sp,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                } else {
-                    Text("Wallet syncing", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        if (isOnline) "Registering rewards state now" else "Will register when service returns",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontSize = 9.sp,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
+            Column(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(WindowInsets.systemBars.asPaddingValues())
+                    .padding(top = 16.dp, end = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                MapActionButton("Audio", Icons.Default.Mic, RewardsPalette.Forest, onNavigateToBiodiversity)
+                MapActionButton("Photo", Icons.Default.CameraAlt, RewardsPalette.Gold, onNavigateToCamera)
+                MapActionButton("Report", Icons.Default.Add, RewardsPalette.Clay, onNavigateToReport)
+                MapActionButton(
+                    "Locate",
+                    Icons.Default.MyLocation,
+                    RewardsPalette.Sky
+                ) {
+                    val center = userLocation?.let { GeoPoint(it.lat, it.lng) } ?: GeoPoint(32.88, -117.24)
+                    mapView?.controller?.animateTo(center)
                 }
             }
-        }
 
-        TrailBriefingSheet(
-            reports = displayReports,
-            biodiversity = displayBiodiversity,
-            walletState = walletState,
-            onOpenReport = { onNavigateToReportDetail(it.reportId) },
-            onOpenReportComposer = onNavigateToReport,
-            onOpenRelay = onNavigateToBle,
-            onOpenRewards = onNavigateToRewards,
-            onOpenProfile = onNavigateToProfile,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(horizontal = 12.dp, vertical = 12.dp)
-        )
+            TrailBriefingSheet(
+                reports = displayReports,
+                biodiversity = displayBiodiversity,
+                walletState = walletState,
+                onOpenReport = { onNavigateToReportDetail(it.reportId) },
+                onOpenReportComposer = onNavigateToReport,
+                onOpenRelay = onNavigateToBle,
+                onOpenRewards = onNavigateToRewards,
+                onOpenProfile = onNavigateToProfile,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(horizontal = 12.dp, vertical = 12.dp)
+            )
         }
     }
 }

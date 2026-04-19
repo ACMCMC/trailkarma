@@ -55,6 +55,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
@@ -165,7 +167,8 @@ fun BiodiversityCaptureScreen(
                                 enabled = !uiState.isRecording,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(54.dp),
+                                    .height(54.dp)
+                                    .semantics { contentDescription = "Record Trail Sound" },
                                 colors = ButtonDefaults.buttonColors(containerColor = RewardsPalette.Forest)
                             ) {
                                 if (uiState.isRecording) {

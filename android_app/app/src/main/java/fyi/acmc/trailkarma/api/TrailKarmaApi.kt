@@ -42,7 +42,7 @@ interface TrailKarmaApi {
 
 object ApiClient {
     fun create(baseUrl: String): TrailKarmaApi = Retrofit.Builder()
-        .baseUrl(baseUrl)
+        .baseUrl(DebugEndpointResolver.resolve(baseUrl))
         .client(
             OkHttpClient.Builder()
                 .addInterceptor(HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BODY })

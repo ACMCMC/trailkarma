@@ -93,7 +93,9 @@ class RewardsRepositoryIntegrationTest {
 
         rewardsRepository.openPendingRelayJobs()
 
-        val openJob = db.relayJobIntentDao().getAll().first().first { it.jobId == relayIntent!!.jobId }
+        val openJob = waitForRelayJob(relayIntent!!.jobId) {
+            it.status == "open" && !it.openedTxSignature.isNullOrBlank()
+        }
         assertEquals("open", openJob.status)
         assertFalse(openJob.openedTxSignature.isNullOrBlank())
 
@@ -120,6 +122,56 @@ class RewardsRepositoryIntegrationTest {
         val packet = db.relayPacketDao().getById("voice:${voiceIntent.jobId}")
         assertNotNull(packet)
         assertTrue(packet!!.payloadJson.contains("\"type\":\"voice_relay_intent\""))
+    }
+
+    @Test
+    fun tipFlowPreparesSignsAndTransfersKarma() = runBlocking {
+        resetDatabase()
+
+        val sender = createFreshUser("Integration Sender")
+        val senderWallet = waitForValue { rewardsRepository.syncCurrentUserRegistration() }
+        assertNotNull(senderWallet)
+
+        createFreshUser("Integration Recipient")
+        val recipientWallet = waitForValue { rewardsRepository.syncCurrentUserRegistration() }
+        assertNotNull(recipientWallet)
+
+        userRepository.saveUser(sender)
+
+        val reportId = "android-tip-${System.currentTimeMillis()}"
+        db.trailReportDao().insert(
+            TrailReport(
+                reportId = reportId,
+                userId = sender.userId,
+                type = ReportType.hazard,
+                title = "Tip flow seed report",
+                description = "Seeds enough KARMA to test a transfer.",
+                lat = 32.883,
+                lng = -117.236,
+                timestamp = Instant.now().toString(),
+            )
+        )
+
+        rewardsRepository.claimRewardsForPendingReports()
+        val senderSeededWallet = waitForValue {
+            rewardsRepository.fetchWalletState()?.takeIf { (it.karmaBalance.toIntOrNull() ?: 0) >= 10 }
+        }
+        assertNotNull(senderSeededWallet)
+
+        val preparedTip = rewardsRepository.prepareTip(
+            recipientWallet = recipientWallet!!.walletPublicKey,
+            amount = 3
+        )
+        assertNotNull(preparedTip)
+        assertTrue(rewardsRepository.submitTip(preparedTip!!))
+
+        val senderAfterTip = waitForValue {
+            rewardsRepository.fetchRewardsActivity().takeIf { entries ->
+                entries.any { it.kind == "tip_sent" }
+            }
+        }
+        assertNotNull(senderAfterTip)
+        assertTrue(senderAfterTip!!.any { it.kind == "tip_sent" })
     }
 
     private suspend fun createFreshUser(displayName: String): User {
@@ -153,6 +205,24 @@ class RewardsRepositoryIntegrationTest {
         val final = db.trailReportDao().getById(reportId)
         assertNotNull("Timed out waiting for report $reportId", final)
         assertTrue("Timed out waiting for report $reportId to satisfy predicate", predicate(final!!))
+        return final
+    }
+
+    private suspend fun waitForRelayJob(
+        jobId: String,
+        attempts: Int = 20,
+        delayMs: Long = 1000,
+        predicate: (fyi.acmc.trailkarma.models.RelayJobIntent) -> Boolean
+    ): fyi.acmc.trailkarma.models.RelayJobIntent {
+        repeat(attempts - 1) {
+            db.relayJobIntentDao().getAll().first().firstOrNull { it.jobId == jobId }?.let {
+                if (predicate(it)) return it
+            }
+            kotlinx.coroutines.delay(delayMs)
+        }
+        val final = db.relayJobIntentDao().getAll().first().firstOrNull { it.jobId == jobId }
+        assertNotNull("Timed out waiting for relay job $jobId", final)
+        assertTrue("Timed out waiting for relay job $jobId to satisfy predicate", predicate(final!!))
         return final
     }
 
