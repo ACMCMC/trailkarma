@@ -161,6 +161,7 @@ data class RelayJobIntent(
     val expiryTs: Long,
     val rewardAmount: Int,
     val nonce: Long,
+    val encryptedBlob: String? = null, // ECIES-encrypted payload for backend
     val signedMessageBase64: String,
     val signatureBase64: String,
     val source: String = "self",

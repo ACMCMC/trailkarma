@@ -61,6 +61,9 @@ android {
         buildConfigField("String", "DATABRICKS_URL", "\"$databricksUrl\"")
         buildConfigField("String", "DATABRICKS_TOKEN", "\"$databricksToken\"")
         buildConfigField("String", "DATABRICKS_WAREHOUSE", "\"$databricksWarehouse\"")
+
+        // X25519 Public Key for Voice Relay Payload Encryption (Backend)
+        buildConfigField("String", "RELAY_ENCRYPTION_PUBLIC_KEY", "\"9e8a82be5922e42cd11dd2ee5a0ae64c0a590172fa047e5a132104314f483404\"")
     }
 
     buildTypes {

@@ -175,7 +175,16 @@ class RewardsRepository(context: Context, private val db: AppDatabase) {
         val jobId = CryptoUtil.sha256Hex("${user.userId}:${UUID.randomUUID()}:${System.currentTimeMillis()}")
         val destinationHash = CryptoUtil.sha256Hex(recipientPhoneNumber)
         val contextJson = buildVoiceRelayContext(user, shareLocation, shareRealName, shareCallbackNumber)
-        val payloadHash = CryptoUtil.sha256Hex("$messageBody|$contextJson")
+        
+        // PRIVACY: Encrypt the sensitive payload (recipient, message, context) for the Backend
+        val plainPayload = JSONObject()
+            .put("recipientName", recipientName)
+            .put("recipientPhoneNumber", recipientPhoneNumber)
+            .put("messageBody", messageBody)
+            .put("contextJson", contextJson)
+            .toString()
+        val encryptedBlob = EncryptionUtil.encryptForBackend(plainPayload, BuildConfig.RELAY_ENCRYPTION_PUBLIC_KEY)
+        val payloadHash = CryptoUtil.sha256Hex(encryptedBlob)
         val expiryTs = Instant.now().plusSeconds(6 * 60 * 60).epochSecond
         val rewardAmount = 12
         val nonce = System.currentTimeMillis()
@@ -222,13 +231,9 @@ class RewardsRepository(context: Context, private val db: AppDatabase) {
                     .put("job_id", jobId)
                     .put("user_id", user.userId)
                     .put("sender_wallet", user.walletPublicKey)
-                    .put("recipient_name", recipientName)
-                    .put("recipient_phone_number", recipientPhoneNumber)
+                    .put("encrypted_blob", encryptedBlob) // CARRIER CANNOT READ THIS
                     .put("destination_hash", destinationHash)
                     .put("payload_hash", payloadHash)
-                    .put("message_body", messageBody)
-                    .put("context_summary", summary)
-                    .put("context_json", JSONObject(contextJson))
                     .put("expiry_ts", expiryTs)
                     .put("reward_amount", rewardAmount)
                     .put("nonce", nonce)
