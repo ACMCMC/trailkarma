@@ -201,7 +201,7 @@ fun MapScreen(
                     zoomLevel = currentZoom
                 }
 
-                val markerSize = (48 + (zoomLevel - 10) * 6).coerceIn(48, 120)
+                val markerSize = (40 + (zoomLevel - 10) * 6).coerceIn(40, 140)
 
                 val overlayKey = OverlayKey(displayReports, userLocation, selectedTrail, markerSize, currentMapStyle)
                 if (overlayKey == lastOverlayKey) return@AndroidView
