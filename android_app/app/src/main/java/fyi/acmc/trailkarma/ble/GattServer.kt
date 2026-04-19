@@ -118,15 +118,19 @@ class GattServer(
             value: ByteArray
         ) {
             val request = String(value, Charsets.UTF_8)
+            Log.d(TAG, "✍️ onCharacteristicWriteRequest: uuid=${characteristic.uuid}, request=$request, responseNeeded=$responseNeeded")
             if (responseNeeded) {
                 gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null)
             }
 
             when (characteristic.uuid) {
                 MANIFEST_CHAR_UUID -> scope.launch {
+                    Log.d(TAG, "📋 Building report manifest...")
                     val ids = reportDao.getIds()
                     val json = ids.joinToString(prefix = "[", postfix = "]") { "\"$it\"" }
+                    Log.d(TAG, "📢 Sending manifest notification: ${json.length} bytes, ${ids.size} IDs")
                     notifyJson(device, MANIFEST_CHAR_UUID, json)
+                    Log.d(TAG, "✓ Manifest notification sent")
                 }
 
                 PACKET_MANIFEST_CHAR_UUID -> scope.launch {
@@ -202,10 +206,14 @@ class GattServer(
     }
 
     private fun notifyJson(device: BluetoothDevice, characteristicUuid: UUID, json: String) {
-        val characteristic = gattServer?.getService(GATT_SERVICE_UUID)?.getCharacteristic(characteristicUuid) ?: return
+        val characteristic = gattServer?.getService(GATT_SERVICE_UUID)?.getCharacteristic(characteristicUuid) ?: run {
+            Log.e(TAG, "✗ Characteristic $characteristicUuid not found for notification")
+            return
+        }
         val bytes = json.toByteArray(Charsets.UTF_8)
         val chunkSize = MAX_NOTIFY_CHUNK - 4
         val chunks = bytes.toList().chunked(chunkSize)
+        Log.d(TAG, "🔔 Notifying ${chunks.size} chunks (total ${bytes.size} bytes) to ${device.address}")
 
         for ((index, chunk) in chunks.withIndex()) {
             val frame = ByteArray(4 + chunk.size)
@@ -215,7 +223,9 @@ class GattServer(
             frame[3] = (chunks.size and 0xFF).toByte()
             chunk.toByteArray().copyInto(frame, 4)
             characteristic.value = frame
+            Log.d(TAG, "  chunk $index/${chunks.size}: ${frame.size} bytes")
             gattServer?.notifyCharacteristicChanged(device, characteristic, false)
         }
+        Log.d(TAG, "✓ All notifications sent")
     }
 }

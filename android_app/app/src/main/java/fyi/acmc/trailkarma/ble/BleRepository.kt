@@ -50,6 +50,7 @@ class BleRepository(
     // Track last sync time per device (map of address -> epochSecond)
     // Allow re-sync every 10 seconds to handle data updates
     private val lastSyncTime = mutableMapOf<String, Long>()
+    private var syncInProgress = false
 
     private val gattClient by lazy {
         GattClient(
@@ -182,11 +183,17 @@ class BleRepository(
 
                     val now = Instant.now().epochSecond
                     val lastSync = lastSyncTime[address] ?: 0L
-                    if (now - lastSync >= 10) {
+                    if (syncInProgress) {
+                        Log.d(TAG, "Sync already in progress with another device, skipping $address")
+                    } else if (now - lastSync >= 10) {
                         lastSyncTime[address] = now
                         val msg2 = "🔗 Syncing reports with $hikerId ($address)…"
                         log(msg2); Log.i(TAG, msg2)
-                        gattClient.syncWithPeer(device)
+                        syncInProgress = true
+                        scope.launch {
+                            gattClient.syncWithPeer(device)
+                            syncInProgress = false
+                        }
                     } else {
                         val remaining = 10 - (now - lastSync)
                         Log.d(TAG, "Recently synced with $address (cooldown $remaining seconds), skipping")
