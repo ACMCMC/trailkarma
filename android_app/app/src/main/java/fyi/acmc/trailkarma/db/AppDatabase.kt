@@ -16,16 +16,13 @@ class Converters {
 class DatabaseCallback : RoomDatabase.Callback() {
     override fun onCreate(db: SupportSQLiteDatabase) {
         super.onCreate(db)
-        val now = Instant.now().toString()
-        db.execSQL("""INSERT INTO trail_reports (reportId, userId, type, title, description, lat, lng, timestamp, speciesName, confidence, source, synced) VALUES ('mock-1', 'seed', 'hazard', 'Rockslide ahead', 'Section near mile 24 has debris', 32.88, -117.24, '$now', NULL, NULL, 'self', 0)""")
-        db.execSQL("""INSERT INTO trail_reports (reportId, userId, type, title, description, lat, lng, timestamp, speciesName, confidence, source, synced) VALUES ('mock-2', 'seed', 'hazard', 'Rattlesnake spotted', 'Stay alert, seen near water source', 32.87, -117.25, '$now', NULL, NULL, 'relayed', 0)""")
-        db.execSQL("""INSERT INTO trail_reports (reportId, userId, type, title, description, lat, lng, timestamp, speciesName, confidence, source, synced) VALUES ('mock-3', 'seed', 'water', 'Water source confirmed', 'Spring flowing, fresh water tested', 32.89, -117.23, '$now', NULL, NULL, 'self', 0)""")
+        // No mock data - sync from cloud instead
     }
 }
 
 @Database(
     entities = [User::class, TrailReport::class, LocationUpdate::class, RelayPacket::class],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -41,6 +38,7 @@ abstract class AppDatabase : RoomDatabase() {
         fun get(context: Context): AppDatabase = INSTANCE ?: synchronized(this) {
             Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, "trailkarma.db")
                 .addCallback(DatabaseCallback())
+                .fallbackToDestructiveMigration()
                 .build().also { INSTANCE = it }
         }
     }

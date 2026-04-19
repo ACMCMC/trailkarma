@@ -36,12 +36,14 @@ def main():
 
     now = datetime.utcnow()
 
-    # The 4 demo hikers
+    # The 4 demo hikers (id, name, wallet, karma, active_trail_id)
+    pct_trail_id = str(uuid.uuid4())
+    
     users = [
-        (str(uuid.uuid4()), 'Aldan', '8Bse...1a', 150),
-        (str(uuid.uuid4()), 'Qianqian', 'C9fe...2b', 320),
-        (str(uuid.uuid4()), 'Suraj', 'A1bc...3c', 50),
-        (str(uuid.uuid4()), 'Edith', 'D4de...4d', 420),
+        (str(uuid.uuid4()), 'Aldan', '8Bse...1a', 150, pct_trail_id),
+        (str(uuid.uuid4()), 'Qianqian', 'C9fe...2b', 320, pct_trail_id),
+        (str(uuid.uuid4()), 'Suraj', 'A1bc...3c', 50, pct_trail_id),
+        (str(uuid.uuid4()), 'Edith', 'D4de...4d', 420, pct_trail_id),
     ]
 
     base_lat, base_lng = 32.88, -117.24
@@ -71,21 +73,50 @@ def main():
         f"CREATE SCHEMA IF NOT EXISTS {full_schema}",
         
         # WIPE OUT EXISTING TABLES
-        f"DROP TABLE IF EXISTS {full_schema}.users",
-        f"DROP TABLE IF EXISTS {full_schema}.trail_reports",
         f"DROP TABLE IF EXISTS {full_schema}.user_contacts",
         f"DROP TABLE IF EXISTS {full_schema}.location_updates",
         f"DROP TABLE IF EXISTS {full_schema}.relay_packets",
+        f"DROP TABLE IF EXISTS {full_schema}.trail_reports",
+        f"DROP TABLE IF EXISTS {full_schema}.users",
+        f"DROP TABLE IF EXISTS {full_schema}.trail_waypoints",
+        f"DROP TABLE IF EXISTS {full_schema}.trails",
+        f"DROP TABLE IF EXISTS {full_schema}.relay_packets",
         
         # RECREATE FULL STRUCTURE
+        f"""CREATE TABLE {full_schema}.trails (
+            trail_id STRING NOT NULL PRIMARY KEY,
+            name STRING NOT NULL,
+            description STRING,
+            total_length_miles DOUBLE,
+            region STRING,
+            geometry_json STRING,
+            created_at TIMESTAMP,
+            updated_at TIMESTAMP
+        ) USING DELTA""",
+        
+        f"""CREATE TABLE {full_schema}.trail_waypoints (
+            waypoint_id STRING NOT NULL PRIMARY KEY,
+            trail_id STRING NOT NULL,
+            name STRING NOT NULL,
+            type STRING NOT NULL,
+            lat DOUBLE NOT NULL,
+            lng DOUBLE NOT NULL,
+            description STRING,
+            created_at TIMESTAMP,
+            updated_at TIMESTAMP,
+            CONSTRAINT fk_waypoint_trail FOREIGN KEY (trail_id) REFERENCES {full_schema}.trails(trail_id)
+        ) USING DELTA""",
+
         f"""CREATE TABLE {full_schema}.users (
             user_id STRING NOT NULL PRIMARY KEY, 
             display_name STRING NOT NULL,
             wallet_address STRING,
             karma_points INT,
             profile_image_url STRING,
+            active_trail_id STRING,
             created_at TIMESTAMP,
-            updated_at TIMESTAMP
+            updated_at TIMESTAMP,
+            CONSTRAINT fk_users_trail FOREIGN KEY (active_trail_id) REFERENCES {full_schema}.trails(trail_id)
         ) USING DELTA""",
         
         f"""CREATE TABLE {full_schema}.trail_reports (
@@ -143,8 +174,14 @@ def main():
     ]
 
     # PUT IN ALL THE DATA SO WE START FRESH
-    for user_id, name, wallet, karma in users:
-        sql_statements.append(f"INSERT INTO {full_schema}.users VALUES ('{user_id}', '{name}', '{wallet}', {karma}, NULL, current_timestamp(), current_timestamp())")
+    
+    # Trails
+    mock_geojson = '{"type": "LineString", "coordinates": [[-117.24, 32.88], [-117.23, 32.89]]}'
+    sql_statements.append(f"INSERT INTO {full_schema}.trails VALUES ('{pct_trail_id}', 'Pacific Crest Trail', 'A long-distance hiking and equestrian trail closely aligned with the highest portion of the Cascade and Sierra Nevada mountain ranges.', 2650.0, 'West Coast USA', '{mock_geojson}', current_timestamp(), current_timestamp())")
+    sql_statements.append(f"INSERT INTO {full_schema}.trail_waypoints VALUES ('{str(uuid.uuid4())}', '{pct_trail_id}', 'Southern Terminus', 'trailhead', 32.5896, -116.4669, 'The official start of the PCT at the US-Mexico border.', current_timestamp(), current_timestamp())")
+    
+    for user_id, name, wallet, karma, trail_id in users:
+        sql_statements.append(f"INSERT INTO {full_schema}.users VALUES ('{user_id}', '{name}', '{wallet}', {karma}, NULL, '{trail_id}', current_timestamp(), current_timestamp())")
 
     for i, (rid, rtype, title, desc, lat, lng, source, species, conf) in enumerate(reports):
         user_id = users[i % len(users)][0]

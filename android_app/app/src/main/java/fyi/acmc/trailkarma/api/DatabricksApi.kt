@@ -39,7 +39,7 @@ data class SqlError(
 
 @JsonClass(generateAdapter = true)
 data class SqlResult(
-    val data: List<List<Any?>>? = null
+    val data_array: List<List<Any?>>? = null
 )
 
 object DatabricksApiClient {

@@ -45,46 +45,7 @@ fun MapScreen(
 
     var mapView: MapView? by remember { mutableStateOf(null) }
 
-    // Add mock warnings if no reports yet (for demo)
-    val displayReports = if (reports.isEmpty()) {
-        listOf(
-            TrailReport(
-                reportId = "mock-1",
-                userId = "demo",
-                type = ReportType.hazard,
-                title = "Rockslide ahead",
-                description = "Section near mile 24 has debris",
-                lat = 32.88,
-                lng = -117.24,
-                timestamp = Instant.now().toString(),
-                source = ReportSource.self
-            ),
-            TrailReport(
-                reportId = "mock-2",
-                userId = "demo",
-                type = ReportType.hazard,
-                title = "Rattlesnake spotted",
-                description = "Stay alert, seen near water source",
-                lat = 32.87,
-                lng = -117.25,
-                timestamp = Instant.now().toString(),
-                source = ReportSource.relayed
-            ),
-            TrailReport(
-                reportId = "mock-3",
-                userId = "demo",
-                type = ReportType.water,
-                title = "Water source confirmed",
-                description = "Spring flowing, fresh water tested",
-                lat = 32.89,
-                lng = -117.23,
-                timestamp = Instant.now().toString(),
-                source = ReportSource.self
-            )
-        )
-    } else {
-        reports
-    }
+    val displayReports = reports
 
     Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         // Map View

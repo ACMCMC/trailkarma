@@ -53,6 +53,8 @@ Safe to run anytime—drops old tables and creates fresh ones.
 
 ```
 main.trailkarma/
+├── trails (1 master trail - PCT)
+├── trail_waypoints (master POIs)
 ├── users (4 demo hikers)
 ├── user_contacts (2 friendships/requests)
 ├── trail_reports (5 reports: 2 hazards, 1 water, 2 species)
@@ -62,6 +64,28 @@ main.trailkarma/
 
 ## Schema
 
+### trails (Master Data)
+```
+trail_id STRING (PK)
+name STRING
+description STRING
+total_length_miles DOUBLE
+region STRING
+geometry_json STRING (GeoJSON representation of the path)
+created_at TIMESTAMP, updated_at TIMESTAMP
+```
+
+### trail_waypoints (Master POIs)
+```
+waypoint_id STRING (PK)
+trail_id STRING (FK to trails)
+name STRING
+type STRING (e.g. trailhead | water | campsite | peak)
+lat DOUBLE, lng DOUBLE
+description STRING
+created_at TIMESTAMP, updated_at TIMESTAMP
+```
+
 ### users
 ```
 user_id STRING (PK)
@@ -69,6 +93,7 @@ display_name STRING
 wallet_address STRING
 karma_points INT
 profile_image_url STRING
+active_trail_id STRING (FK to trails)
 created_at TIMESTAMP
 updated_at TIMESTAMP
 ```

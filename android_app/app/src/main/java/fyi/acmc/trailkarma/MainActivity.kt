@@ -41,15 +41,20 @@ class MainActivity : ComponentActivity() {
 
         lifecycleScope.launch {
             val db = AppDatabase.get(applicationContext)
-            seedDatabaseIfEmpty(db)
-
             val syncRepo = DatabricksSyncRepository(applicationContext, db)
+            
             if (BuildConfig.DATABRICKS_TOKEN.isNotEmpty()) {
                 syncRepo.setDatabricksConfig(
                     url = BuildConfig.DATABRICKS_URL,
                     token = BuildConfig.DATABRICKS_TOKEN,
                     warehouse = BuildConfig.DATABRICKS_WAREHOUSE
                 )
+                
+                // Initial sync on startup
+                if (syncRepo.isOnline()) {
+                    syncRepo.syncReports()
+                    syncRepo.pullReportsFromCloud()
+                }
             }
         }
 
@@ -84,46 +89,5 @@ class MainActivity : ComponentActivity() {
         ))
     }
 
-    private suspend fun seedDatabaseIfEmpty(db: AppDatabase) {
-        val count = db.trailReportDao().getAll().first().size
-        if (count == 0) {
-            val now = Instant.now().toString()
-            val repo = UserRepository(applicationContext, db.userDao())
-            val userId = repo.currentUserId.first() ?: "demo-user"
 
-            db.trailReportDao().insert(TrailReport(
-                reportId = "mock-1",
-                userId = userId,
-                type = ReportType.hazard,
-                title = "Rockslide ahead",
-                description = "Section near mile 24 has debris",
-                lat = 32.88,
-                lng = -117.24,
-                timestamp = now,
-                source = ReportSource.self
-            ))
-            db.trailReportDao().insert(TrailReport(
-                reportId = "mock-2",
-                userId = userId,
-                type = ReportType.hazard,
-                title = "Rattlesnake spotted",
-                description = "Stay alert, seen near water source",
-                lat = 32.87,
-                lng = -117.25,
-                timestamp = now,
-                source = ReportSource.relayed
-            ))
-            db.trailReportDao().insert(TrailReport(
-                reportId = "mock-3",
-                userId = userId,
-                type = ReportType.water,
-                title = "Water source confirmed",
-                description = "Spring flowing, fresh water tested",
-                lat = 32.89,
-                lng = -117.23,
-                timestamp = now,
-                source = ReportSource.self
-            ))
-        }
-    }
 }
