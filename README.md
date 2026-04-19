@@ -122,7 +122,7 @@ Initialize the Databricks schema and demo data:
 python setup_databricks.py
 ```
 
-See [DATABRICKS_SETUP.md](DATABRICKS_SETUP.md) for details.
+See [docs/DATABRICKS_SETUP.md](docs/DATABRICKS_SETUP.md) for details.
 
 ### 2. Rewards and voice backend
 
@@ -196,7 +196,7 @@ SESSION_NAME=my-session scripts/android-physical-debug-loop.sh
 
 ## Documentation
 
-- [ANDROID_DATABRICKS_SYNC.md](ANDROID_DATABRICKS_SYNC.md): Android offline sync, Databricks, BLE, and test loop notes
+- [docs/ANDROID_DATABRICKS_SYNC.md](docs/ANDROID_DATABRICKS_SYNC.md): Android offline sync, Databricks, BLE, and test loop notes
 - [backend/README.md](backend/README.md): TypeScript rewards backend and biodiversity service setup
 - [docs/REWARDS.md](docs/REWARDS.md): hybrid Solana rewards architecture and current API surface
 - [docs/bioacoustics.md](docs/bioacoustics.md): biodiversity feature status, model-pack flow, and current limitations
@@ -208,8 +208,8 @@ SESSION_NAME=my-session scripts/android-physical-debug-loop.sh
 
 The current implementation already covers the main offline-first Android flow, BLE carriage, Solana rewards, voice-relay settlement, and audio-based biodiversity capture. The largest remaining gaps are:
 
-- a stronger moderation or attestation pipeline for biodiversity verification instead of mostly local or demo collectible bookkeeping
-- generalized researcher-facing biodiversity export workflows
+- a stronger moderation or attestation pipeline for biodiversity verification instead of mostly local collectible bookkeeping
+- generalized researcher-facing biodiversity export workflows so the crowdsourced stream of biodiversity observations and approximate locations can become genuinely useful data for the biodiversity community
 - more mature multi-phone BLE validation for full relay-carrier flows in the wild
 - stronger trust and anti-abuse logic around what counts as a verified real-world action
 - a web experience backed by live project data instead of mock or demo data
