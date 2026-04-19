@@ -1,0 +1,1354 @@
+{
+  "species::Engystomops pustulosus": {
+    "display_label": "Guayaquil Dwarf Frog",
+    "scientific_name": "Engystomops pustulosus",
+    "genus": "Engystomops",
+    "family": "Leptodactylidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Tamias striatus": {
+    "display_label": "Eastern Chipmunk",
+    "scientific_name": "Tamias striatus",
+    "genus": "Tamias",
+    "family": "Sciuridae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Amietia fuscigula": {
+    "display_label": "Cape River Frog",
+    "scientific_name": "Amietia fuscigula",
+    "genus": "Amietia",
+    "family": "Pyxicephalidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Acridotheres tristis": {
+    "display_label": "Common Mynah",
+    "scientific_name": "Acridotheres tristis",
+    "genus": "Acridotheres",
+    "family": "Sturnidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Acheta domesticus": {
+    "display_label": "House Cricket",
+    "scientific_name": "Acheta domesticus",
+    "genus": "Acheta",
+    "family": "Gryllidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Procyon lotor": {
+    "display_label": "Common Raccoon",
+    "scientific_name": "Procyon lotor",
+    "genus": "Procyon",
+    "family": "Procyonidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Chorthippus mollis": {
+    "display_label": "Lesser Grasshopper",
+    "scientific_name": "Chorthippus mollis",
+    "genus": "Chorthippus",
+    "family": "Acrididae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Actitis macularius": {
+    "display_label": "Spotted Sandpiper",
+    "scientific_name": "Actitis macularius",
+    "genus": "Actitis",
+    "family": "Scolopacidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Arthroleptella lightfooti": {
+    "display_label": "Lightfoot's moss frog",
+    "scientific_name": "Arthroleptella lightfooti",
+    "genus": "Arthroleptella",
+    "family": "Pyxicephalidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Eleutherodactylus coqui": {
+    "display_label": "Common Coqui",
+    "scientific_name": "Eleutherodactylus coqui",
+    "genus": "Eleutherodactylus",
+    "family": "Eleutherodactylidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Amphipsalta zelandica": {
+    "display_label": "Chorus Cicada",
+    "scientific_name": "Amphipsalta zelandica",
+    "genus": "Amphipsalta",
+    "family": "Cicadidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Chremistica ochracea": {
+    "display_label": "Peaceful Cicada",
+    "scientific_name": "Chremistica ochracea",
+    "genus": "Chremistica",
+    "family": "Cicadidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Accipiter nisus": {
+    "display_label": "Eurasian Sparrowhawk",
+    "scientific_name": "Accipiter nisus",
+    "genus": "Accipiter",
+    "family": "Accipitridae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Tamiasciurus hudsonicus": {
+    "display_label": "American Red Squirrel",
+    "scientific_name": "Tamiasciurus hudsonicus",
+    "genus": "Tamiasciurus",
+    "family": "Sciuridae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Acrocephalus scirpaceus": {
+    "display_label": "Eurasian Reed-Warbler",
+    "scientific_name": "Acrocephalus scirpaceus",
+    "genus": "Acrocephalus",
+    "family": "Acrocephalidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Galanga labeculata": {
+    "display_label": "Spotted Wattle Cicada",
+    "scientific_name": "Galanga labeculata",
+    "genus": "Galanga",
+    "family": "Cicadidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Phascolarctos cinereus": {
+    "display_label": "Koala",
+    "scientific_name": "Phascolarctos cinereus",
+    "genus": "Phascolarctos",
+    "family": "Phascolarctidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Acanthorhynchus tenuirostris": {
+    "display_label": "Eastern Spinebill",
+    "scientific_name": "Acanthorhynchus tenuirostris",
+    "genus": "Acanthorhynchus",
+    "family": "Meliphagidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Canis aureus": {
+    "display_label": "Asian Jackal",
+    "scientific_name": "Canis aureus",
+    "genus": "Canis",
+    "family": "Canidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Alouatta palliata": {
+    "display_label": "Mantled Howler Monkey",
+    "scientific_name": "Alouatta palliata",
+    "genus": "Alouatta",
+    "family": "Atelidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Cicada orni": {
+    "display_label": "Ash Cicada",
+    "scientific_name": "Cicada orni",
+    "genus": "Cicada",
+    "family": "Cicadidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Sciurus carolinensis": {
+    "display_label": "Eastern Gray Squirrel",
+    "scientific_name": "Sciurus carolinensis",
+    "genus": "Sciurus",
+    "family": "Sciuridae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Acrocephalus australis": {
+    "display_label": "Australian Reed Warbler",
+    "scientific_name": "Acrocephalus australis",
+    "genus": "Acrocephalus",
+    "family": "Acrocephalidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Gryllus bimaculatus": {
+    "display_label": "African Field Cricket",
+    "scientific_name": "Gryllus bimaculatus",
+    "genus": "Gryllus",
+    "family": "Gryllidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Alouatta pigra": {
+    "display_label": "Mexican Black Howler Monkey",
+    "scientific_name": "Alouatta pigra",
+    "genus": "Alouatta",
+    "family": "Atelidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Acrocephalus dumetorum": {
+    "display_label": "Blyth's Reed Warbler",
+    "scientific_name": "Acrocephalus dumetorum",
+    "genus": "Acrocephalus",
+    "family": "Acrocephalidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Pipistrellus pipistrellus": {
+    "display_label": "Common Pipistrelle",
+    "scientific_name": "Pipistrellus pipistrellus",
+    "genus": "Pipistrellus",
+    "family": "Vespertilionidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Aegolius funereus": {
+    "display_label": "Boreal Owl",
+    "scientific_name": "Aegolius funereus",
+    "genus": "Aegolius",
+    "family": "Strigidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Gryllotalpa gryllotalpa": {
+    "display_label": "Mole Cricket",
+    "scientific_name": "Gryllotalpa gryllotalpa",
+    "genus": "Gryllotalpa",
+    "family": "Gryllotalpidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Cicada mordoganensis": {
+    "display_label": "East Aegean Cicada",
+    "scientific_name": "Cicada mordoganensis",
+    "genus": "Cicada",
+    "family": "Cicadidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Trichosurus vulpecula": {
+    "display_label": "Common Brushtail",
+    "scientific_name": "Trichosurus vulpecula",
+    "genus": "Trichosurus",
+    "family": "Phalangeridae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Aeronautes saxatalis": {
+    "display_label": "White-throated Swift",
+    "scientific_name": "Aeronautes saxatalis",
+    "genus": "Aeronautes",
+    "family": "Apodidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Boana pulchella": {
+    "display_label": "Montevideo Tree Frog",
+    "scientific_name": "Boana pulchella",
+    "genus": "Boana",
+    "family": "Hylidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Boana faber": {
+    "display_label": "Blacksmith Tree Frog",
+    "scientific_name": "Boana faber",
+    "genus": "Boana",
+    "family": "Hylidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Apis mellifera": {
+    "display_label": "Western Honey Bee",
+    "scientific_name": "Apis mellifera",
+    "genus": "Apis",
+    "family": "Apidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Acris blanchardi": {
+    "display_label": "Blanchard's Cricket Frog",
+    "scientific_name": "Acris blanchardi",
+    "genus": "Acris",
+    "family": "Hylidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Graptopsaltria nigrofuscata": {
+    "display_label": "Large Brown Cicada",
+    "scientific_name": "Graptopsaltria nigrofuscata",
+    "genus": "Graptopsaltria",
+    "family": "Cicadidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Cacosternum platys": {
+    "display_label": "Flat Dainty frog",
+    "scientific_name": "Cacosternum platys",
+    "genus": "Cacosternum",
+    "family": "Pyxicephalidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Canis familiaris": {
+    "display_label": "Domestic Dog",
+    "scientific_name": "Canis familiaris",
+    "genus": "Canis",
+    "family": "Canidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Breviceps montanus": {
+    "display_label": "Mountain Rain Frog",
+    "scientific_name": "Breviceps montanus",
+    "genus": "Breviceps",
+    "family": "Brevicipitidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Aix sponsa": {
+    "display_label": "Wood Duck",
+    "scientific_name": "Aix sponsa",
+    "genus": "Aix",
+    "family": "Anatidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Accipiter cooperii": {
+    "display_label": "Cooper's Hawk",
+    "scientific_name": "Accipiter cooperii",
+    "genus": "Accipiter",
+    "family": "Accipitridae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Alectoris rufa": {
+    "display_label": "Red-legged Partridge",
+    "scientific_name": "Alectoris rufa",
+    "genus": "Alectoris",
+    "family": "Phasianidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Callosciurus erythraeus": {
+    "display_label": "Pallas's Squirrel",
+    "scientific_name": "Callosciurus erythraeus",
+    "genus": "Callosciurus",
+    "family": "Sciuridae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Castor canadensis": {
+    "display_label": "American Beaver",
+    "scientific_name": "Castor canadensis",
+    "genus": "Castor",
+    "family": "Castoridae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Odocoileus virginianus": {
+    "display_label": "White-tailed Deer",
+    "scientific_name": "Odocoileus virginianus",
+    "genus": "Odocoileus",
+    "family": "Cervidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Actitis hypoleucos": {
+    "display_label": "Common Sandpiper",
+    "scientific_name": "Actitis hypoleucos",
+    "genus": "Actitis",
+    "family": "Scolopacidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Aegolius acadicus": {
+    "display_label": "Northern Saw-whet Owl",
+    "scientific_name": "Aegolius acadicus",
+    "genus": "Aegolius",
+    "family": "Strigidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Cynomys ludovicianus": {
+    "display_label": "Black-tailed Prairie Dog",
+    "scientific_name": "Cynomys ludovicianus",
+    "genus": "Cynomys",
+    "family": "Sciuridae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Acrocephalus schoenobaenus": {
+    "display_label": "Sedge Warbler",
+    "scientific_name": "Acrocephalus schoenobaenus",
+    "genus": "Acrocephalus",
+    "family": "Acrocephalidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Decticus verrucivorus": {
+    "display_label": "Wart-biter",
+    "scientific_name": "Decticus verrucivorus",
+    "genus": "Decticus",
+    "family": "Tettigoniidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Aimophila ruficeps": {
+    "display_label": "Rufous-crowned Sparrow",
+    "scientific_name": "Aimophila ruficeps",
+    "genus": "Aimophila",
+    "family": "Passerellidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Arthroleptis wahlbergii": {
+    "display_label": "Bush Squeaker",
+    "scientific_name": "Arthroleptis wahlbergii",
+    "genus": "Arthroleptis",
+    "family": "Arthroleptidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Crotalus oreganus": {
+    "display_label": "Western Rattlesnake",
+    "scientific_name": "Crotalus oreganus",
+    "genus": "Crotalus",
+    "family": "Viperidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Epidalea calamita": {
+    "display_label": "Natterjack Toad",
+    "scientific_name": "Epidalea calamita",
+    "genus": "Epidalea",
+    "family": "Bufonidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Arunta perulata": {
+    "display_label": "White Drummer",
+    "scientific_name": "Arunta perulata",
+    "genus": "Arunta",
+    "family": "Cicadidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Megaptera novaeangliae": {
+    "display_label": "Humpback Whale",
+    "scientific_name": "Megaptera novaeangliae",
+    "genus": "Megaptera",
+    "family": "Balaenopteridae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Aegithalos caudatus": {
+    "display_label": "Long-tailed Tit",
+    "scientific_name": "Aegithalos caudatus",
+    "genus": "Aegithalos",
+    "family": "Aegithalidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Chorthippus brunneus": {
+    "display_label": "Common Field Grasshopper",
+    "scientific_name": "Chorthippus brunneus",
+    "genus": "Chorthippus",
+    "family": "Acrididae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Macaca cyclopis": {
+    "display_label": "Formosan Rock Macaque",
+    "scientific_name": "Macaca cyclopis",
+    "genus": "Macaca",
+    "family": "Cercopithecidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Amazona viridigenalis": {
+    "display_label": "Red-crowned Parrot",
+    "scientific_name": "Amazona viridigenalis",
+    "genus": "Amazona",
+    "family": "Psittacidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Tamiasciurus douglasii": {
+    "display_label": "Douglas' Squirrel",
+    "scientific_name": "Tamiasciurus douglasii",
+    "genus": "Tamiasciurus",
+    "family": "Sciuridae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Alauda arvensis": {
+    "display_label": "Skylark",
+    "scientific_name": "Alauda arvensis",
+    "genus": "Alauda",
+    "family": "Alaudidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Eunemobius carolinus": {
+    "display_label": "Carolina Ground Cricket",
+    "scientific_name": "Eunemobius carolinus",
+    "genus": "Eunemobius",
+    "family": "Trigonidiidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Acrocephalus orientalis": {
+    "display_label": "Oriental Reed-Warbler",
+    "scientific_name": "Acrocephalus orientalis",
+    "genus": "Acrocephalus",
+    "family": "Acrocephalidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Atrapsalta fuscata": {
+    "display_label": "Small Bark Squeaker",
+    "scientific_name": "Atrapsalta fuscata",
+    "genus": "Atrapsalta",
+    "family": "Cicadidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Bufotes viridis": {
+    "display_label": "Green Toad",
+    "scientific_name": "Bufotes viridis",
+    "genus": "Bufotes",
+    "family": "Bufonidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Alopochen aegyptiaca": {
+    "display_label": "Egyptian Goose",
+    "scientific_name": "Alopochen aegyptiaca",
+    "genus": "Alopochen",
+    "family": "Anatidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Canis latrans": {
+    "display_label": "Coyote",
+    "scientific_name": "Canis latrans",
+    "genus": "Canis",
+    "family": "Canidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Cicada barbara": {
+    "display_label": "Cicada barbara",
+    "scientific_name": "Cicada barbara",
+    "genus": "Cicada",
+    "family": "Cicadidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Bombina bombina": {
+    "display_label": "European Fire-Bellied Toad",
+    "scientific_name": "Bombina bombina",
+    "genus": "Bombina",
+    "family": "Bombinatoridae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Fejervarya limnocharis": {
+    "display_label": "Alpine Cricket Frog",
+    "scientific_name": "Fejervarya limnocharis",
+    "genus": "Fejervarya",
+    "family": "Dicroglossidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Sciurus vulgaris": {
+    "display_label": "Eurasian Red Squirrel",
+    "scientific_name": "Sciurus vulgaris",
+    "genus": "Sciurus",
+    "family": "Sciuridae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Chorthippus biguttulus": {
+    "display_label": "Bow-winged Grasshopper",
+    "scientific_name": "Chorthippus biguttulus",
+    "genus": "Chorthippus",
+    "family": "Acrididae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Petaurus australis": {
+    "display_label": "Yellow-bellied Glider",
+    "scientific_name": "Petaurus australis",
+    "genus": "Petaurus",
+    "family": "Petauridae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Bicolorana bicolor": {
+    "display_label": "Bicolour Meadow Bush-cricket",
+    "scientific_name": "Bicolorana bicolor",
+    "genus": "Bicolorana",
+    "family": "Tettigoniidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Anaxyrus quercicus": {
+    "display_label": "Oak Toad",
+    "scientific_name": "Anaxyrus quercicus",
+    "genus": "Anaxyrus",
+    "family": "Bufonidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Gryllodes sigillatus": {
+    "display_label": "Tropical House Cricket",
+    "scientific_name": "Gryllodes sigillatus",
+    "genus": "Gryllodes",
+    "family": "Gryllidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Petaurus breviceps": {
+    "display_label": "Sugar Glider",
+    "scientific_name": "Petaurus breviceps",
+    "genus": "Petaurus",
+    "family": "Petauridae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Accipiter striatus": {
+    "display_label": "Sharp-shinned Hawk",
+    "scientific_name": "Accipiter striatus",
+    "genus": "Accipiter",
+    "family": "Accipitridae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Anaxyrus americanus": {
+    "display_label": "American Toad",
+    "scientific_name": "Anaxyrus americanus",
+    "genus": "Anaxyrus",
+    "family": "Bufonidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Atrapsalta encaustica": {
+    "display_label": "Black Squeaker",
+    "scientific_name": "Atrapsalta encaustica",
+    "genus": "Atrapsalta",
+    "family": "Cicadidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Eleutherodactylus antillensis": {
+    "display_label": "Antillean Coqui",
+    "scientific_name": "Eleutherodactylus antillensis",
+    "genus": "Eleutherodactylus",
+    "family": "Eleutherodactylidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Pteropus poliocephalus": {
+    "display_label": "Grey-headed Flying-fox",
+    "scientific_name": "Pteropus poliocephalus",
+    "genus": "Pteropus",
+    "family": "Pteropodidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Otospermophilus beecheyi": {
+    "display_label": "California Ground Squirrel",
+    "scientific_name": "Otospermophilus beecheyi",
+    "genus": "Otospermophilus",
+    "family": "Sciuridae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Otospermophilus variegatus": {
+    "display_label": "Rock Squirrel",
+    "scientific_name": "Otospermophilus variegatus",
+    "genus": "Otospermophilus",
+    "family": "Sciuridae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Cacosternum nanum": {
+    "display_label": "Dwarf Dainty Frog",
+    "scientific_name": "Cacosternum nanum",
+    "genus": "Cacosternum",
+    "family": "Pyxicephalidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Accipiter atricapillus": {
+    "display_label": "American Goshawk",
+    "scientific_name": "Accipiter atricapillus",
+    "genus": "Accipiter",
+    "family": "Accipitridae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Bombina variegata": {
+    "display_label": "Yellow-bellied Toad",
+    "scientific_name": "Bombina variegata",
+    "genus": "Bombina",
+    "family": "Bombinatoridae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Allonemobius allardi": {
+    "display_label": "Allard's Ground Cricket",
+    "scientific_name": "Allonemobius allardi",
+    "genus": "Allonemobius",
+    "family": "Trigonidiidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Cacosternum boettgeri": {
+    "display_label": "Boettger's dainty frog",
+    "scientific_name": "Cacosternum boettgeri",
+    "genus": "Cacosternum",
+    "family": "Pyxicephalidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Muntiacus reevesi": {
+    "display_label": "Reeves's Muntjac",
+    "scientific_name": "Muntiacus reevesi",
+    "genus": "Muntiacus",
+    "family": "Cervidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Anaxyrus woodhousii": {
+    "display_label": "Woodhouse's Toad",
+    "scientific_name": "Anaxyrus woodhousii",
+    "genus": "Anaxyrus",
+    "family": "Bufonidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Canis lupus": {
+    "display_label": "Gray Wolf",
+    "scientific_name": "Canis lupus",
+    "genus": "Canis",
+    "family": "Canidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Acrocephalus agricola": {
+    "display_label": "Paddyfield Warbler",
+    "scientific_name": "Acrocephalus agricola",
+    "genus": "Acrocephalus",
+    "family": "Acrocephalidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Breviceps gibbosus": {
+    "display_label": "Giant Rain Frog",
+    "scientific_name": "Breviceps gibbosus",
+    "genus": "Breviceps",
+    "family": "Brevicipitidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Cacosternum australis": {
+    "display_label": "Southern Dainty Frog",
+    "scientific_name": "Cacosternum australis",
+    "genus": "Cacosternum",
+    "family": "Pyxicephalidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Acris gryllus": {
+    "display_label": "Southern Cricket Frog",
+    "scientific_name": "Acris gryllus",
+    "genus": "Acris",
+    "family": "Hylidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Vulpes vulpes": {
+    "display_label": "Red Fox",
+    "scientific_name": "Vulpes vulpes",
+    "genus": "Vulpes",
+    "family": "Canidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Acanthis cabaret": {
+    "display_label": "Lesser Redpoll",
+    "scientific_name": "Acanthis cabaret",
+    "genus": "Acanthis",
+    "family": "Fringillidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Amaurornis phoenicurus": {
+    "display_label": "White-breasted Waterhen",
+    "scientific_name": "Amaurornis phoenicurus",
+    "genus": "Amaurornis",
+    "family": "Rallidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Acanthiza pusilla": {
+    "display_label": "Brown Thornbill",
+    "scientific_name": "Acanthiza pusilla",
+    "genus": "Acanthiza",
+    "family": "Acanthizidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Felis catus": {
+    "display_label": "Domestic Cat",
+    "scientific_name": "Felis catus",
+    "genus": "Felis",
+    "family": "Felidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Alligator mississippiensis": {
+    "display_label": "American Alligator",
+    "scientific_name": "Alligator mississippiensis",
+    "genus": "Alligator",
+    "family": "Alligatoridae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Sciurus niger": {
+    "display_label": "Fox Squirrel",
+    "scientific_name": "Sciurus niger",
+    "genus": "Sciurus",
+    "family": "Sciuridae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Amblycorypha oblongifolia": {
+    "display_label": "Oblong-winged Katydid",
+    "scientific_name": "Amblycorypha oblongifolia",
+    "genus": "Amblycorypha",
+    "family": "Tettigoniidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Breviceps acutirostris": {
+    "display_label": "Strawberry Rain Frog",
+    "scientific_name": "Breviceps acutirostris",
+    "genus": "Breviceps",
+    "family": "Brevicipitidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Alectoris chukar": {
+    "display_label": "Chukar",
+    "scientific_name": "Alectoris chukar",
+    "genus": "Alectoris",
+    "family": "Phasianidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Conocephalus brevipennis": {
+    "display_label": "Short-winged Meadow Katydid",
+    "scientific_name": "Conocephalus brevipennis",
+    "genus": "Conocephalus",
+    "family": "Tettigoniidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Alcedo atthis": {
+    "display_label": "Common Kingfisher",
+    "scientific_name": "Alcedo atthis",
+    "genus": "Alcedo",
+    "family": "Alcedinidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Auscala spinosa": {
+    "display_label": "Creaking Branch Cicada",
+    "scientific_name": "Auscala spinosa",
+    "genus": "Auscala",
+    "family": "Cicadidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Alytes obstetricans": {
+    "display_label": "Common Midwife Toad",
+    "scientific_name": "Alytes obstetricans",
+    "genus": "Alytes",
+    "family": "Alytidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Gekko gecko": {
+    "display_label": "Tokay Gecko",
+    "scientific_name": "Gekko gecko",
+    "genus": "Gekko",
+    "family": "Gekkonidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Acris crepitans": {
+    "display_label": "Northern Cricket Frog",
+    "scientific_name": "Acris crepitans",
+    "genus": "Acris",
+    "family": "Hylidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Adelotus brevis": {
+    "display_label": "Tusked Frog",
+    "scientific_name": "Adelotus brevis",
+    "genus": "Adelotus",
+    "family": "Limnodynastidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Amazona aestiva": {
+    "display_label": "Blue-fronted Parrot",
+    "scientific_name": "Amazona aestiva",
+    "genus": "Amazona",
+    "family": "Psittacidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Birrima castanea": {
+    "display_label": "Red Tree-ticker",
+    "scientific_name": "Birrima castanea",
+    "genus": "Birrima",
+    "family": "Cicadidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Capreolus capreolus": {
+    "display_label": "Western Roe Deer",
+    "scientific_name": "Capreolus capreolus",
+    "genus": "Capreolus",
+    "family": "Cervidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Cervus elaphus": {
+    "display_label": "Red Deer",
+    "scientific_name": "Cervus elaphus",
+    "genus": "Cervus",
+    "family": "Cervidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Cervus canadensis": {
+    "display_label": "Elk",
+    "scientific_name": "Cervus canadensis",
+    "genus": "Cervus",
+    "family": "Cervidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Sciurus griseus": {
+    "display_label": "Western Gray Squirrel",
+    "scientific_name": "Sciurus griseus",
+    "genus": "Sciurus",
+    "family": "Sciuridae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Alisterus scapularis": {
+    "display_label": "Australian King-Parrot",
+    "scientific_name": "Alisterus scapularis",
+    "genus": "Alisterus",
+    "family": "Psittaculidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Urocyon cinereoargenteus": {
+    "display_label": "Gray Fox",
+    "scientific_name": "Urocyon cinereoargenteus",
+    "genus": "Urocyon",
+    "family": "Canidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Crinia parinsignifera": {
+    "display_label": "Eastern Sign-bearing Froglet",
+    "scientific_name": "Crinia parinsignifera",
+    "genus": "Crinia",
+    "family": "Myobatrachidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Alcippe morrisonia": {
+    "display_label": "Morrison's Fulvetta",
+    "scientific_name": "Alcippe morrisonia",
+    "genus": "Alcippe",
+    "family": "Leiothrichidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Gryllotalpa vineae": {
+    "display_label": "Gryllotalpa vineae",
+    "scientific_name": "Gryllotalpa vineae",
+    "genus": "Gryllotalpa",
+    "family": "Gryllotalpidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Aegithina tiphia": {
+    "display_label": "Common Iora",
+    "scientific_name": "Aegithina tiphia",
+    "genus": "Aegithina",
+    "family": "Aegithinidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Cryptotympana facialis": {
+    "display_label": "Black Giant Cicada",
+    "scientific_name": "Cryptotympana facialis",
+    "genus": "Cryptotympana",
+    "family": "Cicadidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Cyclochila australasiae": {
+    "display_label": "Green Grocer",
+    "scientific_name": "Cyclochila australasiae",
+    "genus": "Cyclochila",
+    "family": "Cicadidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Anaxyrus punctatus": {
+    "display_label": "Red-spotted Toad",
+    "scientific_name": "Anaxyrus punctatus",
+    "genus": "Anaxyrus",
+    "family": "Bufonidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Atrapsalta corticina": {
+    "display_label": "Southern Bark Squeaker",
+    "scientific_name": "Atrapsalta corticina",
+    "genus": "Atrapsalta",
+    "family": "Cicadidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Aleeta curvicosta": {
+    "display_label": "Floury Baker",
+    "scientific_name": "Aleeta curvicosta",
+    "genus": "Aleeta",
+    "family": "Cicadidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Acrocephalus arundinaceus": {
+    "display_label": "Great Reed-Warbler",
+    "scientific_name": "Acrocephalus arundinaceus",
+    "genus": "Acrocephalus",
+    "family": "Acrocephalidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Eleutherodactylus campi": {
+    "display_label": "Camp's Chirping Frog",
+    "scientific_name": "Eleutherodactylus campi",
+    "genus": "Eleutherodactylus",
+    "family": "Eleutherodactylidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Glaucomys volans": {
+    "display_label": "Southern Flying Squirrel",
+    "scientific_name": "Glaucomys volans",
+    "genus": "Glaucomys",
+    "family": "Sciuridae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Lontra canadensis": {
+    "display_label": "Northern River Otter",
+    "scientific_name": "Lontra canadensis",
+    "genus": "Lontra",
+    "family": "Mustelidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Chorthippus dorsatus": {
+    "display_label": "Steppe Grasshopper",
+    "scientific_name": "Chorthippus dorsatus",
+    "genus": "Chorthippus",
+    "family": "Acrididae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Cryptotympana atrata": {
+    "display_label": "Eastern horse cicada",
+    "scientific_name": "Cryptotympana atrata",
+    "genus": "Cryptotympana",
+    "family": "Cicadidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Ochotona princeps": {
+    "display_label": "American Pika",
+    "scientific_name": "Ochotona princeps",
+    "genus": "Ochotona",
+    "family": "Ochotonidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Calyptocephalella gayi": {
+    "display_label": "Helmeted Water Toad",
+    "scientific_name": "Calyptocephalella gayi",
+    "genus": "Calyptocephalella",
+    "family": "Calyptocephalellidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Atrapsalta collina": {
+    "display_label": "Sandstone Squeaker",
+    "scientific_name": "Atrapsalta collina",
+    "genus": "Atrapsalta",
+    "family": "Cicadidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Dendropsophus minutus": {
+    "display_label": "Lesser Tree Frog",
+    "scientific_name": "Dendropsophus minutus",
+    "genus": "Dendropsophus",
+    "family": "Hylidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Crinia signifera": {
+    "display_label": "Common Eastern Froglet",
+    "scientific_name": "Crinia signifera",
+    "genus": "Crinia",
+    "family": "Myobatrachidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Agelaioides badius": {
+    "display_label": "Grayish Baywing",
+    "scientific_name": "Agelaioides badius",
+    "genus": "Agelaioides",
+    "family": "Icteridae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Arthroleptella villiersi": {
+    "display_label": "De Villiers's Moss Frog",
+    "scientific_name": "Arthroleptella villiersi",
+    "genus": "Arthroleptella",
+    "family": "Pyxicephalidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Cystosoma saundersii": {
+    "display_label": "Bladder Cicada",
+    "scientific_name": "Cystosoma saundersii",
+    "genus": "Cystosoma",
+    "family": "Cicadidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Tadarida brasiliensis": {
+    "display_label": "Mexican Free-tailed Bat",
+    "scientific_name": "Tadarida brasiliensis",
+    "genus": "Tadarida",
+    "family": "Molossidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Eleutherodactylus planirostris": {
+    "display_label": "Greenhouse Frog",
+    "scientific_name": "Eleutherodactylus planirostris",
+    "genus": "Eleutherodactylus",
+    "family": "Eleutherodactylidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Acanthis flammea": {
+    "display_label": "Common Redpoll",
+    "scientific_name": "Acanthis flammea",
+    "genus": "Acanthis",
+    "family": "Fringillidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Abroscopus albogularis": {
+    "display_label": "Rufous-faced Warbler",
+    "scientific_name": "Abroscopus albogularis",
+    "genus": "Abroscopus",
+    "family": "Scotocercidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Agelaius phoeniceus": {
+    "display_label": "Red-winged Blackbird",
+    "scientific_name": "Agelaius phoeniceus",
+    "genus": "Agelaius",
+    "family": "Icteridae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Gryllus campestris": {
+    "display_label": "European Field Cricket",
+    "scientific_name": "Gryllus campestris",
+    "genus": "Gryllus",
+    "family": "Gryllidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Bufo bufo": {
+    "display_label": "European Toad",
+    "scientific_name": "Bufo bufo",
+    "genus": "Bufo",
+    "family": "Bufonidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Eumodicogryllus bordigalensis": {
+    "display_label": "Verge Cricket",
+    "scientific_name": "Eumodicogryllus bordigalensis",
+    "genus": "Eumodicogryllus",
+    "family": "Gryllidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Anaxyrus fowleri": {
+    "display_label": "Fowler's Toad",
+    "scientific_name": "Anaxyrus fowleri",
+    "genus": "Anaxyrus",
+    "family": "Bufonidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Marmota marmota": {
+    "display_label": "Alpine Marmot",
+    "scientific_name": "Marmota marmota",
+    "genus": "Marmota",
+    "family": "Sciuridae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Anaxyrus terrestris": {
+    "display_label": "Southern Toad",
+    "scientific_name": "Anaxyrus terrestris",
+    "genus": "Anaxyrus",
+    "family": "Bufonidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Cryptotympana takasagona": {
+    "display_label": "Cryptotympana takasagona",
+    "scientific_name": "Cryptotympana takasagona",
+    "genus": "Cryptotympana",
+    "family": "Cicadidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Acrocephalus palustris": {
+    "display_label": "Marsh Warbler",
+    "scientific_name": "Acrocephalus palustris",
+    "genus": "Acrocephalus",
+    "family": "Acrocephalidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Birrima varians": {
+    "display_label": "Black Tree-ticker",
+    "scientific_name": "Birrima varians",
+    "genus": "Birrima",
+    "family": "Cicadidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Duttaphrynus melanostictus": {
+    "display_label": "Common Indian Toad",
+    "scientific_name": "Duttaphrynus melanostictus",
+    "genus": "Duttaphrynus",
+    "family": "Bufonidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Ailuroedus crassirostris": {
+    "display_label": "Green Catbird",
+    "scientific_name": "Ailuroedus crassirostris",
+    "genus": "Ailuroedus",
+    "family": "Ptilonorhynchidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "species::Decticus albifrons": {
+    "display_label": "White-faced Bush-cricket",
+    "scientific_name": "Decticus albifrons",
+    "genus": "Decticus",
+    "family": "Tettigoniidae",
+    "taxonomic_level": "species",
+    "is_negative": false
+  },
+  "negative::dog_bark": {
+    "display_label": "Dog bark",
+    "scientific_name": null,
+    "genus": null,
+    "family": null,
+    "taxonomic_level": "unknown",
+    "is_negative": true
+  },
+  "negative::footsteps_/_gear_rustle": {
+    "display_label": "Footsteps / gear rustle",
+    "scientific_name": null,
+    "genus": null,
+    "family": null,
+    "taxonomic_level": "unknown",
+    "is_negative": true
+  },
+  "negative::silence": {
+    "display_label": "Silence",
+    "scientific_name": null,
+    "genus": null,
+    "family": null,
+    "taxonomic_level": "unknown",
+    "is_negative": true
+  },
+  "negative::human_speech": {
+    "display_label": "Human speech",
+    "scientific_name": null,
+    "genus": null,
+    "family": null,
+    "taxonomic_level": "unknown",
+    "is_negative": true
+  },
+  "negative::wind_/_stream_noise": {
+    "display_label": "Wind / stream noise",
+    "scientific_name": null,
+    "genus": null,
+    "family": null,
+    "taxonomic_level": "unknown",
+    "is_negative": true
+  },
+  "negative::traffic_noise": {
+    "display_label": "Traffic noise",
+    "scientific_name": null,
+    "genus": null,
+    "family": null,
+    "taxonomic_level": "unknown",
+    "is_negative": true
+  }
+}

@@ -2,36 +2,120 @@ package fyi.acmc.trailkarma.ui.history
 
 import android.app.Application
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Forest
-import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material.icons.filled.WaterDrop
-import androidx.compose.material3.*
+import androidx.compose.material3.Badge
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import fyi.acmc.trailkarma.db.AppDatabase
+import fyi.acmc.trailkarma.models.BiodiversityContribution
+import fyi.acmc.trailkarma.models.CloudSyncState
 import fyi.acmc.trailkarma.models.TrailReport
-import fyi.acmc.trailkarma.models.ReportType
-import fyi.acmc.trailkarma.repository.ReportRepository
-import fyi.acmc.trailkarma.ui.rewards.RewardsPalette
+import fyi.acmc.trailkarma.ui.biodiversitySourceLabel
 import fyi.acmc.trailkarma.ui.rewards.TrailKarmaRewardsTheme
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
+
+data class HistoryItem(
+    val id: String,
+    val timestamp: String,
+    val title: String,
+    val subtitle: String,
+    val body: String,
+    val synced: Boolean,
+    val badges: List<Pair<String, Color>>
+)
 
 class ReportHistoryViewModel(app: Application) : AndroidViewModel(app) {
-    val reports = ReportRepository(AppDatabase.get(app).trailReportDao()).allReports
+    private val db = AppDatabase.get(app)
+
+    val history = combine(
+        db.trailReportDao().getAll(),
+        db.biodiversityContributionDao().getSaved()
+    ) { reports, biodiversity ->
+        buildList {
+            addAll(reports.map(::reportItem))
+            addAll(biodiversity.map(::biodiversityItem))
+        }.sortedByDescending { it.timestamp }
+    }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+
+    private fun reportItem(report: TrailReport): HistoryItem = HistoryItem(
+        id = report.reportId,
+        timestamp = report.timestamp,
+        title = report.title,
+        subtitle = report.type.name,
+        body = report.description,
+        synced = report.synced,
+        badges = buildList {
+            add(report.type.name to Color(0xFF546E7A))
+            if (report.source.name == "relayed") add("relayed" to Color(0xFF6D4C41))
+            when {
+                report.rewardClaimed -> add("karma settled" to Color(0xFF2E7D32))
+                report.verificationStatus == "rejected" -> add("rejected" to Color(0xFFC62828))
+                else -> add("pending review" to Color(0xFF1565C0))
+            }
+        }
+    )
+
+    private fun biodiversityItem(item: BiodiversityContribution): HistoryItem = HistoryItem(
+        id = item.id,
+        timestamp = item.createdAt,
+        title = item.finalLabel ?: "Queued local biodiversity capture",
+        subtitle = buildString {
+            append(item.observerDisplayName ?: "unknown hiker")
+            append(" • biodiversity_audio_detection")
+        },
+        body = item.explanation ?: "Audio captured at ${item.createdAt}",
+        synced = item.cloudSyncState == CloudSyncState.SYNCED || item.synced,
+        badges = buildList {
+            add((item.finalTaxonomicLevel ?: "pending") to Color(0xFF1565C0))
+            add((item.confidenceBand ?: item.inferenceState.name.lowercase()) to Color(0xFF00897B))
+            biodiversitySourceLabel(item.classificationSource)?.let { sourceLabel ->
+                add(
+                    sourceLabel to if (item.classificationSource == "heuristic_fallback") {
+                        Color(0xFFEF6C00)
+                    } else {
+                        Color(0xFF455A64)
+                    }
+                )
+            }
+            if (item.photoUri != null) add("photo" to Color(0xFF6A1B9A))
+            if (item.karmaStatus.name == "pending") add("karma pending" to Color(0xFF8E24AA))
+            if (item.collectibleStatus == "verified") add("collectible" to Color(0xFFE7A64F))
+            if (item.lat == null || item.lon == null) add("location missing" to Color(0xFFC62828))
+            add(item.dataShareStatus.replace('_', ' ') to Color(0xFF546E7A))
+        }
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -40,7 +124,7 @@ fun ReportHistoryScreen(
     onBack: () -> Unit = {},
     vm: ReportHistoryViewModel = viewModel()
 ) {
-    val reports by vm.reports.collectAsState(initial = emptyList())
+    val history by vm.history.collectAsState()
 
     TrailKarmaRewardsTheme {
         Scaffold(
@@ -49,9 +133,9 @@ fun ReportHistoryScreen(
                 TopAppBar(
                     title = {
                         Column {
-                            Text("Report ledger")
+                            Text("Trail feed")
                             Text(
-                                "Verification and reward status for every field report",
+                                "Reports and biodiversity contributions stored on this device",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -78,9 +162,9 @@ fun ReportHistoryScreen(
                     )
                     .padding(padding)
             ) {
-                if (reports.isEmpty()) {
+                if (history.isEmpty()) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("No reports yet")
+                        Text("No activity yet")
                     }
                 } else {
                     LazyColumn(
@@ -88,7 +172,7 @@ fun ReportHistoryScreen(
                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        items(reports) { report -> ReportItem(report) }
+                        items(history) { item -> HistoryItemCard(item) }
                     }
                 }
             }
@@ -97,104 +181,49 @@ fun ReportHistoryScreen(
 }
 
 @Composable
-private fun ReportItem(report: TrailReport) {
-    val accent = when (report.type) {
-        ReportType.hazard -> RewardsPalette.Clay
-        ReportType.water -> RewardsPalette.Sky
-        ReportType.species -> RewardsPalette.Moss
-    }
-    val icon: ImageVector = when (report.type) {
-        ReportType.hazard -> Icons.Default.Shield
-        ReportType.water -> Icons.Default.WaterDrop
-        ReportType.species -> Icons.Default.Forest
-    }
-
+private fun HistoryItemCard(item: HistoryItem) {
     Card(
         shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = androidx.compose.foundation.BorderStroke(1.dp, accent.copy(alpha = 0.16f))
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Box(
-                modifier = Modifier
-                    .size(42.dp)
-                    .background(accent.copy(alpha = 0.14f), shape = RoundedCornerShape(14.dp)),
-                contentAlignment = Alignment.Center
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(icon, contentDescription = null, tint = accent)
-            }
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(report.title, style = MaterialTheme.typography.titleMedium)
-                Text(
-                    "${report.type.name.replaceFirstChar(Char::uppercase)} • ${report.timestamp.take(10)}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    AssistChip(
-                        onClick = {},
-                        label = { Text(if (report.synced) "Synced" else "Offline") },
-                        colors = AssistChipDefaults.assistChipColors(
-                            containerColor = if (report.synced) RewardsPalette.Forest.copy(alpha = 0.12f) else RewardsPalette.Gold.copy(alpha = 0.18f),
-                            labelColor = if (report.synced) RewardsPalette.Forest else RewardsPalette.Ink
-                        )
-                    )
-                    AssistChip(
-                        onClick = {},
-                        label = {
-                            Text(
-                                when {
-                                    report.rewardClaimed -> "KARMA settled"
-                                    report.verificationStatus == "rejected" -> "Rejected"
-                                    else -> "Pending review"
-                                }
-                            )
-                        },
-                        colors = AssistChipDefaults.assistChipColors(
-                            containerColor = when {
-                                report.rewardClaimed -> RewardsPalette.Forest.copy(alpha = 0.12f)
-                                report.verificationStatus == "rejected" -> RewardsPalette.Clay.copy(alpha = 0.14f)
-                                else -> RewardsPalette.Sky.copy(alpha = 0.12f)
-                            },
-                            labelColor = when {
-                                report.rewardClaimed -> RewardsPalette.Forest
-                                report.verificationStatus == "rejected" -> RewardsPalette.Clay
-                                else -> RewardsPalette.Sky
-                            }
-                        )
-                    )
-                }
-            }
-            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(
-                    when {
-                        report.rewardClaimed && report.type == ReportType.species && report.highConfidenceBonus -> "+13"
-                        report.rewardClaimed && report.type != ReportType.species -> "+10"
-                        report.rewardClaimed -> "+8"
-                        else -> "--"
-                    },
-                    style = MaterialTheme.typography.titleLarge,
-                    color = if (report.rewardClaimed) accent else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    "KARMA",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                report.rewardTxSignature?.let {
+                Column(Modifier.weight(1f)) {
+                    Text(item.title, style = MaterialTheme.typography.titleMedium)
                     Text(
-                        it.take(10) + "...",
-                        style = MaterialTheme.typography.labelSmall,
+                        item.subtitle,
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+                Badge(containerColor = if (item.synced) Color(0xFF2E7D32) else Color(0xFFEF6C00)) {
+                    Text(if (item.synced) "saved" else "offline")
+                }
             }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                item.badges.forEach { (label, color) ->
+                    Badge(containerColor = color) {
+                        Text(label)
+                    }
+                }
+            }
+
+            Text(item.body, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                item.timestamp,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

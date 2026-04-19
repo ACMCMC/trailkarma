@@ -16,10 +16,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Mail
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Route
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -58,10 +60,18 @@ import fyi.acmc.trailkarma.ui.feedback.FeedbackTone
 import fyi.acmc.trailkarma.ui.feedback.TrailFeedbackBus
 import fyi.acmc.trailkarma.ui.rewards.RewardsPalette
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.util.UUID
+
+data class BiodiversityProfileStats(
+    val savedCount: Int = 0,
+    val verifiedCount: Int = 0,
+    val pendingCollectibles: Int = 0,
+    val distinctLabels: Int = 0
+)
 
 class ProfileViewModel(app: Application) : AndroidViewModel(app) {
     private val db = AppDatabase.get(app)
@@ -73,9 +83,21 @@ class ProfileViewModel(app: Application) : AndroidViewModel(app) {
     private val _contacts = MutableStateFlow<List<TrustedContact>>(emptyList())
     val contacts = _contacts
     val saving = MutableStateFlow(false)
+    private val _biodiversityStats = MutableStateFlow(BiodiversityProfileStats())
+    val biodiversityStats = _biodiversityStats
 
     init {
         refresh()
+        viewModelScope.launch {
+            db.biodiversityContributionDao().getSaved().collectLatest { contributions ->
+                _biodiversityStats.value = BiodiversityProfileStats(
+                    savedCount = contributions.size,
+                    verifiedCount = contributions.count { it.collectibleStatus == "verified" },
+                    pendingCollectibles = contributions.count { it.collectibleStatus == "pending_verification" },
+                    distinctLabels = contributions.mapNotNull { it.finalLabel }.distinct().size
+                )
+            }
+        }
     }
 
     fun refresh() {
@@ -148,6 +170,7 @@ fun ProfileScreen(
     val user by vm.user.collectAsState()
     val contacts by vm.contacts.collectAsState()
     val saving by vm.saving.collectAsState()
+    val biodiversityStats by vm.biodiversityStats.collectAsState()
 
     var displayName by remember(user?.userId) { mutableStateOf(user?.displayName.orEmpty()) }
     var realName by remember(user?.userId) { mutableStateOf(user?.realName.orEmpty()) }
@@ -206,6 +229,29 @@ fun ProfileScreen(
                                 )
                             }
                         )
+                    }
+
+                    item {
+                        TrailSectionCard(title = "Biodiversity ledger", accent = RewardsPalette.Moss) {
+                            TrailListRow(
+                                title = "${biodiversityStats.savedCount} saved field records",
+                                subtitle = "Observer-linked biodiversity events that can be exported to partners later.",
+                                icon = Icons.Default.Mic,
+                                accent = RewardsPalette.Moss
+                            )
+                            TrailListRow(
+                                title = "${biodiversityStats.pendingCollectibles} collectible checks pending",
+                                subtitle = "Eligible audio contributions waiting on verification and blockchain settlement.",
+                                icon = Icons.Default.Sync,
+                                accent = RewardsPalette.Gold
+                            )
+                            TrailListRow(
+                                title = "${biodiversityStats.verifiedCount} verified collectibles",
+                                subtitle = "${biodiversityStats.distinctLabels} unique taxa recorded by this profile so far.",
+                                icon = Icons.Default.Verified,
+                                accent = RewardsPalette.Forest
+                            )
+                        }
                     }
 
                     item {
