@@ -6,7 +6,10 @@ import androidx.room.PrimaryKey
 @Entity(tableName = "users")
 data class User(
     @PrimaryKey val userId: String,
-    val displayName: String
+    val displayName: String,
+    val walletPublicKey: String = "",
+    val solanaRegistered: Boolean = false,
+    val lastWalletSyncAt: String? = null
 )
 
 @Entity(tableName = "location_updates")
@@ -35,7 +38,15 @@ data class TrailReport(
     val speciesName: String? = null,
     val confidence: Float? = null,
     val source: ReportSource = ReportSource.self,
-    val synced: Boolean = false
+    val synced: Boolean = false,
+    val verificationStatus: String = "pending",
+    val verificationTier: String? = null,
+    val rewardClaimed: Boolean = false,
+    val rewardTxSignature: String? = null,
+    val metadataHash: String? = null,
+    val photoUri: String? = null,
+    val audioUri: String? = null,
+    val highConfidenceBonus: Boolean = false
 )
 
 @Entity(tableName = "relay_packets")
@@ -45,4 +56,25 @@ data class RelayPacket(
     val receivedAt: String,
     val senderDevice: String,
     val uploaded: Boolean = false
+)
+
+@Entity(tableName = "relay_job_intents")
+data class RelayJobIntent(
+    @PrimaryKey val jobId: String,
+    val userId: String,
+    val senderWallet: String,
+    val destinationHash: String,
+    val payloadHash: String,
+    val expiryTs: Long,
+    val rewardAmount: Int,
+    val nonce: Long,
+    val signedMessageBase64: String,
+    val signatureBase64: String,
+    val source: String = "self",
+    val status: String = "pending",
+    val proofRef: String? = null,
+    val openedTxSignature: String? = null,
+    val fulfilledTxSignature: String? = null,
+    val createdAt: String,
+    val synced: Boolean = false
 )

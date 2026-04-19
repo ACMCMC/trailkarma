@@ -19,4 +19,6 @@ class UserRepository(private val context: Context, private val dao: UserDao) {
         dao.insert(user)
         context.dataStore.edit { it[KEY_USER_ID] = user.userId }
     }
+
+    suspend fun currentUser(): User? = dao.getFirst()
 }

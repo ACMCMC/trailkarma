@@ -44,7 +44,10 @@ class MainActivity : ComponentActivity() {
             seedDatabaseIfEmpty(db)
 
             val syncRepo = DatabricksSyncRepository(applicationContext, db)
-            if (BuildConfig.DATABRICKS_TOKEN.isNotEmpty()) {
+            if (BuildConfig.DATABRICKS_URL.isNotEmpty() &&
+                BuildConfig.DATABRICKS_TOKEN.isNotEmpty() &&
+                BuildConfig.DATABRICKS_WAREHOUSE.isNotEmpty()
+            ) {
                 syncRepo.setDatabricksConfig(
                     url = BuildConfig.DATABRICKS_URL,
                     token = BuildConfig.DATABRICKS_TOKEN,

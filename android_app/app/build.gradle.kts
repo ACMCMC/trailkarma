@@ -22,6 +22,10 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:3000\"")
+        val rewardsBaseUrl = project.findProperty("rewards.url")?.toString()
+            ?: System.getenv("REWARDS_BASE_URL")
+            ?: "http://10.0.2.2:3000"
+        buildConfigField("String", "REWARDS_BASE_URL", "\"$rewardsBaseUrl\"")
 
         // Databricks credentials
         val databricksUrl = project.findProperty("databricks.url")?.toString()
@@ -32,7 +36,7 @@ android {
             ?: ""
         val databricksWarehouse = project.findProperty("databricks.warehouse")?.toString()
             ?: System.getenv("DATABRICKS_WAREHOUSE")
-            ?: ""
+            ?: "5fa7bca37483870e"
 
         buildConfigField("String", "DATABRICKS_URL", "\"$databricksUrl\"")
         buildConfigField("String", "DATABRICKS_TOKEN", "\"$databricksToken\"")
@@ -89,6 +93,7 @@ dependencies {
     implementation(libs.retrofit.converter.moshi)
     implementation(libs.okhttp.logging)
     implementation(libs.moshi.kotlin)
+    implementation(libs.androidx.security.crypto)
 
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)

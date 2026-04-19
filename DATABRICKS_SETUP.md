@@ -21,6 +21,7 @@ Also copy your workspace URL from the browser:
 # Option A: Export directly
 export DATABRICKS_HOST=https://your-workspace.cloud.databricks.com
 export DATABRICKS_TOKEN=dapi...
+export DATABRICKS_WAREHOUSE=5fa7bca37483870e
 
 # Option B: Create .env file (easier for reuse)
 cp .env.example .env
@@ -52,7 +53,7 @@ Safe to run anytime—drops old tables and creates fresh ones.
 ## What Gets Created
 
 ```
-main.trailkarma/
+trailkarma/
 ├── users (3 demo hikers)
 ├── trail_reports (5 reports: 2 hazards, 1 water, 2 species)
 ├── location_updates (3 GPS pings)
@@ -135,7 +136,7 @@ Run these in Databricks SQL to impress judges:
 ```sql
 -- Active hazards on PCT around current location
 SELECT title, description, lat, lng, timestamp
-FROM main.trailkarma.trail_reports
+FROM trailkarma.trail_reports
 WHERE type = 'hazard'
 AND ABS(lat - 32.88) < 0.05
 AND ABS(lng + 117.24) < 0.05
@@ -143,12 +144,12 @@ ORDER BY timestamp DESC;
 
 -- Species sightings heatmap
 SELECT lat, lng, species_name, confidence, COUNT(*) as sightings
-FROM main.trailkarma.trail_reports
+FROM trailkarma.trail_reports
 WHERE type = 'species'
 GROUP BY lat, lng, species_name, confidence;
 
 -- Real-time hiker positions
-SELECT * FROM main.trailkarma.location_updates
+SELECT * FROM trailkarma.location_updates
 ORDER BY timestamp DESC LIMIT 10;
 ```
 

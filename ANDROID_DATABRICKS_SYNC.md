@@ -22,9 +22,9 @@ import fyi.acmc.trailkarma.db.AppDatabase
 val db = AppDatabase.get(this)
 val syncRepo = DatabricksSyncRepository(this, db)
 syncRepo.setDatabricksConfig(
-    url = "https://your-workspace.cloud.databricks.com",
+    url = "https://dbc-f1d1578e-8435.cloud.databricks.com",
     token = "dapi...",  // Your Databricks personal access token
-    warehouse = "warehouse-id"  // Your SQL warehouse ID
+    warehouse = "5fa7bca37483870e"  // Current SQL warehouse ID
 )
 ```
 

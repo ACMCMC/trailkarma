@@ -33,7 +33,9 @@ fun TrailKarmaNavGraph(navController: NavHostController, startDestination: Strin
         composable(Routes.MAP) {
             MapScreen(
                 onNavigateToCamera = { navController.navigate(Routes.CAMERA) },
-                onNavigateToReport = { navController.navigate(Routes.CREATE_REPORT) }
+                onNavigateToReport = { navController.navigate(Routes.CREATE_REPORT) },
+                onNavigateToBle = { navController.navigate(Routes.BLE) },
+                onNavigateToHistory = { navController.navigate(Routes.HISTORY) }
             )
         }
         composable(Routes.CAMERA) {

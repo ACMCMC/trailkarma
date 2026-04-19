@@ -3,10 +3,13 @@ package fyi.acmc.trailkarma.ui.map
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import fyi.acmc.trailkarma.api.WalletStateResponse
 import fyi.acmc.trailkarma.db.AppDatabase
 import fyi.acmc.trailkarma.models.LocationUpdate
 import fyi.acmc.trailkarma.models.TrailReport
+import fyi.acmc.trailkarma.repository.RewardsRepository
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
 import org.osmdroid.util.GeoPoint
 
 data class MapMarker(
@@ -19,10 +22,12 @@ data class MapMarker(
 
 class MapViewModel(app: Application) : AndroidViewModel(app) {
     private val db = AppDatabase.get(app)
+    private val rewardsRepository = RewardsRepository(app, db)
 
     val reports: Flow<List<TrailReport>> = db.trailReportDao().getAll()
     val userLocation: Flow<LocationUpdate?> = db.locationUpdateDao().getLatest()
     val selectedReport = MutableStateFlow<TrailReport?>(null)
+    val walletState = MutableStateFlow<WalletStateResponse?>(null)
 
     // Combined markers for the map
     val mapMarkers: Flow<List<MapMarker>> = combine(
@@ -68,5 +73,15 @@ class MapViewModel(app: Application) : AndroidViewModel(app) {
 
     fun selectReport(report: TrailReport?) {
         selectedReport.value = report
+    }
+
+    init {
+        refreshWalletState()
+    }
+
+    fun refreshWalletState() {
+        viewModelScope.launch {
+            walletState.value = rewardsRepository.fetchWalletState() ?: rewardsRepository.syncCurrentUserRegistration()
+        }
     }
 }

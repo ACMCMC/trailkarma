@@ -47,9 +47,29 @@ private fun ReportItem(report: TrailReport) {
             Column(Modifier.weight(1f)) {
                 Text(report.title, style = MaterialTheme.typography.titleSmall)
                 Text("${report.type.name} • ${report.timestamp.take(10)}", style = MaterialTheme.typography.bodySmall)
+                report.rewardTxSignature?.let {
+                    Text("tx ${it.take(10)}...", style = MaterialTheme.typography.labelSmall)
+                }
             }
-            Badge(containerColor = if (report.synced) Color(0xFF4CAF50) else Color(0xFFFF9800)) {
-                Text(if (report.synced) "synced" else "offline")
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp), horizontalAlignment = Alignment.End) {
+                Badge(containerColor = if (report.synced) Color(0xFF4CAF50) else Color(0xFFFF9800)) {
+                    Text(if (report.synced) "synced" else "offline")
+                }
+                Badge(
+                    containerColor = when {
+                        report.rewardClaimed -> Color(0xFF2E7D32)
+                        report.verificationStatus == "rejected" -> Color(0xFFC62828)
+                        else -> Color(0xFF1565C0)
+                    }
+                ) {
+                    Text(
+                        when {
+                            report.rewardClaimed -> "karma"
+                            report.verificationStatus == "rejected" -> "rejected"
+                            else -> "pending"
+                        }
+                    )
+                }
             }
         }
     }

@@ -30,8 +30,7 @@ fun LoginScreen(onLoginSuccess: () -> Unit, vm: LoginViewModel = viewModel()) {
         Button(
             onClick = {
                 if (name.isNotBlank()) {
-                    vm.login(name.trim())
-                    onLoginSuccess()
+                    vm.login(name.trim(), onLoginSuccess)
                 }
             },
             modifier = Modifier.fillMaxWidth()

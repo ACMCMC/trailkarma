@@ -51,3 +51,10 @@ captures/
 
 *.env
 .env
+node_modules/
+dist/
+backend/trailkarma.db
+backend/keys/
+backend/.env
+.localnet-ledger/
+solana/target/

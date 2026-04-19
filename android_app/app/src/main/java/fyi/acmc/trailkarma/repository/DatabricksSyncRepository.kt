@@ -28,6 +28,9 @@ class DatabricksSyncRepository(context: Context, private val db: AppDatabase) {
     private val databricksToken: String
         get() = prefs.getString("databricks_token", "") ?: ""
 
+    fun isConfigured(): Boolean =
+        warehouseId.isNotEmpty() && databricksUrl.isNotEmpty() && databricksToken.isNotEmpty()
+
     fun setDatabricksConfig(url: String, token: String, warehouse: String) {
         prefs.edit().apply {
             putString("databricks_url", url)

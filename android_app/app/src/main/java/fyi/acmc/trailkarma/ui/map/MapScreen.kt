@@ -36,12 +36,19 @@ import java.util.*
 fun MapScreen(
     onNavigateToCamera: () -> Unit = {},
     onNavigateToReport: () -> Unit = {},
+    onNavigateToBle: () -> Unit = {},
+    onNavigateToHistory: () -> Unit = {},
     vm: MapViewModel = viewModel()
 ) {
     val context = LocalContext.current
     val reports by vm.reports.collectAsState(initial = emptyList())
     val userLocation by vm.userLocation.collectAsState(initial = null)
     val selectedReport by vm.selectedReport.collectAsState(initial = null)
+    val walletState by vm.walletState.collectAsState()
+
+    LaunchedEffect(reports.count { it.rewardClaimed }, reports.count { it.verificationStatus == "rejected" }) {
+        vm.refreshWalletState()
+    }
 
     var mapView: MapView? by remember { mutableStateOf(null) }
 
@@ -159,6 +166,27 @@ fun MapScreen(
             }
         }
 
+        walletState?.let { state ->
+            Card(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(WindowInsets.systemBars.asPaddingValues())
+                    .padding(start = 12.dp, top = 96.dp),
+                shape = RoundedCornerShape(8.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+            ) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("KARMA", style = MaterialTheme.typography.labelSmall, fontSize = 11.sp)
+                    Text(state.karmaBalance, style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        if (state.badges.isEmpty()) "No badges yet" else state.badges.joinToString(" • "),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontSize = 9.sp
+                    )
+                }
+            }
+        }
+
         // Legend (top-right)
         Card(
             modifier = Modifier
@@ -184,7 +212,7 @@ fun MapScreen(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(20.dp)
-                .padding(bottom = 280.dp),
+                .padding(bottom = 220.dp),
             containerColor = MaterialTheme.colorScheme.primary
         ) {
             Icon(Icons.Default.PhotoCamera, contentDescription = "Identify Species", tint = Color.White)
@@ -196,11 +224,35 @@ fun MapScreen(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(20.dp)
-                .padding(bottom = 360.dp),
+                .padding(bottom = 300.dp),
             containerColor = MaterialTheme.colorScheme.secondary,
             shape = CircleShape
         ) {
             Icon(Icons.Default.Add, contentDescription = "Add Report", tint = Color.White)
+        }
+
+        FloatingActionButton(
+            onClick = onNavigateToBle,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(20.dp)
+                .padding(bottom = 380.dp),
+            containerColor = MaterialTheme.colorScheme.tertiary,
+            shape = CircleShape
+        ) {
+            Icon(Icons.Default.Bluetooth, contentDescription = "Relay Jobs", tint = Color.White)
+        }
+
+        FloatingActionButton(
+            onClick = onNavigateToHistory,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(20.dp)
+                .padding(bottom = 460.dp),
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            shape = CircleShape
+        ) {
+            Icon(Icons.AutoMirrored.Filled.List, contentDescription = "History", tint = MaterialTheme.colorScheme.onSurface)
         }
 
         // Bottom sheet - reports or detail
