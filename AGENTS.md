@@ -23,36 +23,14 @@ Contributors should preserve these constraints:
 - enforce End-to-Oracle Privacy: sensitive relay payloads (recipient, message) must be ECIES-encrypted on-device for the backend; carriers should remain "blind" and anonymous
 
 ## Android Agent Loop
-
-For Android work in this repo, prefer a repeatable emulator loop instead of manual Android Studio clicking.
-
-Terminal control plane:
-
-- `scripts/android-sdk-bootstrap.sh`
-  - installs Android command-line tools if missing
-  - installs the API 36.1 Google APIs ARM64 system image used by the repo smoke loop
-- `scripts/android-avd-create.sh [trailkarma-api36-1]`
-  - creates the named AVD used for local testing
-- `scripts/android-emulator-start.sh [trailkarma-api36-1]`
-  - starts the emulator, waits for boot completion, and disables animations
-- `scripts/android-install-debug.sh`
-  - builds `:app:assembleDebug`, installs the APK, and grants runtime permissions
-- `scripts/android-ui-dump.sh [.artifacts/android-ui]`
-  - saves a screenshot and `uiautomator` XML dump for debugging
-- `scripts/android-smoke-loop.sh`
-  - starts emulator, installs app, checks launch for `AndroidRuntime` crashes, runs connected Android smoke tests, and captures UI artifacts
-- `scripts/android-physical-install-debug.sh`
-  - installs a debug build for a USB-connected phone
-  - applies `adb reverse tcp:3000 tcp:3000`
-  - builds the app with `api.baseUrl` and `rewards.url` pointed at `http://127.0.0.1:3000`
-- `scripts/android-physical-logcat.sh {start|stop|status}`
-  - captures a full physical-device `logcat` stream into `.artifacts/physical-device/<session>/logcat.txt`
-- `scripts/android-physical-capture.sh`
-  - captures a screenshot, UI hierarchy dump, and window/activity dumps from the USB phone
-- `scripts/android-physical-debug-loop.sh`
-  - verifies the local backend at `http://127.0.0.1:3000/health`
-  - installs the build on the USB phone
-  - starts background `logcat` capture for a named manual-testing session
+Prefer the emulator loop over manual IDE actions:
+- `scripts/android-sdk-bootstrap.sh`: Install tools/images.
+- `scripts/android-avd-create.sh`: Create AVD.
+- `scripts/android-emulator-start.sh`: Start emulator.
+- `scripts/android-install-debug.sh`: Build and install APK.
+- `scripts/android-smoke-loop.sh`: Run full smoke test suite.
+- `scripts/android-physical-debug-loop.sh`: Setup backend reverse-proxy and install on USB phone.
+- `scripts/android-physical-capture.sh`: Screenshot and UI dump from physical device.
 
 Current smoke test coverage:
 
@@ -76,19 +54,9 @@ Preferred workflow after Android edits:
    - `.artifacts/android-smoke/ui/screen.png`
 
 ## Physical Device Loop
-
-For a USB-connected Android phone:
-
-1. Start the local backend on the laptop so `http://127.0.0.1:3000/health` responds.
-2. Run `SESSION_NAME=<label> scripts/android-physical-debug-loop.sh`
-3. Reproduce the flow manually on the phone.
-4. If something looks wrong, run `SESSION_NAME=<label> scripts/android-physical-capture.sh`
-5. When done, run `SESSION_NAME=<label> scripts/android-physical-logcat.sh stop`
-
-Important details:
-
-- these scripts auto-select the first USB-connected Android device unless `ANDROID_SERIAL` is set
-- the phone reaches the laptop backend through `adb reverse`, not `10.0.2.2`
-- artifacts land in `.artifacts/physical-device/<session>/`
-- the default package is `fyi.acmc.trailkarma`
-- if install fails with `INSTALL_FAILED_UPDATE_INCOMPATIBLE`, rerun with `FORCE_UNINSTALL_ON_SIGNATURE_MISMATCH=1` to remove the old app and install the new debug build
+For USB-connected phones:
+1. Start backend.
+2. `SESSION_NAME=<label> scripts/android-physical-debug-loop.sh`
+3. Reproduce flow manually.
+4. `scripts/android-physical-capture.sh` for debugging artifacts.
+5. `scripts/android-physical-logcat.sh stop`.

@@ -14,6 +14,7 @@ import fyi.acmc.trailkarma.models.User
 import fyi.acmc.trailkarma.network.NetworkUtil
 import fyi.acmc.trailkarma.solana.SolanaPayloadCodec
 import fyi.acmc.trailkarma.util.CryptoUtil
+import fyi.acmc.trailkarma.util.EncryptionUtil
 import fyi.acmc.trailkarma.wallet.WalletManager
 import org.json.JSONObject
 import java.time.Instant

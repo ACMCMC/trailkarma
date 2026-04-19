@@ -1,100 +1,19 @@
-# TrailKarma
+## Overview
+TrailKarma is an offline-first hiking app built for DataHacks 2026. It features:
+- **Offline-first Android App**: Reports, locations, and biodiversity capture (Room + WorkManager).
+- **Mesh Relay**: BLE-based phone-to-phone data carriage for offline signal areas.
+- **Privacy**: End-to-Oracle encryption (X25519) to keep messages private from mesh carriers.
+- **Solana Rewards**: KARMA rewards for hazards, wildlife reports, and relay fulfillment.
+- **Voice Relay**: Hybrid ElevenLabs/Twilio outbound calling from signed offline intents.
+- **Biodiversity**: On-device audio classification and Databricks mirroring.
 
-TrailKarma is an offline-first hiking app prototype built for DataHacks 2026. The current repository contains a working Android client, a hybrid Solana rewards layer, a TypeScript relay/rewards backend, a Python biodiversity backend, Databricks sync utilities, and a small React web demo.
-
-## What Exists Today
-
-The current hackathon build implements the following end-to-end pieces:
-
-- Offline-first Android app built with Kotlin, Jetpack Compose, Room, WorkManager, BLE, CameraX, and OSMDroid.
-- Local trail reporting for hazards, water, and species observations.
-- Continuous local location logging plus online sync of reports, locations, trails, and relay packets to Databricks SQL.
-- BLE packet exchange for reports and relay packets so nearby phones can carry data without internet.
-- Hybrid Solana rewards flow with app-managed wallets, KARMA balances, badge claims, relay jobs, and KARMA tipping.
-- Voice relay jobs that are signed on-device, carried offline, then opened and fulfilled through the backend when connectivity returns.
-- End-to-Oracle Privacy: All relay payloads are ECIES-encrypted at the source so that intermediate mesh carriers cannot read the messages.
-- Offline biodiversity audio capture with on-device inference, optional photo attachment, local ledgering, and backend mirroring.
-- Android smoke-test scripts for emulator and physical-device loops.
-- A React/Vite landing-page demo that shows the product concept with mock data.
-
-This is an integrated prototype, not a finished production system. Some parts are live and connected, while a few of the original product goals are still represented as scaffolding, demo logic, or next-step work.
-
-## Current Architecture
-
-TrailKarma is intentionally hybrid:
-
-- `android_app/`
-  Android remains the source of truth for offline activity. It stores reports, biodiversity observations, relay jobs, relay inbox messages, location updates, and wallet state locally in Room.
-- `backend/`
-  Contains two services:
-  - a TypeScript sponsor/attestor backend for Solana rewards and voice relay jobs
-  - a Python FastAPI biodiversity backend for audio/photo ingestion and Databricks mirroring
-- `solana/`
-  Anchor program for reward state, uniqueness, relay-job settlement, KARMA issuance, badge ownership, and tipping.
-- `web/`
-  React/Vite demo site with mock trail-tracker and map views.
-- `scripts/`
-  Android emulator, install, smoke-test, and physical-device helper scripts.
-
-## Implemented Android Features
-
-- Local user profile with trail name, callback number, relay defaults, and trusted contacts.
-- Compose navigation for map, report creation, report history, biodiversity capture, rewards, profile, relay hub, and status screens.
-- Offline storage for:
-  - trail reports
-  - biodiversity contributions
-  - relay packets
-  - relay job intents
-  - relay inbox replies
-  - location updates
-  - trails
-- BLE foreground service plus GATT client/server exchange.
-- On-device Solana wallet generation and signing.
-- Rewards screen with KARMA balance, badge progress, collectible UI, and activity feed.
-- Relay Hub screen for voice relay mission creation, sync, and inbox review.
-- Biodiversity capture flow for 5-second audio recording, local inference, save-to-ledger, and photo attachment.
-
-## Implemented Backend Features
-
-### TypeScript rewards / voice-relay service
-
-- Registers app users on-chain and tracks wallet state.
-- Claims contribution rewards for hazard, water, and species reports.
-- Opens and fulfills relay jobs on Solana Devnet.
-- Prepares and submits signed KARMA tips.
-- Stores audit and relay state in local SQLite.
-- Integrates with ElevenLabs/Twilio for outbound relay calling when configured.
-- Exposes mobile-facing endpoints under `/v1/...`.
-
-### Python biodiversity service
-
-- Accepts audio observations and photo attachments.
-- Stores observation artifacts locally.
-- Runs backend acoustic inference when using `/api/biodiversity/audio`.
-- Accepts already-classified on-device observations through `/api/biodiversity/audio-sync`.
-- Mirrors biodiversity observations into Databricks when credentials are configured.
-
-## Solana Scope
-
-The on-chain layer is intentionally narrow. Hiking workflows are not moved wholesale to Solana.
-
-Solana is currently used for:
-
-- user registration
-- contribution reward receipts
-- KARMA minting
-- badge eligibility and badge ownership
-- relay-job uniqueness and first-fulfiller settlement
-- signed KARMA tipping
-
-Off-chain systems still own:
-
-- report capture
-- biodiversity capture
-- BLE exchange
-- delayed message authoring
-- outbound voice delivery
-- Databricks analytics
+## Repository Structure
+- `android_app/`: Kotlin/Compose app with Room, BLE, and Solana wallet.
+- `backend/`: TypeScript rewards/relay service & Python biodiversity API.
+- `solana/`: Anchor program for rewards, relay settlement, and KARMA.
+- `web/`: React/Vite product demo.
+- `scripts/`: Android automation (emulator, smoke tests, physical device).
+- `docs/`: Feature-specific documentation.
 
 ## Repo Layout
 
