@@ -10,6 +10,8 @@ import fyi.acmc.trailkarma.models.ReportSource
 import fyi.acmc.trailkarma.models.ReportType
 import fyi.acmc.trailkarma.models.TrailReport
 import fyi.acmc.trailkarma.repository.ReportRepository
+import fyi.acmc.trailkarma.repository.UserRepository
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.util.UUID
@@ -22,9 +24,14 @@ class CreateReportViewModel(app: Application) : AndroidViewModel(app) {
     fun save(type: ReportType, title: String, description: String, speciesName: String?) {
         fusedLocation.lastLocation.addOnSuccessListener { loc ->
             viewModelScope.launch {
+                val db = AppDatabase.get(getApplication())
+                val userRepo = UserRepository(getApplication(), db.userDao())
+                val userId = userRepo.currentUserId.first() ?: "unknown"
+
                 repo.save(
                     TrailReport(
                         reportId = UUID.randomUUID().toString(),
+                        userId = userId,
                         type = type,
                         title = title,
                         description = description,

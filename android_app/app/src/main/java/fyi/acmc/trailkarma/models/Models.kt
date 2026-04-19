@@ -12,6 +12,7 @@ data class User(
 @Entity(tableName = "location_updates")
 data class LocationUpdate(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val userId: String,
     val timestamp: String,
     val lat: Double,
     val lng: Double,
@@ -24,6 +25,7 @@ enum class ReportSource { self, relayed }
 @Entity(tableName = "trail_reports")
 data class TrailReport(
     @PrimaryKey val reportId: String,
+    val userId: String,
     val type: ReportType,
     val title: String,
     val description: String,

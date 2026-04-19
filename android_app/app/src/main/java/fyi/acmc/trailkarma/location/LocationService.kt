@@ -8,8 +8,10 @@ import androidx.core.app.NotificationCompat
 import com.google.android.gms.location.*
 import fyi.acmc.trailkarma.db.AppDatabase
 import fyi.acmc.trailkarma.models.LocationUpdate
+import fyi.acmc.trailkarma.repository.UserRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.time.Instant
 
@@ -36,8 +38,11 @@ class LocationService : Service() {
             override fun onLocationResult(result: LocationResult) {
                 val loc = result.lastLocation ?: return
                 scope.launch {
-                    AppDatabase.get(applicationContext).locationUpdateDao().insert(
-                        LocationUpdate(lat = loc.latitude, lng = loc.longitude, timestamp = Instant.now().toString())
+                    val db = AppDatabase.get(applicationContext)
+                    val userRepo = UserRepository(applicationContext, db.userDao())
+                    val userId = userRepo.currentUserId.first() ?: "unknown"
+                    db.locationUpdateDao().insert(
+                        LocationUpdate(userId = userId, lat = loc.latitude, lng = loc.longitude, timestamp = Instant.now().toString())
                     )
                 }
             }

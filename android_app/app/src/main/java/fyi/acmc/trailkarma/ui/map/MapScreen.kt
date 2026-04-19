@@ -50,6 +50,7 @@ fun MapScreen(
         listOf(
             TrailReport(
                 reportId = "mock-1",
+                userId = "demo",
                 type = ReportType.hazard,
                 title = "Rockslide ahead",
                 description = "Section near mile 24 has debris",
@@ -60,6 +61,7 @@ fun MapScreen(
             ),
             TrailReport(
                 reportId = "mock-2",
+                userId = "demo",
                 type = ReportType.hazard,
                 title = "Rattlesnake spotted",
                 description = "Stay alert, seen near water source",
@@ -70,6 +72,7 @@ fun MapScreen(
             ),
             TrailReport(
                 reportId = "mock-3",
+                userId = "demo",
                 type = ReportType.water,
                 title = "Water source confirmed",
                 description = "Spring flowing, fresh water tested",

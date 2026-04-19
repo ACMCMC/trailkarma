@@ -53,8 +53,8 @@ class DatabricksSyncRepository(context: Context, private val db: AppDatabase) {
 
             val sql = """
                 INSERT INTO trailkarma.trail_reports
-                (report_id, type, title, description, lat, lng, timestamp, species_name, confidence, source, synced)
-                VALUES ('${report.reportId}', '${report.type.name}', '${report.title}',
+                (report_id, user_id, type, title, description, lat, lng, timestamp, species_name, confidence, source, synced)
+                VALUES ('${report.reportId}', '${report.userId}', '${report.type.name}', '${report.title}',
                 '${report.description}', ${report.lat}, ${report.lng}, '${report.timestamp}',
                 $species, $confVal, '${report.source.name}', true)
             """.trimIndent()
@@ -84,7 +84,7 @@ class DatabricksSyncRepository(context: Context, private val db: AppDatabase) {
 
         try {
             val api = DatabricksApiClient.create(databricksUrl, databricksToken)
-            val selectSql = "SELECT report_id, type, title, description, lat, lng, timestamp, species_name, confidence, source FROM trailkarma.trail_reports ORDER BY timestamp DESC"
+            val selectSql = "SELECT report_id, user_id, type, title, description, lat, lng, timestamp, species_name, confidence, source FROM trailkarma.trail_reports ORDER BY timestamp DESC"
             val request = DatabricksSyncRequest(warehouseId, selectSql)
             val response = api.executeSql(request)
 
@@ -105,23 +105,25 @@ class DatabricksSyncRepository(context: Context, private val db: AppDatabase) {
             var pulledCount = 0
             for (row in rows) {
                 try {
-                    if (row.size < 10) continue
+                    if (row.size < 11) continue
 
                     val reportId = row.getOrNull(0) as? String ?: continue
-                    val typeStr = row.getOrNull(1) as? String ?: "hazard"
+                    val userId = row.getOrNull(1) as? String ?: continue
+                    val typeStr = row.getOrNull(2) as? String ?: "hazard"
                     val type = try { ReportType.valueOf(typeStr) } catch (e: Exception) { ReportType.hazard }
-                    val title = row.getOrNull(2) as? String ?: ""
-                    val description = row.getOrNull(3) as? String ?: ""
-                    val lat = (row.getOrNull(4) as? Number)?.toDouble() ?: 0.0
-                    val lng = (row.getOrNull(5) as? Number)?.toDouble() ?: 0.0
-                    val timestamp = row.getOrNull(6) as? String ?: ""
-                    val speciesName = row.getOrNull(7) as? String
-                    val confidence = (row.getOrNull(8) as? Number)?.toFloat()
-                    val sourceStr = row.getOrNull(9) as? String ?: "self"
+                    val title = row.getOrNull(3) as? String ?: ""
+                    val description = row.getOrNull(4) as? String ?: ""
+                    val lat = (row.getOrNull(5) as? Number)?.toDouble() ?: 0.0
+                    val lng = (row.getOrNull(6) as? Number)?.toDouble() ?: 0.0
+                    val timestamp = row.getOrNull(7) as? String ?: ""
+                    val speciesName = row.getOrNull(8) as? String
+                    val confidence = (row.getOrNull(9) as? Number)?.toFloat()
+                    val sourceStr = row.getOrNull(10) as? String ?: "self"
                     val source = try { ReportSource.valueOf(sourceStr) } catch (e: Exception) { ReportSource.self }
 
                     val report = TrailReport(
                         reportId = reportId,
+                        userId = userId,
                         type = type,
                         title = title,
                         description = description,
@@ -159,8 +161,8 @@ class DatabricksSyncRepository(context: Context, private val db: AppDatabase) {
         var success = true
         for (location in locations) {
             val sql = """
-                INSERT INTO trailkarma.location_updates (id, timestamp, lat, lng, synced)
-                VALUES ('${location.id}', '${location.timestamp}', ${location.lat}, ${location.lng}, true)
+                INSERT INTO trailkarma.location_updates (id, user_id, timestamp, lat, lng, synced)
+                VALUES ('${location.id}', '${location.userId}', '${location.timestamp}', ${location.lat}, ${location.lng}, true)
             """.trimIndent()
 
             try {

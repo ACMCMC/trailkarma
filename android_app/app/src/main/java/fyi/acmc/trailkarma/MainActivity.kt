@@ -38,6 +38,21 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        lifecycleScope.launch {
+            val db = AppDatabase.get(applicationContext)
+            seedDatabaseIfEmpty(db)
+
+            val syncRepo = DatabricksSyncRepository(applicationContext, db)
+            if (BuildConfig.DATABRICKS_TOKEN.isNotEmpty()) {
+                syncRepo.setDatabricksConfig(
+                    url = BuildConfig.DATABRICKS_URL,
+                    token = BuildConfig.DATABRICKS_TOKEN,
+                    warehouse = BuildConfig.DATABRICKS_WAREHOUSE
+                )
+            }
+        }
+
         requestPermissions()
 
         setContent {
@@ -47,23 +62,9 @@ class MainActivity : ComponentActivity() {
 
                 LaunchedEffect(Unit) {
                     val db = AppDatabase.get(applicationContext)
-
-                    seedDatabaseIfEmpty(db)
-
                     val repo = UserRepository(applicationContext, db.userDao())
                     val userId = repo.currentUserId.first()
                     startDest = if (userId != null) Routes.MAP else Routes.LOGIN
-
-                    if (userId != null) {
-                        val syncRepo = DatabricksSyncRepository(applicationContext, db)
-                        if (BuildConfig.DATABRICKS_TOKEN.isNotEmpty()) {
-                            syncRepo.setDatabricksConfig(
-                                url = BuildConfig.DATABRICKS_URL,
-                                token = BuildConfig.DATABRICKS_TOKEN,
-                                warehouse = BuildConfig.DATABRICKS_WAREHOUSE
-                            )
-                        }
-                    }
                 }
 
                 startDest?.let {
@@ -87,8 +88,12 @@ class MainActivity : ComponentActivity() {
         val count = db.trailReportDao().getAll().first().size
         if (count == 0) {
             val now = Instant.now().toString()
+            val repo = UserRepository(applicationContext, db.userDao())
+            val userId = repo.currentUserId.first() ?: "demo-user"
+
             db.trailReportDao().insert(TrailReport(
                 reportId = "mock-1",
+                userId = userId,
                 type = ReportType.hazard,
                 title = "Rockslide ahead",
                 description = "Section near mile 24 has debris",
@@ -99,6 +104,7 @@ class MainActivity : ComponentActivity() {
             ))
             db.trailReportDao().insert(TrailReport(
                 reportId = "mock-2",
+                userId = userId,
                 type = ReportType.hazard,
                 title = "Rattlesnake spotted",
                 description = "Stay alert, seen near water source",
@@ -109,6 +115,7 @@ class MainActivity : ComponentActivity() {
             ))
             db.trailReportDao().insert(TrailReport(
                 reportId = "mock-3",
+                userId = userId,
                 type = ReportType.water,
                 title = "Water source confirmed",
                 description = "Spring flowing, fresh water tested",

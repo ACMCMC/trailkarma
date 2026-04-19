@@ -17,9 +17,9 @@ class DatabaseCallback : RoomDatabase.Callback() {
     override fun onCreate(db: SupportSQLiteDatabase) {
         super.onCreate(db)
         val now = Instant.now().toString()
-        db.execSQL("""INSERT INTO trail_reports (reportId, type, title, description, lat, lng, timestamp, speciesName, confidence, source, synced) VALUES ('mock-1', 'hazard', 'Rockslide ahead', 'Section near mile 24 has debris', 32.88, -117.24, '$now', NULL, NULL, 'self', 0)""")
-        db.execSQL("""INSERT INTO trail_reports (reportId, type, title, description, lat, lng, timestamp, speciesName, confidence, source, synced) VALUES ('mock-2', 'hazard', 'Rattlesnake spotted', 'Stay alert, seen near water source', 32.87, -117.25, '$now', NULL, NULL, 'relayed', 0)""")
-        db.execSQL("""INSERT INTO trail_reports (reportId, type, title, description, lat, lng, timestamp, speciesName, confidence, source, synced) VALUES ('mock-3', 'water', 'Water source confirmed', 'Spring flowing, fresh water tested', 32.89, -117.23, '$now', NULL, NULL, 'self', 0)""")
+        db.execSQL("""INSERT INTO trail_reports (reportId, userId, type, title, description, lat, lng, timestamp, speciesName, confidence, source, synced) VALUES ('mock-1', 'seed', 'hazard', 'Rockslide ahead', 'Section near mile 24 has debris', 32.88, -117.24, '$now', NULL, NULL, 'self', 0)""")
+        db.execSQL("""INSERT INTO trail_reports (reportId, userId, type, title, description, lat, lng, timestamp, speciesName, confidence, source, synced) VALUES ('mock-2', 'seed', 'hazard', 'Rattlesnake spotted', 'Stay alert, seen near water source', 32.87, -117.25, '$now', NULL, NULL, 'relayed', 0)""")
+        db.execSQL("""INSERT INTO trail_reports (reportId, userId, type, title, description, lat, lng, timestamp, speciesName, confidence, source, synced) VALUES ('mock-3', 'seed', 'water', 'Water source confirmed', 'Spring flowing, fresh water tested', 32.89, -117.23, '$now', NULL, NULL, 'self', 0)""")
     }
 }
 
