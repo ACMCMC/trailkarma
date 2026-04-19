@@ -40,6 +40,18 @@ Terminal control plane:
   - saves a screenshot and `uiautomator` XML dump for debugging
 - `scripts/android-smoke-loop.sh`
   - starts emulator, installs app, checks launch for `AndroidRuntime` crashes, runs connected Android smoke tests, and captures UI artifacts
+- `scripts/android-physical-install-debug.sh`
+  - installs a debug build for a USB-connected phone
+  - applies `adb reverse tcp:3000 tcp:3000`
+  - builds the app with `api.baseUrl` and `rewards.url` pointed at `http://127.0.0.1:3000`
+- `scripts/android-physical-logcat.sh {start|stop|status}`
+  - captures a full physical-device `logcat` stream into `.artifacts/physical-device/<session>/logcat.txt`
+- `scripts/android-physical-capture.sh`
+  - captures a screenshot, UI hierarchy dump, and window/activity dumps from the USB phone
+- `scripts/android-physical-debug-loop.sh`
+  - verifies the local backend at `http://127.0.0.1:3000/health`
+  - installs the build on the USB phone
+  - starts background `logcat` capture for a named manual-testing session
 
 Current smoke test coverage:
 
@@ -61,3 +73,21 @@ Preferred workflow after Android edits:
    - `.artifacts/android-smoke/launch-logcat.txt`
    - `.artifacts/android-smoke/ui/window_dump.xml`
    - `.artifacts/android-smoke/ui/screen.png`
+
+## Physical Device Loop
+
+For a USB-connected Android phone:
+
+1. Start the local backend on the laptop so `http://127.0.0.1:3000/health` responds.
+2. Run `SESSION_NAME=<label> scripts/android-physical-debug-loop.sh`
+3. Reproduce the flow manually on the phone.
+4. If something looks wrong, run `SESSION_NAME=<label> scripts/android-physical-capture.sh`
+5. When done, run `SESSION_NAME=<label> scripts/android-physical-logcat.sh stop`
+
+Important details:
+
+- these scripts auto-select the first USB-connected Android device unless `ANDROID_SERIAL` is set
+- the phone reaches the laptop backend through `adb reverse`, not `10.0.2.2`
+- artifacts land in `.artifacts/physical-device/<session>/`
+- the default package is `fyi.acmc.trailkarma`
+- if install fails with `INSTALL_FAILED_UPDATE_INCOMPATIBLE`, rerun with `FORCE_UNINSTALL_ON_SIGNATURE_MISMATCH=1` to remove the old app and install the new debug build
