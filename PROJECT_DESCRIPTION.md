@@ -25,13 +25,13 @@ When you reach a trailhead and connect to the internet, the sync worker pushes e
 The app generates a Solana wallet on your phone and keeps it local. When you come back online and the backend verifies your contributions, it sponsors the Solana transaction on your behalf, you don't need any SOL and you never see a private key or a gas fee. KARMA tokens land in your wallet, and achievement badges get minted as non-transferable Token-2022 assets.  We use the blockchain for uniqueness and ownership only, not for storing hiking data. The real-world events stay off-chain.
 
 **Species Detection:**
-The app can run on-device audio classification to detect likely species from sounds, paired with your location. You can also upload photos for species ID. Verified contributions earn a KARMA bonus and feed a dataset that conservation researchers can actually access.
+The app can run on-device audio classification to detect likely species from sounds, paired with your location. You can also attach photos to the same observation for later review and verification. Verified contributions earn a KARMA bonus and feed a dataset that conservation researchers can actually access.
 
 ## The Full Stack
 
-* **Android:** Kotlin, Jetpack Compose, Room DB, WorkManager, CameraX 1.4.1, Bluetooth Low Energy.
+* **Android:** Kotlin, Jetpack Compose, Room DB, WorkManager, CameraX, Bluetooth Low Energy.
 * **BLE Mesh:** Persistent foreground service with GATT server/client, exponential backoff, and graceful peer drop handling.
-* **Backend:** TypeScript. Reads contribution claims, verifies them against Databricks, submits sponsored Solana transactions.
+* **Backend:** TypeScript rewards/relay service plus a Python biodiversity API.
 * **Solana Program:** Anchor. User profiles, contribution receipts, relay jobs, badge mints, and the KARMA fungible token.
 * **Databricks:** Delta Lake with `MERGE INTO` for idempotent sync, native H3 spatial indexing, and Z-ordered tables for fast spatial queries.
 
@@ -39,14 +39,14 @@ The app can run on-device audio classification to detect likely species from sou
 
 * **BLE Reliability:** Getting two phones to discover each other and exchange data without draining the battery was harder than expected. We went through a lot of iterations of the GATT protocol, backoff timings, and connection pooling before it felt stable.
 * **H3 at Scale:** Computing H3 cells on-device for every GPS ping is too slow. We push that to Databricks and use Z-ordering so range queries stay fast.
-* **Android 15:** The 16KB memory page alignment requirement (NDK r27) broke our early builds. We had to upgrade CameraX to 1.4.1 and rethink how we bundle native libraries.
+* **Android 15:** The 16KB memory page alignment requirement broke our early builds. We had to upgrade the Android camera stack and rethink how we bundle native libraries.
 * **Offline-first correctness:** It's easy to make an app that works online and "also supports offline mode." It's much harder to design one where offline is the real state and sync is the exception. The idempotent schema took a few redesigns to get right.
 * **Reward deduplication:** Without on-chain uniqueness, you could claim the same report twice. Solana's PDAs solve this: one PDA per contribution, one per badge. The backend verifies before submitting, and the chain rejects duplicates automatically.
 
 ## Accomplishments We're Proud Of
 
 * **The BLE mesh actually works:** We can put two phones on separate networks, walk them past each other, and watch the reports sync without touching either screen. This is the core of the app and it works.
-* **Zero mocked data:** Every layer is connected. Databricks, Solana Devnet, the Android app, the backend service, all live, all talking to each other. We didn't fake anything to make the demo work.
+* **Integrated core stack:** The main Android, Databricks, Solana Devnet, and backend flows are connected end-to-end. The separate web demo still uses mock data, but the mobile demo path is real.
 * **Smart use of Solana:** We didn't try to put hiking on-chain. We used the blockchain for the one thing it's actually better at than a database: proving that an event happened exactly once, and nobody can change that. KARMA tokens and badges are on Devnet and verifiable right now.
 * **H3 in production:** We have real trail data indexed with H3, and heatmaps update in real time as new reports come in. You can see clusters of hazards and water sources with no query taking more than a fraction of a second.
 
@@ -60,11 +60,12 @@ We were also surprised by how much the visibility of a reward matters. A private
 
 The first thing is to expand beyond the PCT and see if the KARMA incentive actually changes behavior. Does it make people log more reports? Do they explore harder terrain to find new species? We genuinely don't know yet.
 
-Beyond that, we're exploring:
-- **Voice relays:** Use an ElevenLabs agent to make a phone call when a relay job is fulfilled, instead of a text message. More human, more useful.
-- **Wearables:** Integrate heart rate and SpO2 to predict altitude sickness before it hits, based on actual physiology instead of just elevation.
-- **Conservation partnerships:** Get our biodiversity data in front of researchers. The dataset is already growing.
-- **iOS:** The architecture is portable. If there's enough interest, a native iOS version makes sense.
+Beyond that, the biggest remaining implementation steps are:
+- **Biodiversity verification:** turn the current audio + photo capture flow into a stronger review, verification, and reward pipeline.
+- **Researcher export:** get the biodiversity dataset into a form that conservation partners can actually consume.
+- **Field validation:** harden the multi-phone relay flow with more real-world BLE and carrier testing.
+- **Wearables:** integrate heart rate and SpO2 to predict altitude sickness before it hits, based on actual physiology instead of just elevation.
+- **iOS:** the architecture is portable. If there's enough interest, a native iOS version makes sense.
 
 > **The trail is a community. TrailKarma is what happens when you give that community the tools to help itself, and make sure people actually get credit for it.**
 
