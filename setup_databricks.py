@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 
 PCT_GEOJSON = os.path.join(os.path.dirname(__file__), "data", "Southern_California.geojson")
 SPECIES_CSV = os.path.join(os.path.dirname(__file__), "data", "observations-712152.csv")
+WATER_CSV = os.path.join(os.path.dirname(__file__), "data", "water_reports.csv")
 
 SOCAL_LAT_MIN, SOCAL_LAT_MAX = 32.0, 35.0
 SOCAL_LNG_MIN, SOCAL_LNG_MAX = -118.0, -116.0
@@ -124,6 +125,43 @@ def load_species_report_statements(full_schema):
         print(f"  ⚠️  Species CSV not found at {SPECIES_CSV}, skipping")
 
     print(f"  ✓ Loaded {len(statements)} Southern California species reports")
+    return statements
+
+
+def load_water_report_statements(full_schema):
+    """Read water_reports.csv and return INSERT statements for trail_reports."""
+    statements = []
+    try:
+        with open(WATER_CSV, encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                try:
+                    lat = float(row["lat"])
+                    lng = float(row["lng"])
+                except (ValueError, KeyError):
+                    continue
+
+                report_id = str(uuid.uuid4())
+                title = row.get("title", "").replace("'", "\\'")
+                desc = row.get("description", "").replace("'", "\\'")
+                created_at = row.get("created_at") or None
+                updated_at = row.get("updated_at") or None
+
+                created_val = f"CAST('{created_at}' AS TIMESTAMP)" if created_at else "current_timestamp()"
+                updated_val = f"CAST('{updated_at}' AS TIMESTAMP)" if updated_at else "current_timestamp()"
+
+                statements.append(
+                    f"INSERT INTO {full_schema}.trail_reports VALUES ("
+                    f"'{report_id}', 'water-system', 'water', "
+                    f"'{title}', '{desc}', {lat}, {lng}, "
+                    f"'{updated_at or datetime.utcnow().isoformat()}Z', "
+                    f"NULL, NULL, NULL, 'self', 0, true, "
+                    f"{created_val}, {updated_val})"
+                )
+    except FileNotFoundError:
+        print(f"  ⚠️  Water CSV not found at {WATER_CSV}, skipping")
+
+    print(f"  ✓ Loaded {len(statements)} water source reports")
     return statements
 
 
@@ -330,6 +368,9 @@ def main():
 
     # Species reports from iNaturalist (Southern California only)
     sql_statements.extend(load_species_report_statements(full_schema))
+
+    # Water source reports from PCT Water Report
+    sql_statements.extend(load_water_report_statements(full_schema))
 
     # Contacts
     # Aldan and Qianqian are contacts
