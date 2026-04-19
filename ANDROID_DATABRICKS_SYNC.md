@@ -62,6 +62,23 @@ When online, the app automatically syncs in both directions:
 - **Manual**: Call `syncRepo.syncReports()` and `syncRepo.syncLocations()` from your ViewModel
 - **Retry**: If sync fails, WorkManager will retry on next network change
 - **Offline**: All data remains accessible locally until sync succeeds
+- **BLE Relay**: Encounter data from nearby hikers is stored as `RelayPacket` and synced to the cloud, allowing reports to propagate even from zero-signal areas.
+
+## 📱 User Interface Updates
+
+### Hiker Nickname (Login)
+The initial login screen asks for your **"Hiker Nickname (Trail Name)"**. This is your personal alias in the TrailKarma community (e.g., "Strider"). Once logged in, this name is attached to all your reports and sightings.
+
+### Dynamic Trail Selection
+After login, you can select which physical trail you are currently hiking (e.g., PCT) directly from the Map Screen. This list is pulled live from Databricks, ensuring you always have the latest trail data and community reports for your specific route.
+
+## 📡 BLE Contact Tracing & Relay
+The app uses Bluetooth Low Energy (BLE) to detect other hikers in the vicinity, even in total "dead zones."
+
+- **Broadcasting**: Your phone constantly broadcasts a "TrailKarma Beacon" containing your hiker ID.
+- **Scanning**: Your phone scans for nearby beacons. When a contact is made, it logs an "Encounter" with signal strength (RSSI).
+- **Data Mesh**: If you encounter a hiker who has "relayed" data, your phone will automatically store it and attempt to upload it to Databricks as soon as you hit a pocket of LTE/5G.
+
 
 ## Code Examples
 
@@ -114,8 +131,12 @@ Mobile App (offline-first)
     └── SELECT from trail_reports (Pull)
         ↓
     Databricks SQL Warehouse
-    └── workspace.trailkarma.trail_reports/location_updates
+    └── workspace.trailkarma.trail_reports/location_updates/relay_packets
 ```
+
+## 🛠 Android 15 & 16KB Alignment
+The app is fully optimized for **Android 15**. We have upgraded to **CameraX 1.4.1** and **NDK r27** to ensure that all native libraries are 16KB page-aligned, preventing "ELF alignment" warnings on modern hardware.
+
 
 ## Troubleshooting
 

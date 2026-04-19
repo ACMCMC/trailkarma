@@ -59,8 +59,14 @@ main.trailkarma/
 ├── user_contacts (2 friendships/requests)
 ├── trail_reports (5 reports: 2 hazards, 1 water, 2 species)
 ├── location_updates (3 GPS pings)
-└── relay_packets (BLE mesh data)
+└── relay_packets (BLE mesh data / encounters)
 ```
+
+### 📍 H3 Spatial Indexing (Advanced Analytics)
+To win the **Cloud/Analytics tracks**, we are leveraging **Uber H3 Indexing**. Instead of slow raw-coordinate queries, we index all trail data and reports into hexagonal cells.
+- **Table Change**: All spatial tables now support an `h3_index` column (Resolution 9).
+- **Z-Ordering**: The Delta Lake is clustered using `OPTIMIZE ... ZORDER BY (h3_index)` for O(1) spatial lookups.
+
 
 ### trails (Master Data)
 Stores master definitions of trails (like the PCT) to allow hikers to switch context. Includes a `geometry_json` column specifically designed to hold GeoJSON representations. This allows you to import external GIS datasets (Shapefiles, GPX, KMZ converted to GeoJSON) directly into Databricks so the Android client can pull and render the trail path.
@@ -198,6 +204,12 @@ GROUP BY lat, lng, species_name, confidence;
 -- Real-time hiker positions
 SELECT * FROM workspace.trailkarma.location_updates
 ORDER BY timestamp DESC LIMIT 10;
+
+-- H3 Hexagonal Aggregation (Hackathon Flex)
+-- This aggregates reports into 1km hexagons for heatmap rendering
+SELECT h3_longlatash3(lng, lat, 9) as h3_cell, COUNT(*) as report_density
+FROM workspace.trailkarma.trail_reports
+GROUP BY h3_cell;
 ```
 
 ## Troubleshooting
