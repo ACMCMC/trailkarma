@@ -29,6 +29,7 @@ class MapViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         startPolling()
+        listenForNetworkChanges()
     }
 
     private fun startPolling() {
@@ -46,6 +47,26 @@ class MapViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 // Poll every 15 seconds for near real-time updates
                 kotlinx.coroutines.delay(15_000)
+            }
+        }
+    }
+
+    private fun listenForNetworkChanges() {
+        viewModelScope.launch {
+            val networkUtil = fyi.acmc.trailkarma.network.NetworkUtil(getApplication())
+            networkUtil.networkChanged.collect { changed ->
+                if (changed && networkUtil.isOnlineNow()) {
+                    android.util.Log.d("MapViewModel", "Network became available, triggering sync")
+                    val syncRepo = fyi.acmc.trailkarma.repository.DatabricksSyncRepository(getApplication(), db)
+                    try {
+                        syncRepo.syncReports()
+                        syncRepo.pullReportsFromCloud()
+                        syncRepo.pullTrailsFromCloud()
+                    } catch (e: Exception) {
+                        android.util.Log.e("MapViewModel", "Auto-sync failed", e)
+                    }
+                    networkUtil.clearNetworkChangeFlag()
+                }
             }
         }
     }

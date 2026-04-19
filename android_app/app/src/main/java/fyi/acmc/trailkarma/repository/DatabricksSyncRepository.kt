@@ -13,6 +13,7 @@ import fyi.acmc.trailkarma.models.ReportSource
 import fyi.acmc.trailkarma.models.ReportType
 import fyi.acmc.trailkarma.models.TrailReport
 import fyi.acmc.trailkarma.network.NetworkUtil
+import kotlinx.coroutines.CancellationException
 import okhttp3.OkHttpClient
 
 class DatabricksSyncRepository(context: Context, private val db: AppDatabase) {
@@ -87,7 +88,7 @@ class DatabricksSyncRepository(context: Context, private val db: AppDatabase) {
                 }
             } catch (e: Exception) {
                 when (e) {
-                    is kotlinx.coroutines.JobCancellationException -> Log.e("DatabricksSync", "✗ Sync cancelled: ${report.title}")
+                    is CancellationException -> Log.e("DatabricksSync", "✗ Sync cancelled: ${report.title}")
                     else -> Log.e("DatabricksSync", "✗ Error uploading: ${report.title}", e)
                 }
                 success = false
