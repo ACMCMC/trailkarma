@@ -17,6 +17,8 @@ import fyi.acmc.trailkarma.models.ReportType
 import fyi.acmc.trailkarma.models.TrailReport
 import fyi.acmc.trailkarma.repository.UserRepository
 import fyi.acmc.trailkarma.repository.DatabricksSyncRepository
+import fyi.acmc.trailkarma.sync.BiodiversityLocalInferenceWorker
+import fyi.acmc.trailkarma.sync.BiodiversitySyncWorker
 import fyi.acmc.trailkarma.sync.SyncWorker
 import fyi.acmc.trailkarma.ui.design.TrailKarmaAppTheme
 import fyi.acmc.trailkarma.ui.navigation.Routes
@@ -40,6 +42,8 @@ class MainActivity : ComponentActivity() {
             BleService.start(this)
         }
         SyncWorker.schedule(this)
+        BiodiversityLocalInferenceWorker.schedulePending(this)
+        BiodiversitySyncWorker.schedule(this)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -97,6 +101,8 @@ class MainActivity : ComponentActivity() {
         permissionLauncher.launch(arrayOf(
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.ACCESS_COARSE_LOCATION,
+            Manifest.permission.RECORD_AUDIO,
+            Manifest.permission.CAMERA,
             Manifest.permission.BLUETOOTH_SCAN,
             Manifest.permission.BLUETOOTH_ADVERTISE,
             Manifest.permission.BLUETOOTH_CONNECT

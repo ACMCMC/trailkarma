@@ -1,0 +1,14 @@
+{
+  "model_file": "perch_encoder.tflite",
+  "classifier_weights_file": "classifier_weights.bin",
+  "classifier_bias_file": "classifier_bias.bin",
+  "classifier_classes_file": "classifier_classes.json",
+  "prototype_embeddings_file": "prototype_embeddings.bin",
+  "prototype_embeddings_dtype": "float16",
+  "prototype_bank_file": "prototype_bank.json",
+  "label_metadata_file": "label_metadata.json",
+  "embedding_dim": 1280,
+  "window_sample_rate_hz": 32000,
+  "window_seconds": 5.0,
+  "model_version": "perch_8"
+}

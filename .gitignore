@@ -56,6 +56,8 @@ dist/
 backend/trailkarma.db
 backend/keys/
 backend/.env
+__pycache__/
+android_app/model_exports/
 .localnet-ledger/
 solana/target/
 .artifacts/

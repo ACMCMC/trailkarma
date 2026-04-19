@@ -22,12 +22,19 @@ android {
         versionCode = 1
         versionName = "1.0"
 
-    testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        ndk {
+            abiFilters += listOf("arm64-v8a")
+        }
 
-        buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:3000\"")
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        val apiBaseUrl = project.findProperty("api.baseUrl")?.toString()
+            ?: System.getenv("TRAILKARMA_API_BASE_URL")
+            ?: "http://10.0.2.2:3000"
+        buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
         val rewardsBaseUrl = project.findProperty("rewards.url")?.toString()
             ?: System.getenv("REWARDS_BASE_URL")
-            ?: "http://10.0.2.2:3000"
+            ?: apiBaseUrl
         buildConfigField("String", "REWARDS_BASE_URL", "\"$rewardsBaseUrl\"")
 
         // Read from local.properties
@@ -131,6 +138,10 @@ dependencies {
     // OSMDroid
     implementation(libs.osmdroid.android)
 
+    // On-device ML
+    implementation(libs.tensorflow.lite)
+    implementation(libs.tensorflow.lite.select.tf.ops)
+
     // Test
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
@@ -139,6 +150,7 @@ dependencies {
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.rules)
+    androidTestImplementation("androidx.test.uiautomator:uiautomator:2.3.0")
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 

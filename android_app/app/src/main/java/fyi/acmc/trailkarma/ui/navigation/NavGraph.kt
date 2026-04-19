@@ -13,6 +13,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import fyi.acmc.trailkarma.ui.ble.BleScreen
+import fyi.acmc.trailkarma.ui.biodiversity.BiodiversityCaptureScreen
 import fyi.acmc.trailkarma.ui.camera.CameraScreen
 import fyi.acmc.trailkarma.ui.history.ReportHistoryScreen
 import fyi.acmc.trailkarma.ui.login.LoginScreen
@@ -31,6 +32,7 @@ object Routes {
     const val LOGIN           = "login"
     const val MAP             = "map"
     const val CAMERA          = "camera"
+    const val BIODIVERSITY    = "biodiversity"
     const val CREATE_REPORT   = "create_report"
     const val REWARDS         = "rewards"
     const val PROFILE         = "profile"
@@ -69,6 +71,7 @@ fun TrailKarmaNavGraph(navController: NavHostController, startDestination: Strin
             }
             composable(Routes.MAP) {
                 MapScreen(
+                    onNavigateToBiodiversity = { navController.navigate(Routes.BIODIVERSITY) },
                     onNavigateToCamera = { navController.navigate(Routes.CAMERA) },
                     onNavigateToReport = { navController.navigate(Routes.CREATE_REPORT) },
                     onNavigateToReportDetail = { reportId ->
@@ -83,6 +86,9 @@ fun TrailKarmaNavGraph(navController: NavHostController, startDestination: Strin
                     onNavigateToContact = { navController.navigate(Routes.CONTACT) },
                     onNavigateToContactTracing = { navController.navigate(Routes.CONTACT_TRACING) }
                 )
+            }
+            composable(Routes.BIODIVERSITY) {
+                BiodiversityCaptureScreen(onBack = { navController.popBackStack() })
             }
             composable(Routes.REWARDS) {
                 RewardsScreen(
