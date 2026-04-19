@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 PCT_GEOJSON = os.path.join(os.path.dirname(__file__), "data", "Southern_California.geojson")
 SPECIES_CSV = os.path.join(os.path.dirname(__file__), "data", "observations-712152.csv")
 WATER_CSV = os.path.join(os.path.dirname(__file__), "data", "water_reports.csv")
+FOOD_CSV  = os.path.join(os.path.dirname(__file__), "..", "data", "food_reports.csv")
 
 SOCAL_LAT_MIN, SOCAL_LAT_MAX = 32.0, 35.0
 SOCAL_LNG_MIN, SOCAL_LNG_MAX = -118.0, -116.0
@@ -113,11 +114,12 @@ def load_species_report_statements(full_schema):
                     continue
 
                 report_id = str(uuid.uuid4())
-                title = (row.get("common_name") or row.get("species_guess") or "Unknown Species").replace("'", "\\'")
-                desc = (row.get("description") or row.get("place_guess") or "").replace("'", "\\'")
+                def _clean(s): return (s or "").replace("'", "\\'").replace("\n", " ").replace("\r", "")
+                title = _clean(row.get("common_name") or row.get("species_guess") or "Unknown Species")
+                desc = _clean(row.get("description") or row.get("place_guess") or "")
                 ts = row.get("time_observed_at") or row.get("observed_on") or datetime.utcnow().isoformat() + "Z"
-                image_url = (row.get("image_url") or "").replace("'", "\\'")
-                species_name = (row.get("scientific_name") or "").replace("'", "\\'")
+                image_url = _clean(row.get("image_url") or "")
+                species_name = _clean(row.get("scientific_name") or "")
 
                 user_id = row.get("user_id", "unknown")
                 statements.append(
@@ -148,8 +150,8 @@ def load_water_report_statements(full_schema):
                     continue
 
                 report_id = str(uuid.uuid4())
-                title = row.get("title", "").replace("'", "\\'")
-                desc = row.get("description", "").replace("'", "\\'")
+                title = row.get("title", "").replace("'", "\\'").replace("\n", " ").replace("\r", "")
+                desc = row.get("description", "").replace("'", "\\'").replace("\n", " ").replace("\r", "")
                 created_at = row.get("created_at") or None
                 updated_at = row.get("updated_at") or None
 
@@ -189,10 +191,80 @@ def load_weather_cache_statements(full_schema, section_centroids):
     return statements
 
 
+def load_food_report_statements(full_schema):
+    """Read food_reports.csv and return INSERT statements for trail_reports."""
+    statements = []
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    try:
+        with open(FOOD_CSV, encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                try:
+                    lat = float(row["lat"])
+                    lng = float(row["lng"])
+                except (ValueError, KeyError):
+                    continue
+                report_id = str(uuid.uuid4())
+                title = row.get("title", "").replace("'", "\\'").replace("\n", " ").replace("\r", "")
+                desc  = row.get("description", "").replace("'", "\\'").replace("\n", " ").replace("\r", "")
+                statements.append(
+                    f"INSERT INTO {full_schema}.trail_reports VALUES ("
+                    f"'{report_id}', 'food-system', 'food', "
+                    f"'{title}', '{desc}', {lat}, {lng}, "
+                    f"'{today}T00:00:00Z', "
+                    f"NULL, NULL, NULL, 'self', 0, true, "
+                    f"CAST('{today}' AS TIMESTAMP), CAST('{today}' AS TIMESTAMP))"
+                )
+    except FileNotFoundError:
+        print(f"  WARNING: Food CSV not found at {FOOD_CSV}, skipping")
+    print(f"  Loaded {len(statements)} food resupply reports")
+    return statements
+
+
+def _merge_inserts(statements, batch=50):
+    """Merge consecutive INSERT INTO same_table statements into multi-value batches."""
+    merged = []
+    i = 0
+    while i < len(statements):
+        sql = statements[i]
+        # Only merge INSERT INTO ... VALUES (...) statements
+        if not sql.strip().upper().startswith("INSERT INTO"):
+            merged.append(sql)
+            i += 1
+            continue
+
+        # Extract table name and VALUES clause
+        prefix = sql[:sql.upper().index(" VALUES ")]   # "INSERT INTO table"
+        values = sql[sql.upper().index(" VALUES ") + 8:]  # "(col1, col2, ...)"
+
+        # Collect consecutive INSERTs into the same table
+        batch_values = [values]
+        j = i + 1
+        while j < len(statements) and len(batch_values) < batch:
+            nxt = statements[j]
+            if (nxt.strip().upper().startswith("INSERT INTO") and
+                    nxt[:nxt.upper().index(" VALUES ")] == prefix):
+                batch_values.append(nxt[nxt.upper().index(" VALUES ") + 8:])
+                j += 1
+            else:
+                break
+
+        merged.append(f"{prefix} VALUES {', '.join(batch_values)}")
+        i = j
+
+    print(f"  Merged {len(statements)} statements → {len(merged)} (batch size {batch})")
+    return merged
+
+
 def load_env():
     config = {}
-    if os.path.exists('.env'):
-        with open('.env') as f:
+    for candidate in ['.env', '../backend/.env', 'backend/.env']:
+        if os.path.exists(candidate):
+            break
+    else:
+        candidate = '.env'
+    if os.path.exists(candidate):
+        with open(candidate) as f:
             for line in f:
                 line = line.strip()
                 if line and not line.startswith('#'):
@@ -268,7 +340,7 @@ def main():
         
         # RECREATE FULL STRUCTURE
         f"""CREATE TABLE {full_schema}.trails (
-            trail_id STRING NOT NULL PRIMARY KEY,
+            trail_id STRING NOT NULL,
             name STRING NOT NULL,
             description STRING,
             total_length_miles DOUBLE,
@@ -293,7 +365,7 @@ def main():
         ) USING DELTA""",
 
         f"""CREATE TABLE {full_schema}.trail_waypoints (
-            waypoint_id STRING NOT NULL PRIMARY KEY,
+            waypoint_id STRING NOT NULL,
             trail_id STRING NOT NULL,
             name STRING NOT NULL,
             type STRING NOT NULL,
@@ -301,63 +373,57 @@ def main():
             lng DOUBLE NOT NULL,
             description STRING,
             created_at TIMESTAMP,
-            updated_at TIMESTAMP,
-            CONSTRAINT fk_waypoint_trail FOREIGN KEY (trail_id) REFERENCES {full_schema}.trails(trail_id)
+            updated_at TIMESTAMP
         ) USING DELTA""",
 
         f"""CREATE TABLE {full_schema}.users (
-            user_id STRING NOT NULL PRIMARY KEY, 
+            user_id STRING NOT NULL,
             display_name STRING NOT NULL,
             wallet_address STRING,
             karma_points INT,
             profile_image_url STRING,
             active_trail_id STRING,
             created_at TIMESTAMP,
-            updated_at TIMESTAMP,
-            CONSTRAINT fk_users_trail FOREIGN KEY (active_trail_id) REFERENCES {full_schema}.trails(trail_id)
+            updated_at TIMESTAMP
         ) USING DELTA""",
-        
+
         f"""CREATE TABLE {full_schema}.trail_reports (
-            report_id STRING NOT NULL PRIMARY KEY, 
+            report_id STRING NOT NULL,
             user_id STRING NOT NULL,
-            type STRING NOT NULL, 
+            type STRING NOT NULL,
             title STRING NOT NULL,
-            description STRING, 
-            lat DOUBLE NOT NULL, 
-            lng DOUBLE NOT NULL, 
+            description STRING,
+            lat DOUBLE NOT NULL,
+            lng DOUBLE NOT NULL,
             timestamp STRING NOT NULL,
             image_url STRING,
-            species_name STRING, 
-            confidence DOUBLE, 
-            source STRING NOT NULL, 
+            species_name STRING,
+            confidence DOUBLE,
+            source STRING NOT NULL,
             upvotes INT,
             synced BOOLEAN,
             created_at TIMESTAMP,
-            updated_at TIMESTAMP,
-            CONSTRAINT fk_reports_user FOREIGN KEY (user_id) REFERENCES {full_schema}.users(user_id)
+            updated_at TIMESTAMP
         ) USING DELTA""",
-        
+
         f"""CREATE TABLE {full_schema}.location_updates (
-            id STRING NOT NULL PRIMARY KEY, 
+            id STRING NOT NULL,
             user_id STRING NOT NULL,
-            timestamp STRING NOT NULL, 
+            timestamp STRING NOT NULL,
             lat DOUBLE NOT NULL,
-            lng DOUBLE NOT NULL, 
+            lng DOUBLE NOT NULL,
             synced BOOLEAN,
             created_at TIMESTAMP,
-            updated_at TIMESTAMP,
-            CONSTRAINT fk_locations_user FOREIGN KEY (user_id) REFERENCES {full_schema}.users(user_id)
+            updated_at TIMESTAMP
         ) USING DELTA""",
-        
+
         f"""CREATE TABLE {full_schema}.user_contacts (
-            contact_id STRING NOT NULL PRIMARY KEY,
+            contact_id STRING NOT NULL,
             user_id STRING NOT NULL,
             contact_user_id STRING NOT NULL,
             status STRING NOT NULL,
             created_at TIMESTAMP,
-            updated_at TIMESTAMP,
-            CONSTRAINT fk_contacts_user1 FOREIGN KEY (user_id) REFERENCES {full_schema}.users(user_id),
-            CONSTRAINT fk_contacts_user2 FOREIGN KEY (contact_user_id) REFERENCES {full_schema}.users(user_id)
+            updated_at TIMESTAMP
         ) USING DELTA""",
         
         f"""CREATE TABLE {full_schema}.relay_packets (
@@ -411,6 +477,9 @@ def main():
     # Water source reports from PCT Water Report
     sql_statements.extend(load_water_report_statements(full_schema))
 
+    # Food resupply reports
+    sql_statements.extend(load_food_report_statements(full_schema))
+
     # Weather cache — one row per PCT section, weather filled by scheduled Job
     sql_statements.extend(load_weather_cache_statements(full_schema, section_centroids))
 
@@ -441,6 +510,7 @@ def main():
         print("  ❌ No running warehouses! Please start a warehouse in Databricks and rerun.")
         return False
 
+    sql_statements = _merge_inserts(sql_statements, batch=50)
     print(f"🗄️  Executing {len(sql_statements)} SQL statements to wipe, recreate, and populate DB...\n")
     headers['Content-Type'] = 'application/json'
     success = 0
