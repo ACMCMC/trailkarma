@@ -233,7 +233,8 @@ class RewardsRepository(context: Context, private val db: AppDatabase) {
                     .put("job_id", jobId)
                     .put("user_id", user.userId)
                     .put("sender_wallet", user.walletPublicKey)
-                    .put("encrypted_blob", encryptedBlob) // CARRIER CANNOT READ THIS
+                    // Carrier devices only forward this payload blob.
+                    .put("encrypted_blob", encryptedBlob)
                     .put("destination_hash", destinationHash)
                     .put("payload_hash", payloadHash)
                     .put("expiry_ts", expiryTs)
@@ -295,11 +296,8 @@ class RewardsRepository(context: Context, private val db: AppDatabase) {
                     expiryTs = job.expiryTs,
                     rewardAmount = job.rewardAmount,
                     nonce = job.nonce,
-                    recipientName = job.recipientName,
-                    recipientPhoneNumber = job.recipientPhoneNumber,
-                    messageBody = job.messageBody,
-                    contextSummary = job.contextSummary,
-                    contextJson = job.contextJson
+                    encryptedBlob = job.encryptedBlob
+                        ?: throw IllegalStateException("Missing encrypted relay payload for voice job ${job.jobId}")
                 )
             )
             } ?: continue

@@ -41,3 +41,36 @@ class EventStore:
         current.update(payload)
         self.save_event(observation_id, current)
         return current
+
+    def iter_events(self) -> list[dict[str, Any]]:
+        events: list[dict[str, Any]] = []
+        for path in sorted(self.event_dir.glob("*.json")):
+            try:
+                events.append(json.loads(path.read_text()))
+            except json.JSONDecodeError:
+                continue
+        return events
+
+    def has_verified_species_label(self, label: str, *, exclude_observation_id: str | None = None) -> bool:
+        normalized = self.normalize_species_label(label)
+        if not normalized:
+            return False
+
+        for event in self.iter_events():
+            if exclude_observation_id and event.get("observation_id") == exclude_observation_id:
+                continue
+            if event.get("verification_status") != "verified":
+                continue
+            if event.get("collectible_status") != "verified":
+                continue
+
+            candidate = event.get("finalLabel") or event.get("collectible_name")
+            if self.normalize_species_label(str(candidate or "")) == normalized:
+                return True
+        return False
+
+    @staticmethod
+    def normalize_species_label(label: str) -> str:
+        return " ".join(
+            "".join(ch.lower() if ch.isalnum() else " " for ch in label).split()
+        )

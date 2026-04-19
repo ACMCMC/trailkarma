@@ -1,5 +1,6 @@
 import java.util.Properties
 import java.io.FileInputStream
+import org.gradle.api.GradleException
 
 plugins {
     alias(libs.plugins.android.application)
@@ -15,6 +16,62 @@ android {
         }
     }
 
+    val localProperties = Properties()
+    val localPropertiesFile = rootProject.file("local.properties")
+    if (localPropertiesFile.exists()) {
+        FileInputStream(localPropertiesFile).use { localProperties.load(it) }
+    }
+
+    fun configValue(
+        localKey: String,
+        projectKey: String,
+        envKey: String
+    ): String? = localProperties.getProperty(localKey)
+        ?: project.findProperty(projectKey)?.toString()
+        ?: System.getenv(envKey)
+
+    val debugApiBaseUrl = configValue(
+        localKey = "api.debugBaseUrl",
+        projectKey = "api.baseUrl",
+        envKey = "TRAILKARMA_API_BASE_URL"
+    ) ?: "http://10.0.2.2:3000"
+
+    val debugRewardsBaseUrl = configValue(
+        localKey = "rewards.debugBaseUrl",
+        projectKey = "rewards.url",
+        envKey = "REWARDS_BASE_URL"
+    ) ?: debugApiBaseUrl
+
+    val releaseApiBaseUrl = configValue(
+        localKey = "api.releaseBaseUrl",
+        projectKey = "api.releaseBaseUrl",
+        envKey = "TRAILKARMA_PUBLIC_API_BASE_URL"
+    )
+
+    val releaseRewardsBaseUrl = configValue(
+        localKey = "rewards.releaseBaseUrl",
+        projectKey = "rewards.releaseBaseUrl",
+        envKey = "TRAILKARMA_PUBLIC_REWARDS_BASE_URL"
+    ) ?: releaseApiBaseUrl
+
+    val geminiApiKey = configValue(
+        localKey = "gemini.apiKey",
+        projectKey = "gemini.apiKey",
+        envKey = "GEMINI_API_KEY"
+    ) ?: ""
+
+    val geminiModel = configValue(
+        localKey = "gemini.model",
+        projectKey = "gemini.model",
+        envKey = "GEMINI_MODEL"
+    ) ?: "gemini-2.5-flash"
+
+    val requestedTasks = gradle.startParameter.taskNames
+    val isReleaseBuildRequested = requestedTasks.any { taskName ->
+        taskName.contains("Release", ignoreCase = true) ||
+            taskName.contains("bundle", ignoreCase = true)
+    }
+
     defaultConfig {
         applicationId = "fyi.acmc.trailkarma"
         minSdk = 29
@@ -28,21 +85,10 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        val apiBaseUrl = project.findProperty("api.baseUrl")?.toString()
-            ?: System.getenv("TRAILKARMA_API_BASE_URL")
-            ?: "http://10.0.2.2:3000"
-        buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
-        val rewardsBaseUrl = project.findProperty("rewards.url")?.toString()
-            ?: System.getenv("REWARDS_BASE_URL")
-            ?: apiBaseUrl
-        buildConfigField("String", "REWARDS_BASE_URL", "\"$rewardsBaseUrl\"")
-
-        // Read from local.properties
-        val localProperties = Properties()
-        val localPropertiesFile = rootProject.file("local.properties")
-        if (localPropertiesFile.exists()) {
-            FileInputStream(localPropertiesFile).use { localProperties.load(it) }
-        }
+        buildConfigField("String", "API_BASE_URL", "\"$debugApiBaseUrl\"")
+        buildConfigField("String", "REWARDS_BASE_URL", "\"$debugRewardsBaseUrl\"")
+        buildConfigField("String", "GEMINI_API_KEY", "\"$geminiApiKey\"")
+        buildConfigField("String", "GEMINI_MODEL", "\"$geminiModel\"")
 
         // Databricks credentials
         val databricksUrl = localProperties.getProperty("databricks.url")
@@ -67,7 +113,36 @@ android {
     }
 
     buildTypes {
+        debug {
+            buildConfigField("String", "API_BASE_URL", "\"$debugApiBaseUrl\"")
+            buildConfigField("String", "REWARDS_BASE_URL", "\"$debugRewardsBaseUrl\"")
+            buildConfigField("String", "GEMINI_API_KEY", "\"$geminiApiKey\"")
+            buildConfigField("String", "GEMINI_MODEL", "\"$geminiModel\"")
+        }
         release {
+            val finalReleaseApiBaseUrl = releaseApiBaseUrl?.takeIf { it.isNotBlank() }
+                ?: if (isReleaseBuildRequested) {
+                    throw GradleException(
+                        "Release builds require a hosted biodiversity backend URL. " +
+                            "Set api.releaseBaseUrl in android_app/local.properties or export TRAILKARMA_PUBLIC_API_BASE_URL."
+                    )
+                } else {
+                    debugApiBaseUrl
+                }
+            val finalReleaseRewardsBaseUrl = releaseRewardsBaseUrl?.takeIf { it.isNotBlank() }
+                ?: if (isReleaseBuildRequested) {
+                    throw GradleException(
+                        "Release builds require a hosted rewards backend URL. " +
+                            "Set rewards.releaseBaseUrl in android_app/local.properties or export TRAILKARMA_PUBLIC_REWARDS_BASE_URL."
+                    )
+                } else {
+                    debugRewardsBaseUrl
+                }
+
+            buildConfigField("String", "API_BASE_URL", "\"$finalReleaseApiBaseUrl\"")
+            buildConfigField("String", "REWARDS_BASE_URL", "\"$finalReleaseRewardsBaseUrl\"")
+            buildConfigField("String", "GEMINI_API_KEY", "\"$geminiApiKey\"")
+            buildConfigField("String", "GEMINI_MODEL", "\"$geminiModel\"")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

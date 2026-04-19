@@ -84,11 +84,12 @@ data class BiodiversityContribution(
     val observerDisplayName: String? = null,
     val observerWalletPublicKey: String? = null,
     val createdAt: String,
+    val claimedLabel: String? = null,
     val lat: Double? = null,
     val lon: Double? = null,
     val locationAccuracyMeters: Float? = null,
     val locationSource: String = "missing",
-    val audioUri: String,
+    val audioUri: String? = null,
     val photoUri: String? = null,
     val topKJson: String? = null,
     val finalLabel: String? = null,
@@ -115,6 +116,7 @@ data class BiodiversityContribution(
     val collectibleId: String? = null,
     val collectibleName: String? = null,
     val collectibleImageUri: String? = null,
+    val rewardPointsAwarded: Int = 0,
     val dataShareStatus: String = "local_only",
     val sharedWithOrgAt: String? = null
 )

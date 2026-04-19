@@ -133,6 +133,36 @@ const FEATURES = [
   },
 ]
 
+const DEPLOYMENT_STATUS = [
+  {
+    label: 'Website layer',
+    value: 'Concept demo with tracker and trail-report map enabled',
+  },
+  {
+    label: 'Biodiversity verification',
+    value: 'Android flow can verify photo species claims with Gemini and mirror verified events to Databricks',
+  },
+  {
+    label: 'Solana rewards backend',
+    value: 'Live reward claiming, relay settlement, and wallet-backed activity require PROGRAM_ID, SPONSOR_SECRET_KEY, and ATTESTOR_SECRET_KEY on the deployed backend',
+  },
+]
+
+const RESEARCHER_WORKFLOW = [
+  {
+    title: 'Biodiversity review queue',
+    body: 'Conservation partners can review incoming species observations, filter by confidence and verification state, and spot submissions that need a closer human check before being used downstream.',
+  },
+  {
+    title: 'Research-ready exports',
+    body: 'Verified observations can be packaged for biodiversity teams as structured exports with species labels, timestamps, coordinates, confidence bands, and attached media references.',
+  },
+  {
+    title: 'Databricks-backed partner sync',
+    body: 'The app already mirrors biodiversity events into Databricks. The next product step is a polished partner workflow on top of that mirrored data rather than raw table access alone.',
+  },
+]
+
 export default function Home() {
   const [activeFeature, setActiveFeature] = useState('tracker')
   const [query, setQuery] = useState('')
@@ -305,6 +335,129 @@ export default function Home() {
             </div>
           )
         })}
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'center', padding: '22px 24px 0' }}>
+        <div style={{
+          width: '100%',
+          maxWidth: 960,
+          background: 'linear-gradient(180deg, #fffef8 0%, #f7f4ea 100%)',
+          border: '1px solid #e6dcc3',
+          borderRadius: 18,
+          boxShadow: '0 8px 24px rgba(61, 52, 33, 0.08)',
+          overflow: 'hidden',
+        }}>
+          <div style={{
+            padding: '16px 20px',
+            borderBottom: '1px solid #ece3cd',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            flexWrap: 'wrap',
+          }}>
+            <span style={{ fontSize: 18 }}>⚙️</span>
+            <span style={{ fontSize: 14, fontWeight: 700, color: '#5c4a1f', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+              Live Deployment Status
+            </span>
+          </div>
+          <div style={{ padding: '18px 20px 20px', display: 'grid', gap: 14 }}>
+            {DEPLOYMENT_STATUS.map((item) => (
+              <div key={item.label} style={{
+                display: 'grid',
+                gridTemplateColumns: 'minmax(160px, 220px) 1fr',
+                gap: 12,
+                alignItems: 'start',
+              }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#6b5b34' }}>{item.label}</div>
+                <div style={{ fontSize: 14, lineHeight: 1.55, color: '#3d3521' }}>{item.value}</div>
+              </div>
+            ))}
+            <div style={{
+              marginTop: 4,
+              padding: '14px 16px',
+              borderRadius: 14,
+              background: '#fff7e3',
+              border: '1px solid #efd595',
+              fontSize: 13,
+              lineHeight: 1.6,
+              color: '#6b5316',
+            }}>
+              The website now states the real backend prerequisite directly: if those three Solana env vars are not configured on the deployed service, biodiversity sync can still work, but Solana-backed rewards should be treated as unavailable rather than live.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'center', padding: '22px 24px 0' }}>
+        <div style={{
+          width: '100%',
+          maxWidth: 960,
+          background: 'white',
+          border: '1px solid #d8e6dc',
+          borderRadius: 20,
+          boxShadow: '0 10px 28px rgba(23, 53, 39, 0.08)',
+          overflow: 'hidden',
+        }}>
+          <div style={{
+            padding: '18px 20px',
+            borderBottom: '1px solid #e7f0ea',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            flexWrap: 'wrap',
+          }}>
+            <span style={{ fontSize: 18 }}>🔬</span>
+            <span style={{ fontSize: 14, fontWeight: 700, color: '#1b4332', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+              Researchers / Conservation Partners
+            </span>
+          </div>
+          <div style={{ padding: '20px', display: 'grid', gap: 18 }}>
+            <div style={{ maxWidth: 760 }}>
+              <div style={{ fontSize: 24, fontWeight: 750, color: '#163624', marginBottom: 10, letterSpacing: '-0.02em' }}>
+                Biodiversity data is already mirrored. The partner workflow is the next layer.
+              </div>
+              <div style={{ fontSize: 15, lineHeight: 1.65, color: '#486152' }}>
+                TrailKarma already captures biodiversity observations in the field and can mirror verified events into Databricks.
+                What is still being built is the polished researcher-facing experience for reviewing, validating, and exporting those observations for conservation teams.
+              </div>
+            </div>
+
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+              gap: 14,
+            }}>
+              {RESEARCHER_WORKFLOW.map((item) => (
+                <div key={item.title} style={{
+                  padding: '16px 16px 18px',
+                  borderRadius: 16,
+                  background: 'linear-gradient(180deg, #f8fcf8 0%, #f0f7f1 100%)',
+                  border: '1px solid #dcebdd',
+                }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: '#1b4332', marginBottom: 8 }}>
+                    {item.title}
+                  </div>
+                  <div style={{ fontSize: 14, lineHeight: 1.6, color: '#52685b' }}>
+                    {item.body}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{
+              padding: '14px 16px',
+              borderRadius: 14,
+              background: '#eef7f0',
+              border: '1px solid #d1e6d7',
+              fontSize: 13,
+              lineHeight: 1.6,
+              color: '#355243',
+            }}>
+              Current website status: this is a product-direction section on the landing page, not a live partner dashboard yet.
+              The actual researcher review and export interface still needs to be implemented.
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* ── Feature content ── */}

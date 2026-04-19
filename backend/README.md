@@ -97,6 +97,7 @@ This service powers the biodiversity ingestion path. It can run full backend inf
 - receives audio clips and photo attachments
 - stores observation artifacts locally
 - runs acoustic inference through `AcousticPipeline`
+- verifies typed photo species claims against submitted images with Gemini
 - optionally post-processes inference results with a local model
 - mirrors observations to Databricks when credentials are configured
 - accepts already-classified observations from Android via `/api/biodiversity/audio-sync`
@@ -114,6 +115,7 @@ This service powers the biodiversity ingestion path. It can run full backend inf
 - `GET /health`
 - `POST /api/biodiversity/audio`
 - `POST /api/biodiversity/photo-link`
+- `POST /api/biodiversity/photo-verify`
 - `POST /api/biodiversity/audio-sync`
 
 ### Run Locally
@@ -125,6 +127,15 @@ source .venv/bin/activate
 pip install -r backend/requirements.txt
 uvicorn backend.app:app --reload --port 3000
 ```
+
+To enable photo verification, configure Gemini before starting the backend:
+
+```bash
+export GEMINI_API_KEY=...
+export GEMINI_MODEL=gemini-2.5-flash
+```
+
+The backend also loads `backend/.env`, so you can copy [backend/.env.example](.env.example) and fill it in locally.
 
 ### Optional Databricks Mirroring
 
