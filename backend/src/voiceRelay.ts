@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { config } from "./config.js";
 import { db } from "./db.js";
 import { fulfillRelayJob, openRelayJobForSenderWallet } from "./solana/client.js";
+import { decryptRelayPayload } from "./solana/crypto.js";
 
 type OpenVoiceRelayJobInput = {
   appUserId: string;
@@ -14,11 +15,7 @@ type OpenVoiceRelayJobInput = {
   expiryTs: number;
   rewardAmount: number;
   nonce: number;
-  recipientName: string;
-  recipientPhoneNumber: string;
-  messageBody: string;
-  contextSummary: string;
-  contextJson: string;
+  encryptedBlob: string; // The encrypted JSON containing recipient details and message
 };
 
 type VoiceRelayJobRow = {
@@ -114,6 +111,14 @@ export async function openVoiceRelayJob(input: OpenVoiceRelayJobInput) {
     return toVoiceRelayResponse(refreshed ?? existing);
   }
 
+  // PRIVACY: Decrypt the sensitive payload sent via the mesh
+  if (!config.relayEncryptionPrivateKey) {
+      throw new Error("Backend encryption key is not configured.");
+  }
+  const decrypted = JSON.parse(decryptRelayPayload(input.encryptedBlob, config.relayEncryptionPrivateKey));
+  const { recipientName, recipientPhoneNumber, messageBody, contextJson } = decrypted;
+  const summary = `Relay message from ${sender.display_name}: "${messageBody}"`;
+
   const bootstrap = await ensureVoiceBootstrap();
   const openResult = await openRelayJobForSenderWallet({
     auditAppUserId: input.appUserId,
@@ -131,15 +136,15 @@ export async function openVoiceRelayJob(input: OpenVoiceRelayJobInput) {
   const call = await initiateOutboundCall({
     agentId: bootstrap.agentId,
     phoneNumberId: bootstrap.phoneNumberId,
-    recipientPhoneNumber: input.recipientPhoneNumber,
+    recipientPhoneNumber: recipientPhoneNumber,
     dynamicVariables: buildDynamicVariables({
-      recipientName: input.recipientName,
+      recipientName: recipientName,
       senderName: sender.display_name,
       senderRealName: sender.real_name,
       callbackNumber: sender.phone_number,
-      messageBody: input.messageBody,
-      contextSummary: input.contextSummary,
-      contextJson: input.contextJson,
+      messageBody: messageBody,
+      contextSummary: summary,
+      contextJson: contextJson,
     }),
   });
 
@@ -195,13 +200,13 @@ export async function openVoiceRelayJob(input: OpenVoiceRelayJobInput) {
     senderAppUserId: sender.app_user_id,
     carrierAppUserId: input.appUserId,
     senderWallet: input.senderWalletPublicKey,
-    recipientName: input.recipientName,
-    recipientPhoneNumber: normalizePhone(input.recipientPhoneNumber),
-    messageBody: input.messageBody,
-    contextSummary: input.contextSummary,
-    contextJson: input.contextJson,
-    destinationHash: input.destinationHashHex,
-    payloadHash: input.payloadHashHex,
+    recipient_name: recipientName,
+    recipient_phone_number: normalizePhone(recipientPhoneNumber),
+    message_body: messageBody,
+    context_summary: summary,
+    context_json: contextJson,
+    destination_hash: input.destinationHashHex,
+    payload_hash: input.payloadHashHex,
     status: "calling",
     openedTxSignature: openResult.txSignature,
     callSid: call.callSid,

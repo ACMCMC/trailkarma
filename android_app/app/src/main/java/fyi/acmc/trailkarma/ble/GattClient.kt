@@ -56,12 +56,14 @@ class GattClient(
 
     fun syncWithPeer(device: BluetoothDevice) {
         scope.launch {
+            onLog("📱 syncWithPeer called for ${device.address}")
             try {
                 withTimeout(CONNECT_TIMEOUT_MS) {
                     connectAndSync(device)
                 }
+                onLog("✓ syncWithPeer completed successfully for ${device.address}")
             } catch (error: Exception) {
-                onLog("BLE sync error with ${device.address}: ${error.message}")
+                onLog("✗ BLE sync error with ${device.address}: ${error.message}")
             }
         }
     }
@@ -70,38 +72,52 @@ class GattClient(
         var gatt: BluetoothGatt? = null
         reportNotificationsReady = false
 
+        onLog("🔗 Attempting GATT connection to ${device.address}")
+
         val callback = object : BluetoothGattCallback() {
             override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
+                val stateStr = if (newState == BluetoothProfile.STATE_CONNECTED) "CONNECTED" else "DISCONNECTED"
+                onLog("📶 onConnectionStateChange: status=$status, newState=$stateStr (${device.address})")
                 if (newState == BluetoothProfile.STATE_CONNECTED) {
+                    onLog("🔄 Requesting MTU 517...")
                     g.requestMtu(517)
                 } else if (newState == BluetoothProfile.STATE_DISCONNECTED && continuation.isActive) {
+                    onLog("❌ Peer disconnected, ending sync")
                     continuation.resume(Unit)
                 }
             }
 
             override fun onMtuChanged(g: BluetoothGatt, mtu: Int, status: Int) {
+                onLog("✓ MTU set to $mtu, discovering services...")
                 g.discoverServices()
             }
 
             override fun onServicesDiscovered(g: BluetoothGatt, status: Int) {
+                onLog("🔍 Services discovered, status=$status")
                 val service = g.getService(GATT_SERVICE_UUID) ?: run {
+                    onLog("✗ GATT_SERVICE_UUID not found!")
                     g.disconnect()
                     return
                 }
+                onLog("✓ Found GATT service, looking for REPORT_CHAR...")
                 val reportChar = service.getCharacteristic(REPORT_CHAR_UUID)
                 val descriptor = reportChar?.getDescriptor(CCCD_UUID)
                 if (reportChar == null || descriptor == null) {
+                    onLog("✗ REPORT_CHAR or CCCD descriptor not found!")
                     g.disconnect()
                     return
                 }
 
+                onLog("✓ Enabling notifications for REPORT_CHAR...")
                 g.setCharacteristicNotification(reportChar, true)
                 descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
                 g.writeDescriptor(descriptor)
             }
 
             override fun onDescriptorWrite(g: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {
+                onLog("✓ Descriptor write complete, status=$status")
                 if (!reportNotificationsReady && descriptor.characteristic.uuid == REPORT_CHAR_UUID) {
+                    onLog("🔔 REPORT_CHAR notifications ready, enabling PACKET_CHAR...")
                     reportNotificationsReady = true
                     val packetChar = g.getService(GATT_SERVICE_UUID)?.getCharacteristic(PACKET_CHAR_UUID)
                     val packetDescriptor = packetChar?.getDescriptor(CCCD_UUID)
@@ -110,29 +126,43 @@ class GattClient(
                         packetDescriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
                         g.writeDescriptor(packetDescriptor)
                         return
+                    } else {
+                        onLog("⚠ PACKET_CHAR not found, skipping...")
                     }
                 }
 
-                scope.launch {
-                    syncReports(g, device.address)
-                    syncPackets(g, device.address)
-                    g.disconnect()
+                if (descriptor.characteristic.uuid == PACKET_CHAR_UUID || reportNotificationsReady) {
+                    onLog("🟢 All notifications ready, starting sync...")
+                    scope.launch {
+                        syncReports(g, device.address)
+                        syncPackets(g, device.address)
+                        g.disconnect()
+                    }
                 }
             }
 
             override fun onCharacteristicRead(g: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) {
+                onLog("📖 onCharacteristicRead: status=$status, uuid=${characteristic.uuid}")
                 val json = if (status == BluetoothGatt.GATT_SUCCESS) {
                     String(characteristic.value ?: ByteArray(0), Charsets.UTF_8)
                 } else {
+                    onLog("✗ Read failed with status $status")
                     null
                 }
                 manifestDeferred?.complete(json)
             }
 
             override fun onCharacteristicChanged(g: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
-                if (characteristic.uuid != activeTransferUuid) return
+                onLog("📨 onCharacteristicChanged: uuid=${characteristic.uuid}, dataSize=${characteristic.value?.size ?: 0}")
+                if (characteristic.uuid != activeTransferUuid) {
+                    onLog("⚠ Ignoring notification for wrong UUID (expected $activeTransferUuid)")
+                    return
+                }
                 val frame = characteristic.value ?: return
-                if (frame.size < 4) return
+                if (frame.size < 4) {
+                    onLog("⚠ Frame too small: ${frame.size} bytes")
+                    return
+                }
 
                 val seq = ((frame[0].toInt() and 0xFF) shl 8) or (frame[1].toInt() and 0xFF)
                 val total = ((frame[2].toInt() and 0xFF) shl 8) or (frame[3].toInt() and 0xFF)
@@ -157,7 +187,15 @@ class GattClient(
         }
 
         gatt = device.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE)
-        continuation.invokeOnCancellation { gatt?.disconnect() }
+        if (gatt == null) {
+            onLog("✗ device.connectGatt() returned null! Check BLE permissions.")
+        } else {
+            onLog("✓ connectGatt call succeeded, waiting for callbacks...")
+        }
+        continuation.invokeOnCancellation {
+            onLog("⚠ GATT connection cancelled, disconnecting...")
+            gatt?.disconnect()
+        }
     }
 
     private suspend fun syncReports(gatt: BluetoothGatt, senderDevice: String) {

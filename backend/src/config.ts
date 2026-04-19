@@ -35,4 +35,5 @@ export const config = {
     path.join(repoRoot, "solana", "target", "idl", "trail_karma_rewards.json"),
   sqlitePath: process.env.SQLITE_PATH ?? path.join(repoRoot, "backend", "trailkarma.db"),
   configSeed: "config",
+  relayEncryptionPrivateKey: process.env.RELAY_ENCRYPTION_PRIVATE_KEY ?? null,
 };

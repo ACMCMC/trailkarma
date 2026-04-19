@@ -215,6 +215,7 @@ class RewardsRepository(context: Context, private val db: AppDatabase) {
             expiryTs = expiryTs,
             rewardAmount = rewardAmount,
             nonce = nonce,
+            encryptedBlob = encryptedBlob,
             signedMessageBase64 = Base64.encodeToString(signedMessage, Base64.NO_WRAP),
             signatureBase64 = Base64.encodeToString(signature, Base64.NO_WRAP),
             source = "self",
