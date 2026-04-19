@@ -385,7 +385,7 @@ export async function openRelayJob(input: {
       expiryTs: new BN(input.expiryTs),
       rewardAmount: new BN(input.rewardAmount),
       nonce: new BN(input.nonce),
-      signedMessage: Array.from(signedMessage),
+      signedMessage: Buffer.from(signedMessage),
     })
     .accounts({
       payer: sponsor.publicKey,
@@ -590,7 +590,7 @@ export async function submitTip(input: {
       tipId: Array.from(tipId),
       amount: new BN(input.amount),
       nonce: new BN(input.nonce),
-      signedMessage: Array.from(signedMessage),
+      signedMessage: Buffer.from(signedMessage),
     })
     .accounts({
       payer: sponsor.publicKey,
