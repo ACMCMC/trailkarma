@@ -1,6 +1,6 @@
 # TrailKarma Track Application Guide
 
-This document maps TrailKarma to every sponsor track we plan to apply for. It is written as a submission-facing engineering brief: what the track is asking for, how our app satisfies it, which parts are already implemented in the repo, and what story we should tell judges in a demo.
+This document maps TrailKarma to every sponsor track we plan to apply for. It is written as a submission-facing engineering brief: what the track is asking for, how our app satisfies it, which parts are already implemented in the repo, which supporting artifacts live outside the repo, and what story we should tell judges in a demo.
 
 ## How To Read This
 
@@ -15,6 +15,23 @@ Not every track maps to the same layer of the project.
 
 Where a track is weaker or depends on packaging outside the repo, this document says so explicitly. The goal is to be detailed without overclaiming.
 
+## Submission Artifacts Beyond The Repo
+
+Some of our strongest training and analytics evidence lives outside the checked-in codebase and should be included in the final submission bundle or demo deck.
+
+Those external artifacts include:
+
+- Marimo notebooks used for exploratory data analysis on trail/environment data
+- Marimo notebooks used to train the snake-risk model
+- Marimo notebooks used to visualize risk zones on the trail
+- any Sphinx-generated or Sphinx-ready rendered documentation built from those notebooks and our markdown docs
+
+This matters most for:
+
+- Best Use of Marimo/Sphinx
+- Best Models Trained on Impulse AI Platform
+- Best Use of Databricks, if the notebooks show analytics outputs or risk-zone visualizations backed by warehouse data
+
 ## App Architecture In One Paragraph
 
 TrailKarma is an offline-first hiking app. The Android client stores reports, biodiversity observations, relay jobs, location history, and wallet state locally. Phones exchange reports and relay packets over BLE when there is no signal. When connectivity returns, the app syncs reports, locations, biodiversity events, and relay metadata to Databricks-backed services. Solana is used as a narrow settlement layer for KARMA rewards, badge ownership, relay-job uniqueness, and tipping. AI appears in three places: on-device biodiversity audio inference, Gemini-backed photo verification, and ElevenLabs-backed delayed voice relay calls.
@@ -23,17 +40,17 @@ TrailKarma is an offline-first hiking app. The Android client stores reports, bi
 
 | Track | Fit Strength | Why We Fit |
 | --- | --- | --- |
-| Best Use of Marimo/Sphinx | Workflow fit | We have a real Marimo notebook for reproducible species-dataset creation and a structured docs set that can anchor Sphinx-style documentation. |
+| Best Use of Marimo/Sphinx | Strong workflow fit | We have an in-repo Marimo notebook plus additional off-repo Marimo notebooks for EDA, snake-risk training, and risk-zone visualization, along with a strong docs set that can be published through Sphinx. |
 | Best Use of Scripps Data | Strong fit | Our biodiversity, trail safety, and species-reporting pipeline uses the Southern California species dataset as seeded training/report data. |
 | Best Use of Databricks | Strong fit | Databricks is the cloud analytics and sync backbone for reports, trails, biodiversity mirroring, H3 indexing, and warehouse queries. |
 | Best Use of Edge-AI (Qualcomm) | Strong fit | Core biodiversity intelligence runs on-device in the Android app using a bundled TFLite model pack. |
-| Best Models Trained on Impulse AI Platform | Workflow fit | Our model-development story includes an Impulse-ready training pipeline and a weather/snake-risk narrative tied to our trail safety layer. |
+| Best Models Trained on Impulse AI Platform | Strong workflow fit | Our model-development story includes an Impulse-ready training pipeline plus off-repo Marimo notebooks used to train the weather-aware snake-risk model for trail safety. |
 | Best Use of Nvidia Brev.dev | Strong fit | Brev is used for the heavier biodiversity training/export workflow that produces the Android model artifacts. |
 | Most Innovative Idea (The Basement) | Strong fit | The product idea itself is unusually strong: offline trail mutual aid, BLE message carrying, biodiversity logging, and on-chain social rewards in one system. |
 | Best Use of Gemini API | Strong fit | Gemini verifies typed species claims from photos directly in the Android app and backend support code. |
 | Best Use of ElevenLabs | Strong fit | ElevenLabs powers the voice relay path for delayed check-in and emergency-style message delivery. |
 | Best Use of Solana | Strong fit | Solana secures reward issuance, relay-job uniqueness, badge ownership, and KARMA tipping without requiring users to hold SOL. |
-| Best Use of DigitalOcean | Deployment fit | Our app already expects hosted public API endpoints for release builds, and the services are separable enough to deploy cleanly on DigitalOcean infrastructure. |
+| Best Use of DigitalOcean | Deployment fit | Our app already expects hosted public API endpoints for release builds, and the services are separable enough to deploy cleanly on DigitalOcean infrastructure if the live demo stack is hosted there. |
 
 ## 1. Best Use of Marimo/Sphinx
 
@@ -43,7 +60,7 @@ This track rewards ML/data-science development done in Marimo notebooks with cle
 
 ### How TrailKarma Fits
 
-Our biodiversity model-development workflow already has a real Marimo notebook entrypoint:
+Our biodiversity model-development workflow already has a real Marimo notebook entrypoint in the repo:
 
 - [data_pipeline.py](../data_pipeline.py)
 
@@ -64,9 +81,16 @@ It even calls out challenge coverage inside the notebook itself:
 - `Best Use of Marimo/Sphinx`
 - `Best Models Trained on Impulse AI Platform`
 
+In addition to that checked-in notebook, we also have off-repo Marimo notebooks that were used for:
+
+- EDA on the risk and environmental dataset
+- training the trail snake-risk model
+- visualizing trail risk zones for decision support and demo storytelling
+
 ### Implementation Details To Highlight
 
-- The Marimo notebook is not a toy notebook; it is part of the real data pipeline that converts biodiversity observations into a trainable species dataset.
+- The checked-in Marimo notebook is not a toy notebook; it is part of the real data pipeline that converts biodiversity observations into a trainable species dataset.
+- The off-repo Marimo notebooks cover the complementary analytics side of the project: EDA, weather-aware snake-risk modeling, and risk-zone visualization.
 - The downstream training/export chain is represented in the repo through the `backend/training/` scripts and the Android model pack in `android_app/app/src/main/assets/biodiversity/`.
 - Our broader documentation layer is already structured in markdown across:
   - [README.md](../README.md)
@@ -80,12 +104,13 @@ It even calls out challenge coverage inside the notebook itself:
 The strongest honest framing is:
 
 - Marimo is already part of the real model/data workflow.
+- The external Marimo notebooks should be attached during submission because they strengthen the risk-model and analytics story significantly.
 - Our documentation set is strong and reproducible.
 - The Sphinx part should be presented as the publishing/documentation layer for this existing notebook + docs set.
 
 ### Caveat
 
-The repo currently contains the Marimo notebook and the docs content, but not a committed Sphinx `conf.py` / build scaffold. We should describe this as a documentation workflow fit, not as a claim that the app itself depends on Sphinx at runtime.
+The repo currently contains one Marimo notebook and the docs content, but not the full set of external Marimo notebooks or a committed Sphinx `conf.py` / build scaffold. We should present the missing pieces as supplemental submission artifacts, not as runtime dependencies of the app.
 
 ## 2. Best Use of Scripps Data
 
@@ -217,7 +242,7 @@ This track rewards creative, practical model training and deployment using Impul
 
 ### How TrailKarma Fits
 
-This is primarily a model-development workflow track for us.
+This is a model-development track for us, and we should present it that way.
 
 Strong repo evidence:
 
@@ -225,6 +250,11 @@ Strong repo evidence:
 - [backend/training/generate_impulse_jsonl.py](../backend/training/generate_impulse_jsonl.py)
 - [backend/training/finetune_local_llm.py](../backend/training/finetune_local_llm.py)
 - [setup_databricks.py](../setup_databricks.py)
+
+Strong external submission evidence:
+
+- Marimo notebooks used to train the snake-risk model from weather and trail context
+- Marimo notebooks used to visualize trail risk zones and evaluate the model outputs
 
 ### Implementation Details To Highlight
 
@@ -235,6 +265,7 @@ Strong repo evidence:
   - train with Impulse AutoML
   - export TFLite for Android
 - The broader safety model story includes our weather-aware `snake_risk` schema in Databricks through `weather_cache`.
+- The off-repo Marimo notebooks are the right place to show the snake-risk model-training flow, the feature analysis, and the risk-zone outputs that connect model quality to real trail decisions.
 - Our species and snake-focused data sources make the model story directly useful for hikers, not generic wildlife ML.
 
 ### Best Submission Framing
@@ -244,10 +275,11 @@ For judges, the strongest framing is:
 - Impulse is the training/deployment workflow for safety and biodiversity models.
 - The Android app is the runtime consumer of those compact model artifacts.
 - The point of the model is practical risk awareness on remote trails.
+- The off-repo notebooks should be part of the submission package because they make the safety-model story much more concrete.
 
 ### Caveat
 
-The repo has the Impulse-ready dataset pipeline and the schema hooks for weather/snake-risk scoring, but the full snake-risk training code is not as explicit in-repo as the biodiversity model-export path. We should present this as a model-workflow fit supported by real data plumbing, not as a claim that every training step lives in this repository.
+The repo has the Impulse-ready dataset pipeline and the schema hooks for weather/snake-risk scoring, but the full snake-risk training workflow is better represented by the external Marimo notebooks than by the checked-in code alone. We should still apply for this track, but include those notebooks directly in the judging materials.
 
 ## 6. Best Use of Nvidia Brev.dev
 
@@ -449,7 +481,7 @@ This track rewards stable hosting and scaling on DigitalOcean infrastructure.
 
 ### How TrailKarma Fits
 
-This is our weakest purely in-repo track, but we do have a clean deployment story.
+This is our weakest purely in-repo track, but we do have a clean deployment story and it is still worth applying if the live demo stack is hosted on DigitalOcean.
 
 Relevant files:
 
@@ -471,7 +503,7 @@ Relevant files:
 
 ### Best Submission Framing
 
-If we are applying for this track, the honest framing should be:
+Because we are applying for this track too, the honest framing should be:
 
 - DigitalOcean is the stable public home for our API stack.
 - The Android release path already assumes hosted endpoints.
@@ -479,7 +511,7 @@ If we are applying for this track, the honest framing should be:
 
 ### Caveat
 
-This track is strongest only if our actual live demo deployment is on DigitalOcean. The repo alone proves deployability, but not the hosting choice.
+This track is strongest only if our actual live demo deployment is on DigitalOcean. The repo alone proves deployability, but not the hosting choice, so the final submission should explicitly state the DigitalOcean hosting topology if we use it.
 
 ## Recommended Demo Talking Points Per Track
 
@@ -546,8 +578,8 @@ If we have to prioritize what we are strongest on technically, the best tracks a
 6. Best Use of Gemini API
 7. Best Use of Nvidia Brev.dev
 
-The workflow/deployment tracks are still worth applying for, but we should frame them carefully:
+The workflow/deployment tracks are still worth applying for, and we should frame them carefully:
 
-- Marimo/Sphinx: strong on Marimo, documentation-forward on Sphinx
-- Impulse: strong on training workflow, lighter on explicit in-repo model-serving proof
-- DigitalOcean: strongest only if our live demo stack is actually hosted there
+- Marimo/Sphinx: strong on Marimo, documentation-forward on Sphinx, with external notebooks attached
+- Impulse: strong on training workflow, especially once the external snake-risk notebooks are attached
+- DigitalOcean: strongest only if our live demo stack is actually hosted there and we say so directly
