@@ -160,6 +160,39 @@ Current Android behavior:
 - displays KARMA and badge state on the map screen
 - shows reward claim status in report history
 
+## Current GUI Status
+
+The Android rewards GUI is partially built out. The current app exposes the core reward state, but it is not yet a full collectibles or wallet product surface.
+
+What already exists in the UI:
+
+- a KARMA and badges summary card on the map screen
+  - shows current KARMA balance
+  - shows earned badge names returned by the backend wallet state
+- reward status indicators in report history
+  - per-report state shows `pending`, `rejected`, or rewarded
+  - rewarded reports also show a transaction signature snippet
+- relay-job reward UI in the BLE screen
+  - create relay jobs
+  - open relay jobs on-chain
+  - fulfill open relay jobs
+  - view relay reward amount and tx snippets
+
+What is not built out yet:
+
+- no dedicated collectibles gallery or badge inventory screen
+- no dedicated wallet screen with KARMA transaction history
+- no user-facing tip screen, even though the backend and Android repository layer support tipping
+- no badge artwork rendering or Token-2022 metadata presentation
+- no reward activity feed explaining when and why badges were earned
+
+Recommended next UI work for a collaborator:
+
+- build a dedicated `RewardsScreen` with KARMA balance, earned badges, and recent reward events
+- build a `CollectiblesScreen` with badge cards, descriptions, and milestone progress
+- build a `TipKarmaScreen` so users can send KARMA from the app
+- add richer badge presentation instead of only rendering badge names inline
+
 Android configuration:
 
 - `BuildConfig.REWARDS_BASE_URL` controls the backend URL
@@ -251,10 +284,26 @@ Verified end to end on Devnet:
 - test user registered through backend
 - hazard contribution claimed on-chain
 - wallet reflected `10 KARMA` and `Trail Scout`
+- relay job open worked on-chain
+- relay fulfillment worked on-chain
+- KARMA tipping worked end to end
 
-Example successful Devnet reward transaction:
+Most recent Devnet smoke-test behavior:
 
-- `5BYdCN76VbrmA5nrCUCfGQWhFsdwZnG9CEeSq36bTq7wytjmzgNd93b9pw3JhpxE57KCKZoZXAadeZVJ2n6nYXnK`
+- fresh user registration returned `0 KARMA`
+- hazard contribution claim minted `10 KARMA`
+- first contribution minted `Trail Scout`
+- relay-job open produced a valid on-chain relay job
+- first valid relay fulfiller received `12 KARMA`
+- first relay fulfillment minted `Relay Ranger`
+- a `1 KARMA` tip transferred successfully between two test wallets
+
+Example successful Devnet smoke-test transactions from the current branch:
+
+- contribution reward: `47pFWV68qEVGfDCh8s4jd32cCX4FfhdHrgZhJ2RseUo5cM5aZX6GrxD6yzozHdTy8je5VWT4roos7Y2TGGL9SJh6`
+- relay open: `ZZurUu1j9Pobp2ckwfahvKtb6jYgvR9xncba27jK3mh6wSwgponGcXhGqPRBB6eJeKg9xfA2Jhvmfhdhyt7EPS6`
+- relay fulfill: `5REdGjWuBefPd8JrcSk7rLiPSB2Ag2yhFB7AqRWfAoDufiUE2pxpq8VeFshTqxYDXzDkXTddoKnCe7AEZo3QLYaB`
+- tip transfer: `2TiDriwG9EBAYabbquBTJ9UZ6GJUQb83DB2u7mcjoNNP5KK6RmbUiGMx6yjzrD2bqcbbQXWk3joBSUgHWkcHSDL2`
 
 ## Current Commands
 
@@ -284,24 +333,33 @@ Build Solana program:
 
 ```bash
 cd solana
-~/.avm/bin/anchor-1.0.0 build
+~/.avm/bin/anchor build
 ```
 
 Deploy Solana program:
 
 ```bash
 cd solana
-~/.avm/bin/anchor-1.0.0 deploy --provider.cluster devnet --provider.wallet ../backend/keys/admin.json
+~/.avm/bin/anchor deploy --provider.cluster devnet --provider.wallet ../backend/keys/admin.json
 ```
 
 ## Important Tooling Notes
 
-The working toolchain in this repo ended up being:
+The working toolchain in this repo is currently:
 
 - Solana CLI `3.1.13`
-- Anchor CLI `1.0.0` for successful build/deploy flow
+- Anchor CLI `0.30.1`
 
-`anchor 0.30.1` was not reliable in this environment because of IDL generation issues. The program dependencies are still `anchor-lang` / `anchor-spl` `0.30.1`, but the CLI that worked for this branch was `1.0.0`.
+The repo still uses `anchor-lang` / `anchor-spl` `0.30.1`. To restore reliable local IDL generation, this branch now patches `anchor-syn 0.30.1` through Cargo:
+
+- [solana/Cargo.toml](/Users/suraj/Desktop/dhacks/datahacks26/solana/Cargo.toml)
+- [solana/patches/anchor-syn/src/idl/defined.rs](/Users/suraj/Desktop/dhacks/datahacks26/solana/patches/anchor-syn/src/idl/defined.rs)
+
+Reason for the patch:
+
+- upstream `anchor-syn 0.30.1` called `proc_macro2::Span::source_file()`
+- the currently resolved `proc-macro2` no longer exposes that method
+- the local patch switches that logic to `local_file()` / `file()` so `anchor build` works again in this environment
 
 The SBF build also needed an older compatible `blake3` / `constant_time_eq` lockfile resolution so the Solana platform Rust toolchain could compile the workspace.
 
@@ -316,6 +374,7 @@ Current limitations:
 - there is no hosted backend URL yet for physical phone testing
 - map wallet state refreshes after local state changes, but there is no push channel or background polling strategy yet
 - the Android app still has a simplified relay demo flow rather than full encrypted traveler messaging UX
+- the Android app does not yet have a full collectibles gallery, wallet history screen, or in-app tipping UI
 
 ## Planned Relay Upgrade
 
