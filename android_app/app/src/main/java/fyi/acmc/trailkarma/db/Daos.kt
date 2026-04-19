@@ -47,6 +47,9 @@ interface LocationUpdateDao {
     @Query("UPDATE location_updates SET synced = 1 WHERE id = :id")
     suspend fun markSynced(id: String) // String UUID now
 
+    @Query("SELECT * FROM location_updates ORDER BY timestamp DESC")
+    fun getAll(): Flow<List<LocationUpdate>>
+
     @Query("SELECT * FROM location_updates ORDER BY rowid DESC LIMIT 1")
     fun getLatest(): Flow<LocationUpdate?>
 }
