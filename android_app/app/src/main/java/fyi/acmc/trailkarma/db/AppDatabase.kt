@@ -45,7 +45,7 @@ class DatabaseCallback : RoomDatabase.Callback() {
         RelayInboxMessage::class,
         Trail::class
     ],
-    version = 9,
+    version = 11,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

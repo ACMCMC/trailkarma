@@ -33,8 +33,8 @@ data class StructuredCandidatePayload(
     val topCandidates: List<AcousticCandidate>,
     val rawConfidence: Float,
     val backgroundFlags: List<String>,
-    val lat: Double,
-    val lon: Double,
+    val lat: Double? = null,
+    val lon: Double? = null,
     val timestamp: String
 )
 
@@ -126,8 +126,8 @@ class LocalBiodiversityInferenceEngine(private val context: Context) {
     suspend fun infer(
         audioFile: File,
         observationId: String,
-        lat: Double,
-        lon: Double,
+        lat: Double?,
+        lon: Double?,
         timestamp: String
     ): LocalInferenceResult {
         val (sampleRate, signal) = WavReader.readMonoPcm16(audioFile)
@@ -245,8 +245,8 @@ class LocalBiodiversityInferenceEngine(private val context: Context) {
         embedding: FloatArray,
         features: SignalFeatures,
         observationId: String,
-        lat: Double,
-        lon: Double,
+        lat: Double?,
+        lon: Double?,
         timestamp: String
     ): StructuredCandidatePayload {
         val classifier = predictClassifierProbabilities(embedding, bundle)
@@ -339,7 +339,7 @@ class LocalBiodiversityInferenceEngine(private val context: Context) {
 
         val ranked = combined.entries.sortedByDescending { it.value }.take(5)
         if (ranked.isEmpty()) {
-            val fallback = heuristicPayload(features, "unknown", 0.0, 0.0, "")
+            val fallback = heuristicPayload(features, "unknown", null, null, "")
             return Triple(fallback.topCandidates, fallback.rawConfidence, fallback.backgroundFlags)
         }
 
@@ -406,8 +406,8 @@ class LocalBiodiversityInferenceEngine(private val context: Context) {
     private fun heuristicPayload(
         features: SignalFeatures,
         observationId: String,
-        lat: Double,
-        lon: Double,
+        lat: Double?,
+        lon: Double?,
         timestamp: String
     ): StructuredCandidatePayload {
         val backgroundFlags = backgroundFlags(features)

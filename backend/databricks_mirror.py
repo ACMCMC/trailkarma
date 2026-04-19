@@ -22,8 +22,8 @@ class DatabricksMirror:
         VALUES (
             '{event["observation_id"]}',
             '{event["timestamp"]}',
-            {event["lat"]},
-            {event["lon"]},
+            {"NULL" if event.get("lat") is None else event["lat"]},
+            {"NULL" if event.get("lon") is None else event["lon"]},
             '{event["finalLabel"].replace("'", "''")}',
             '{event["finalTaxonomicLevel"]}',
             {event["confidence"]},

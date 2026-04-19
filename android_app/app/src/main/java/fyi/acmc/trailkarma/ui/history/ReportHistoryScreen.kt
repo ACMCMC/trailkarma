@@ -91,7 +91,10 @@ class ReportHistoryViewModel(app: Application) : AndroidViewModel(app) {
         id = item.id,
         timestamp = item.createdAt,
         title = item.finalLabel ?: "Queued local biodiversity capture",
-        subtitle = "biodiversity_audio_detection",
+        subtitle = buildString {
+            append(item.observerDisplayName ?: "unknown hiker")
+            append(" • biodiversity_audio_detection")
+        },
         body = item.explanation ?: "Audio captured at ${item.createdAt}",
         synced = item.cloudSyncState == CloudSyncState.SYNCED || item.synced,
         badges = buildList {
@@ -108,6 +111,9 @@ class ReportHistoryViewModel(app: Application) : AndroidViewModel(app) {
             }
             if (item.photoUri != null) add("photo" to Color(0xFF6A1B9A))
             if (item.karmaStatus.name == "pending") add("karma pending" to Color(0xFF8E24AA))
+            if (item.collectibleStatus == "verified") add("collectible" to Color(0xFFE7A64F))
+            if (item.lat == null || item.lon == null) add("location missing" to Color(0xFFC62828))
+            add(item.dataShareStatus.replace('_', ' ') to Color(0xFF546E7A))
         }
     )
 }

@@ -69,16 +69,30 @@ class BiodiversitySyncWorker(context: Context, params: WorkerParameters) : Corou
                     audioFile.name,
                     audioFile.asRequestBody("audio/wav".toMediaType())
                 ),
-                lat = item.lat.toString().toRequestBody("text/plain".toMediaType()),
-                lon = item.lon.toString().toRequestBody("text/plain".toMediaType()),
+                lat = item.lat?.toString()?.toPlainTextPart(),
+                lon = item.lon?.toString()?.toPlainTextPart(),
+                locationAccuracyMeters = item.locationAccuracyMeters?.toString()?.toPlainTextPart(),
+                locationSource = item.locationSource.toPlainTextPart(),
                 timestamp = item.createdAt.toRequestBody("text/plain".toMediaType()),
                 observationId = item.observationId.toRequestBody("text/plain".toMediaType()),
+                userId = item.userId.toRequestBody("text/plain".toMediaType()),
+                observerDisplayName = item.observerDisplayName?.toPlainTextPart(),
+                observerWalletPublicKey = item.observerWalletPublicKey?.toPlainTextPart(),
                 finalLabel = finalLabel.toRequestBody("text/plain".toMediaType()),
                 finalTaxonomicLevel = finalTaxonomicLevel.toRequestBody("text/plain".toMediaType()),
                 confidence = confidence.toString().toRequestBody("text/plain".toMediaType()),
                 confidenceBand = confidenceBand.toRequestBody("text/plain".toMediaType()),
                 explanation = explanation.toRequestBody("text/plain".toMediaType()),
                 safeForRewarding = item.safeForRewarding.toString().toRequestBody("text/plain".toMediaType()),
+                verificationStatus = item.verificationStatus.toRequestBody("text/plain".toMediaType()),
+                verificationTxSignature = item.verificationTxSignature?.toPlainTextPart(),
+                verifiedAt = item.verifiedAt?.toPlainTextPart(),
+                collectibleStatus = item.collectibleStatus.toRequestBody("text/plain".toMediaType()),
+                collectibleId = item.collectibleId?.toPlainTextPart(),
+                collectibleName = item.collectibleName?.toPlainTextPart(),
+                collectibleImageUri = item.collectibleImageUri?.toPlainTextPart(),
+                dataShareStatus = item.dataShareStatus.toRequestBody("text/plain".toMediaType()),
+                sharedWithOrgAt = item.sharedWithOrgAt?.toPlainTextPart(),
                 topKJson = topKJson.toRequestBody("application/json".toMediaType()),
                 modelMetadataJson = (item.modelMetadataJson ?: "{}").toRequestBody("application/json".toMediaType()),
                 classificationSource = (item.classificationSource ?: "local_android").toRequestBody("text/plain".toMediaType()),
@@ -144,3 +158,5 @@ class BiodiversitySyncWorker(context: Context, params: WorkerParameters) : Corou
         }
     }
 }
+
+private fun String.toPlainTextPart() = toRequestBody("text/plain".toMediaType())

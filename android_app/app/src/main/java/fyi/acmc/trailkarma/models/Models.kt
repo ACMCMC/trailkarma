@@ -79,9 +79,14 @@ data class BiodiversityContribution(
     @PrimaryKey val id: String,
     val type: String = "biodiversity_audio_detection",
     val observationId: String,
+    val userId: String,
+    val observerDisplayName: String? = null,
+    val observerWalletPublicKey: String? = null,
     val createdAt: String,
-    val lat: Double,
-    val lon: Double,
+    val lat: Double? = null,
+    val lon: Double? = null,
+    val locationAccuracyMeters: Float? = null,
+    val locationSource: String = "missing",
     val audioUri: String,
     val photoUri: String? = null,
     val topKJson: String? = null,
@@ -102,16 +107,30 @@ data class BiodiversityContribution(
     val synced: Boolean = false,
     val modelMetadataJson: String? = null,
     val classificationSource: String? = null,
-    val localModelVersion: String? = null
+    val localModelVersion: String? = null,
+    val verificationTxSignature: String? = null,
+    val verifiedAt: String? = null,
+    val collectibleStatus: String = "none",
+    val collectibleId: String? = null,
+    val collectibleName: String? = null,
+    val collectibleImageUri: String? = null,
+    val dataShareStatus: String = "local_only",
+    val sharedWithOrgAt: String? = null
 )
 
 @Entity(tableName = "karma_events")
 data class KarmaEvent(
     @PrimaryKey val id: String,
     val observationId: String,
+    val userId: String,
     val createdAt: String,
     val status: String = "pending",
     val reason: String = "biodiversity_reward_pending",
+    val walletPublicKey: String? = null,
+    val collectibleStatus: String = "pending_verification",
+    val collectibleId: String? = null,
+    val verificationTxSignature: String? = null,
+    val verifiedAt: String? = null,
     val synced: Boolean = false
 )
 

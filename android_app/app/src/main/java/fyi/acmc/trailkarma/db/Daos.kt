@@ -201,7 +201,7 @@ interface TrailDao {
 
 @Dao
 interface KarmaEventDao {
-    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(event: KarmaEvent)
 
     @Query("SELECT * FROM karma_events WHERE observationId = :observationId LIMIT 1")

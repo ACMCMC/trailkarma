@@ -21,6 +21,8 @@ data class RelayableBiodiversityPayload(
     val observation_id: String,
     val lat: Double,
     val lon: Double,
+    val location_accuracy_meters: Float? = null,
+    val location_source: String? = null,
     val timestamp: String,
     val finalLabel: String,
     val taxonomicLevel: String,
@@ -95,7 +97,17 @@ class BiodiversityRepository(
 
     suspend fun markCloudSynced(observationId: String) {
         val item = contributionDao.getByObservationId(observationId) ?: return
-        contributionDao.update(item.copy(cloudSyncState = CloudSyncState.SYNCED, synced = true))
+        contributionDao.update(
+            item.copy(
+                cloudSyncState = CloudSyncState.SYNCED,
+                synced = true,
+                dataShareStatus = if (item.lat == null || item.lon == null) {
+                    "mirrored_cloud_missing_location"
+                } else {
+                    "mirrored_cloud"
+                }
+            )
+        )
     }
 
     suspend fun attachLocalPhoto(observationId: String, photoPath: String) {
@@ -140,33 +152,52 @@ class BiodiversityRepository(
                 confidence = confidence,
                 confidenceBand = confidenceBand,
                 explanation = explanation,
-                relayable = true,
+                relayable = item.lat != null && item.lon != null,
                 safeForRewarding = safeForRewarding,
                 karmaStatus = if (safeForRewarding) KarmaStatus.pending else KarmaStatus.none,
                 inferenceState = InferenceState.CLASSIFIED_LOCAL,
                 cloudSyncState = CloudSyncState.SYNC_QUEUED,
                 modelMetadataJson = modelMetadataJson,
                 classificationSource = classificationSource,
-                localModelVersion = localModelVersion
+                localModelVersion = localModelVersion,
+                collectibleStatus = if (safeForRewarding) "pending_verification" else "not_eligible",
+                dataShareStatus = when {
+                    item.lat == null || item.lon == null -> "location_missing"
+                    else -> "classification_ready"
+                }
             )
         )
     }
 
     suspend fun saveContribution(observationId: String) {
         val item = contributionDao.getByObservationId(observationId) ?: return
-        contributionDao.update(item.copy(savedLocally = true))
+        contributionDao.update(
+            item.copy(
+                savedLocally = true,
+                dataShareStatus = if (item.cloudSyncState == CloudSyncState.SYNCED) {
+                    "mirrored_cloud"
+                } else if (item.lat == null || item.lon == null) {
+                    "location_missing"
+                } else {
+                    "ready_local"
+                }
+            )
+        )
 
         if (item.safeForRewarding && karmaEventDao.findByObservationId(observationId) == null) {
             karmaEventDao.insert(
                 KarmaEvent(
                     id = UUID.randomUUID().toString(),
                     observationId = observationId,
-                    createdAt = Instant.now().toString()
+                    userId = item.userId,
+                    createdAt = Instant.now().toString(),
+                    walletPublicKey = item.observerWalletPublicKey,
+                    collectibleStatus = item.collectibleStatus
                 )
             )
         }
 
-        if (item.relayable && item.finalLabel != null && item.finalTaxonomicLevel != null && item.confidenceBand != null) {
+        if (item.relayable && item.lat != null && item.lon != null && item.finalLabel != null && item.finalTaxonomicLevel != null && item.confidenceBand != null) {
             val packetId = "bio-${item.observationId}"
             if (relayPacketDao.exists(packetId) == 0) {
                 relayPacketDao.insert(
@@ -177,6 +208,8 @@ class BiodiversityRepository(
                                 observation_id = item.observationId,
                                 lat = item.lat,
                                 lon = item.lon,
+                                location_accuracy_meters = item.locationAccuracyMeters,
+                                location_source = item.locationSource,
                                 timestamp = item.createdAt,
                                 finalLabel = item.finalLabel,
                                 taxonomicLevel = item.finalTaxonomicLevel,
@@ -189,6 +222,42 @@ class BiodiversityRepository(
                     )
                 )
             }
+        }
+    }
+
+    suspend fun markCollectibleVerified(
+        observationId: String,
+        collectibleId: String,
+        collectibleName: String,
+        verificationTxSignature: String,
+        collectibleImageUri: String? = null,
+        verifiedAt: String = Instant.now().toString()
+    ) {
+        val item = contributionDao.getByObservationId(observationId) ?: return
+        contributionDao.update(
+            item.copy(
+                verificationStatus = "verified",
+                karmaStatus = KarmaStatus.awarded,
+                verificationTxSignature = verificationTxSignature,
+                verifiedAt = verifiedAt,
+                collectibleStatus = "verified",
+                collectibleId = collectibleId,
+                collectibleName = collectibleName,
+                collectibleImageUri = collectibleImageUri
+            )
+        )
+
+        karmaEventDao.findByObservationId(observationId)?.let { event ->
+            karmaEventDao.insert(
+                event.copy(
+                    status = "verified",
+                    collectibleStatus = "verified",
+                    collectibleId = collectibleId,
+                    verificationTxSignature = verificationTxSignature,
+                    verifiedAt = verifiedAt,
+                    synced = false
+                )
+            )
         }
     }
 }
