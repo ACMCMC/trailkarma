@@ -8,7 +8,7 @@ import math
 import csv
 import requests
 import xml.etree.ElementTree as ET
-from datetime import datetime, timedelta, UTC
+from datetime import datetime, timedelta, timezone
 
 try:
     import h3
@@ -179,7 +179,7 @@ def load_species_report_statements(full_schema):
                 report_id = str(uuid.uuid4())
                 title = (row.get("common_name") or row.get("species_guess") or "Unknown Species").replace("'", "\\'")
                 desc = (row.get("description") or row.get("place_guess") or "").replace("'", "\\'")
-                ts = row.get("time_observed_at") or row.get("observed_on") or iso_z(datetime.now(UTC))
+                ts = row.get("time_observed_at") or row.get("observed_on") or iso_z(datetime.now(timezone.utc))
                 image_url = (row.get("image_url") or "").replace("'", "\\'")
                 species_name = (row.get("scientific_name") or "").replace("'", "\\'")
                 h3_cell = latlng_to_h3(lat, lng)
@@ -281,7 +281,7 @@ def main():
     schema = "trailkarma"
     full_schema = f"{catalog}.{schema}"
 
-    now = datetime.now(UTC)
+    now = datetime.now(timezone.utc)
 
     # The 4 demo hikers (id, name, wallet, karma, active_trail_id)
     pct_trail_id = str(uuid.uuid4())
@@ -332,6 +332,7 @@ def main():
         f"DROP TABLE IF EXISTS {full_schema}.trail_waypoints",
         f"DROP TABLE IF EXISTS {full_schema}.users",
         f"DROP TABLE IF EXISTS {full_schema}.trails",
+        f"DROP TABLE IF EXISTS {full_schema}.biodiversity_events",
         
         # RECREATE FULL STRUCTURE
         f"""CREATE TABLE {full_schema}.trails (
@@ -452,6 +453,20 @@ def main():
             uploaded     BOOLEAN,
             created_at   TIMESTAMP,
             updated_at   TIMESTAMP
+        ) USING DELTA""",
+
+        f"""CREATE TABLE {full_schema}.biodiversity_events (
+            observation_id STRING NOT NULL PRIMARY KEY,
+            timestamp STRING NOT NULL,
+            lat DOUBLE,
+            lon DOUBLE,
+            final_label STRING,
+            taxonomic_level STRING,
+            confidence DOUBLE,
+            confidence_band STRING,
+            explanation STRING,
+            verification_status STRING,
+            photo_uri STRING
         ) USING DELTA""",
 
         # --- H3 SPATIAL OPTIMIZATION ---

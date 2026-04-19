@@ -12,7 +12,7 @@ import os
 import uuid
 import json
 import requests
-from datetime import datetime, timedelta, UTC
+from datetime import datetime, timedelta, timezone
 
 try:
     import h3
@@ -105,7 +105,7 @@ def build_insert(obs: dict, full_schema: str) -> str:
     desc = obs["place_guess"].replace("'", "\\'")
     lat, lng = obs["lat"], obs["lng"]
     h3_cell = h3.latlng_to_cell(lat, lng, 9)
-    ts = obs["observed_on"] or datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    ts = obs["observed_on"] or datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     image_url = obs["image_url"].replace("'", "\\'")
     species_name = obs["scientific_name"].replace("'", "\\'")
     user_id = f"inaturalist-{obs['observation_id']}"
@@ -141,7 +141,7 @@ def main():
         raise SystemExit("❌ Missing DATABRICKS_HOST / DATABRICKS_TOKEN / DATABRICKS_WAREHOUSE")
 
     full_schema = "workspace.trailkarma"
-    since = datetime.now(UTC) - timedelta(hours=1)
+    since = datetime.now(timezone.utc) - timedelta(hours=1)
 
     print(f"\n🌿 TrailKarma iNaturalist Sync")
     print(f"   Fetching observations since {since.strftime('%Y-%m-%d %H:%M')} UTC\n")
