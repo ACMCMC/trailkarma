@@ -1,0 +1,72 @@
+/Users/acmc/Library/Python/3.9/lib/python/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'. See: https://github.com/urllib3/urllib3/issues/3020
+  warnings.warn(
+
+🔧 TrailKarma Databricks Setup
+🌐 Workspace: https://dbc-f1d1578e-8435.cloud.databricks.com
+
+🔍 Finding SQL warehouse...
+  ✓ Using: All-Purpose
+
+🗄️  Executing 22 SQL statements to wipe, recreate, and populate DB...
+
+  [ 1/22] CREATE SCHEMA IF NOT EXISTS main.trailkarma... ❌ ([NO_SUCH_CATALOG_EXCEPTION] Catalog 'main' was not found. Please verify the catalog name and then retry the query or command again. SQLSTATE: 42704)
+  [ 2/22] DROP TABLE IF EXISTS main.trailkarma.users... ✅
+  [ 3/22] DROP TABLE IF EXISTS main.trailkarma.trail_reports... ✅
+  [ 4/22] DROP TABLE IF EXISTS main.trailkarma.location_updates... ✅
+  [ 5/22] DROP TABLE IF EXISTS main.trailkarma.relay_packets... ✅
+  [ 6/22] CREATE TABLE main.trailkarma.users (             user_i... ❌ ([SCHEMA_NOT_FOUND] The schema `main.trailkarma` cannot be found. Verify the spelling and correctness of the schema and catalog.
+If you did not qualify the name with a catalog, verify the current_schema() output, or qualify the name with the correct catalog.
+To tolerate the error on drop use DROP SCHEMA IF EXISTS. SQLSTATE: 42704)
+  [ 7/22] CREATE TABLE main.trailkarma.trail_reports (... ❌ ([SCHEMA_NOT_FOUND] The schema `main.trailkarma` cannot be found. Verify the spelling and correctness of the schema and catalog.
+If you did not qualify the name with a catalog, verify the current_schema() output, or qualify the name with the correct catalog.
+To tolerate the error on drop use DROP SCHEMA IF EXISTS. SQLSTATE: 42704)
+  [ 8/22] CREATE TABLE main.trailkarma.location_updates (... ❌ ([SCHEMA_NOT_FOUND] The schema `main.trailkarma` cannot be found. Verify the spelling and correctness of the schema and catalog.
+If you did not qualify the name with a catalog, verify the current_schema() output, or qualify the name with the correct catalog.
+To tolerate the error on drop use DROP SCHEMA IF EXISTS. SQLSTATE: 42704)
+  [ 9/22] CREATE TABLE main.trailkarma.relay_packets (... ❌ ([SCHEMA_NOT_FOUND] The schema `main.trailkarma` cannot be found. Verify the spelling and correctness of the schema and catalog.
+If you did not qualify the name with a catalog, verify the current_schema() output, or qualify the name with the correct catalog.
+To tolerate the error on drop use DROP SCHEMA IF EXISTS. SQLSTATE: 42704)
+  [10/22] INSERT INTO main.trailkarma.users VALUES ('4555a7c4-38a... ❌ ([TABLE_OR_VIEW_NOT_FOUND] The table or view `main`.`trailkarma`.`users` cannot be found. Verify the spelling and correctness of the schema and catalog.
+If you did not qualify the name with a schema, verify the current_schema() output, or qualify the name with the correct schema and catalog.
+To tolerate the error on drop use DROP VIEW IF EXISTS or DROP TABLE IF EXISTS. SQLSTATE: 42P01; line 1 pos 12)
+  [11/22] INSERT INTO main.trailkarma.users VALUES ('ebfeba51-cc6... ❌ ([TABLE_OR_VIEW_NOT_FOUND] The table or view `main`.`trailkarma`.`users` cannot be found. Verify the spelling and correctness of the schema and catalog.
+If you did not qualify the name with a schema, verify the current_schema() output, or qualify the name with the correct schema and catalog.
+To tolerate the error on drop use DROP VIEW IF EXISTS or DROP TABLE IF EXISTS. SQLSTATE: 42P01; line 1 pos 12)
+  [12/22] INSERT INTO main.trailkarma.users VALUES ('6226b2d6-e82... ❌ ([TABLE_OR_VIEW_NOT_FOUND] The table or view `main`.`trailkarma`.`users` cannot be found. Verify the spelling and correctness of the schema and catalog.
+If you did not qualify the name with a schema, verify the current_schema() output, or qualify the name with the correct schema and catalog.
+To tolerate the error on drop use DROP VIEW IF EXISTS or DROP TABLE IF EXISTS. SQLSTATE: 42P01; line 1 pos 12)
+  [13/22] INSERT INTO main.trailkarma.users VALUES ('347717a1-d91... ❌ ([TABLE_OR_VIEW_NOT_FOUND] The table or view `main`.`trailkarma`.`users` cannot be found. Verify the spelling and correctness of the schema and catalog.
+If you did not qualify the name with a schema, verify the current_schema() output, or qualify the name with the correct schema and catalog.
+To tolerate the error on drop use DROP VIEW IF EXISTS or DROP TABLE IF EXISTS. SQLSTATE: 42P01; line 1 pos 12)
+  [14/22] INSERT INTO main.trailkarma.trail_reports VALUES ('mock... ❌ ([TABLE_OR_VIEW_NOT_FOUND] The table or view `main`.`trailkarma`.`trail_reports` cannot be found. Verify the spelling and correctness of the schema and catalog.
+If you did not qualify the name with a schema, verify the current_schema() output, or qualify the name with the correct schema and catalog.
+To tolerate the error on drop use DROP VIEW IF EXISTS or DROP TABLE IF EXISTS. SQLSTATE: 42P01; line 1 pos 12)
+  [15/22] INSERT INTO main.trailkarma.trail_reports VALUES ('mock... ❌ ([TABLE_OR_VIEW_NOT_FOUND] The table or view `main`.`trailkarma`.`trail_reports` cannot be found. Verify the spelling and correctness of the schema and catalog.
+If you did not qualify the name with a schema, verify the current_schema() output, or qualify the name with the correct schema and catalog.
+To tolerate the error on drop use DROP VIEW IF EXISTS or DROP TABLE IF EXISTS. SQLSTATE: 42P01; line 1 pos 12)
+  [16/22] INSERT INTO main.trailkarma.trail_reports VALUES ('mock... ❌ ([TABLE_OR_VIEW_NOT_FOUND] The table or view `main`.`trailkarma`.`trail_reports` cannot be found. Verify the spelling and correctness of the schema and catalog.
+If you did not qualify the name with a schema, verify the current_schema() output, or qualify the name with the correct schema and catalog.
+To tolerate the error on drop use DROP VIEW IF EXISTS or DROP TABLE IF EXISTS. SQLSTATE: 42P01; line 1 pos 12)
+  [17/22] INSERT INTO main.trailkarma.trail_reports VALUES ('mock... ❌ ([TABLE_OR_VIEW_NOT_FOUND] The table or view `main`.`trailkarma`.`trail_reports` cannot be found. Verify the spelling and correctness of the schema and catalog.
+If you did not qualify the name with a schema, verify the current_schema() output, or qualify the name with the correct schema and catalog.
+To tolerate the error on drop use DROP VIEW IF EXISTS or DROP TABLE IF EXISTS. SQLSTATE: 42P01; line 1 pos 12)
+  [18/22] INSERT INTO main.trailkarma.trail_reports VALUES ('mock... ❌ ([TABLE_OR_VIEW_NOT_FOUND] The table or view `main`.`trailkarma`.`trail_reports` cannot be found. Verify the spelling and correctness of the schema and catalog.
+If you did not qualify the name with a schema, verify the current_schema() output, or qualify the name with the correct schema and catalog.
+To tolerate the error on drop use DROP VIEW IF EXISTS or DROP TABLE IF EXISTS. SQLSTATE: 42P01; line 1 pos 12)
+  [19/22] INSERT INTO main.trailkarma.location_updates VALUES ('1... ❌ ([TABLE_OR_VIEW_NOT_FOUND] The table or view `main`.`trailkarma`.`location_updates` cannot be found. Verify the spelling and correctness of the schema and catalog.
+If you did not qualify the name with a schema, verify the current_schema() output, or qualify the name with the correct schema and catalog.
+To tolerate the error on drop use DROP VIEW IF EXISTS or DROP TABLE IF EXISTS. SQLSTATE: 42P01; line 1 pos 12)
+  [20/22] INSERT INTO main.trailkarma.location_updates VALUES ('e... ❌ ([TABLE_OR_VIEW_NOT_FOUND] The table or view `main`.`trailkarma`.`location_updates` cannot be found. Verify the spelling and correctness of the schema and catalog.
+If you did not qualify the name with a schema, verify the current_schema() output, or qualify the name with the correct schema and catalog.
+To tolerate the error on drop use DROP VIEW IF EXISTS or DROP TABLE IF EXISTS. SQLSTATE: 42P01; line 1 pos 12)
+  [21/22] INSERT INTO main.trailkarma.location_updates VALUES ('1... ❌ ([TABLE_OR_VIEW_NOT_FOUND] The table or view `main`.`trailkarma`.`location_updates` cannot be found. Verify the spelling and correctness of the schema and catalog.
+If you did not qualify the name with a schema, verify the current_schema() output, or qualify the name with the correct schema and catalog.
+To tolerate the error on drop use DROP VIEW IF EXISTS or DROP TABLE IF EXISTS. SQLSTATE: 42P01; line 1 pos 12)
+  [22/22] INSERT INTO main.trailkarma.relay_packets VALUES ('fc83... ❌ ([TABLE_OR_VIEW_NOT_FOUND] The table or view `main`.`trailkarma`.`relay_packets` cannot be found. Verify the spelling and correctness of the schema and catalog.
+If you did not qualify the name with a schema, verify the current_schema() output, or qualify the name with the correct schema and catalog.
+To tolerate the error on drop use DROP VIEW IF EXISTS or DROP TABLE IF EXISTS. SQLSTATE: 42P01; line 1 pos 12)
+
+✅ Setup complete! 4/22 succeeded
+
+🎉 Query your data:
+   SELECT * FROM main.trailkarma.trail_reports;
