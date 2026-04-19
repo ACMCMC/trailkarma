@@ -30,6 +30,10 @@ interface TrailReportDao {
     // Used by BLE set-diff: "what IDs do I already have?"
     @Query("SELECT reportId FROM trail_reports")
     suspend fun getIds(): List<String>
+
+    // Used by GattServer: look up a single report to stream to a peer
+    @Query("SELECT * FROM trail_reports WHERE reportId = :id LIMIT 1")
+    suspend fun getById(id: String): TrailReport?
 }
 
 @Dao

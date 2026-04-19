@@ -6,6 +6,7 @@ import android.content.Intent
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.google.android.gms.location.*
+import com.uber.h3core.H3Core
 import fyi.acmc.trailkarma.db.AppDatabase
 import fyi.acmc.trailkarma.models.LocationUpdate
 import fyi.acmc.trailkarma.repository.UserRepository
@@ -22,6 +23,7 @@ class LocationService : Service() {
     private val scope = CoroutineScope(Dispatchers.IO)
     private lateinit var fusedClient: FusedLocationProviderClient
     private lateinit var callback: LocationCallback
+    private val h3 by lazy { H3Core.newInstance() }
 
     override fun onCreate() {
         super.onCreate()
@@ -41,8 +43,15 @@ class LocationService : Service() {
                     val db = AppDatabase.get(applicationContext)
                     val userRepo = UserRepository(applicationContext, db.userDao())
                     val userId = userRepo.currentUserId.first() ?: "unknown"
+                    val h3Cell = try { h3.latLngToCellAddress(loc.latitude, loc.longitude, 9) } catch (e: Exception) { null }
                     db.locationUpdateDao().insert(
-                        LocationUpdate(userId = userId, lat = loc.latitude, lng = loc.longitude, timestamp = Instant.now().toString())
+                        LocationUpdate(
+                            userId    = userId,
+                            lat       = loc.latitude,
+                            lng       = loc.longitude,
+                            h3Cell    = h3Cell,
+                            timestamp = Instant.now().toString()
+                        )
                     )
                 }
             }

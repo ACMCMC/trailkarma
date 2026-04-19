@@ -48,6 +48,7 @@ data class RelayPacket(
     val payloadJson: String,
     val receivedAt: String,
     val senderDevice: String,
+    val hopCount: Int = 0,        // loop guard: stop re-advertising after N hops
     val uploaded: Boolean = false
 )
 

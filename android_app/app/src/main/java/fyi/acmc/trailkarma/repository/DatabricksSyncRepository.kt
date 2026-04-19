@@ -262,4 +262,38 @@ class DatabricksSyncRepository(context: Context, private val db: AppDatabase) {
             false
         }
     }
+
+    suspend fun syncRelayPackets(): Boolean {
+        if (!networkUtil.isOnlineNow() || warehouseId.isEmpty()) return false
+
+        val api = DatabricksApiClient.create(databricksUrl, databricksToken)
+        val packets = db.relayPacketDao().getPending()
+        Log.d("DatabricksSync", "Uploading ${packets.size} relay packets to Databricks")
+
+        val ids = mutableListOf<String>()
+        for (packet in packets) {
+            val safePayload = packet.payloadJson.replace("'", "''")
+            val sql = """
+                MERGE INTO workspace.trailkarma.relay_packets AS target
+                USING (SELECT
+                    '${packet.packetId}'     AS packet_id,
+                    '$safePayload'           AS payload_json,
+                    '${packet.receivedAt}'   AS received_at,
+                    '${packet.senderDevice}' AS sender_device,
+                    ${packet.hopCount}       AS hop_count
+                ) AS source ON target.packet_id = source.packet_id
+                WHEN NOT MATCHED THEN INSERT *
+            """.trimIndent()
+            try {
+                val response = api.executeSql(DatabricksSyncRequest(warehouseId, sql))
+                if (response.status.state == "SUCCEEDED") ids.add(packet.packetId)
+            } catch (e: Exception) {
+                Log.e("DatabricksSync", "✗ relay packet upload error", e)
+            }
+        }
+
+        if (ids.isNotEmpty()) db.relayPacketDao().markSynced(ids)
+        Log.d("DatabricksSync", "✓ Uploaded ${ids.size}/${packets.size} relay packets")
+        return ids.size == packets.size
+    }
 }

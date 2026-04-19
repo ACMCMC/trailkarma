@@ -10,6 +10,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.compose.rememberNavController
+import fyi.acmc.trailkarma.ble.BleService
 import fyi.acmc.trailkarma.db.AppDatabase
 import fyi.acmc.trailkarma.location.LocationService
 import fyi.acmc.trailkarma.models.ReportSource
@@ -32,6 +33,11 @@ class MainActivity : ComponentActivity() {
     ) { granted ->
         if (granted[Manifest.permission.ACCESS_FINE_LOCATION] == true) {
             startService(Intent(this, LocationService::class.java))
+        }
+        // Start BLE mesh service — runs as long as app is alive, even backgrounded
+        if (granted[Manifest.permission.BLUETOOTH_SCAN] == true &&
+            granted[Manifest.permission.BLUETOOTH_ADVERTISE] == true) {
+            BleService.start(this)
         }
         SyncWorker.schedule(this)
     }

@@ -17,6 +17,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
             // Push local changes to cloud
             syncRepo.syncReports()
             syncRepo.syncLocations()
+            syncRepo.syncRelayPackets() // upload BLE encounter + relay data
 
             // Pull all data from cloud to local
             syncRepo.pullReportsFromCloud()

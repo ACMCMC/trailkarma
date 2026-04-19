@@ -17,7 +17,11 @@ import fyi.acmc.trailkarma.ble.BleRepository
 import fyi.acmc.trailkarma.db.AppDatabase
 
 class BleViewModel(app: Application) : AndroidViewModel(app) {
-    val repo = BleRepository(app, AppDatabase.get(app).relayPacketDao())
+    val repo = BleRepository(
+        context        = app,
+        relayPacketDao = AppDatabase.get(app).relayPacketDao(),
+        trailReportDao = AppDatabase.get(app).trailReportDao()
+    )
     val nearbyDevices = repo.nearbyDevices
     val log = repo.eventLog
 
