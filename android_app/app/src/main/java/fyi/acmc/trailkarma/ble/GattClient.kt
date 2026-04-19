@@ -33,7 +33,9 @@ import java.util.UUID
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
-private const val CONNECT_TIMEOUT_MS = 15_000L
+private const val SESSION_TIMEOUT_MS = 120_000L
+private const val MANIFEST_TIMEOUT_MS = 20_000L
+private const val PAYLOAD_TIMEOUT_MS = 20_000L
 private const val MAX_HOP_COUNT = 5
 
 @SuppressLint("MissingPermission")
@@ -58,8 +60,8 @@ class GattClient(
     suspend fun syncWithPeer(device: BluetoothDevice) {
         onLog("📱 syncWithPeer called for ${device.address}")
         try {
-            withTimeout(CONNECT_TIMEOUT_MS) {
-                onLog("⏱ Starting 15-second connection timeout...")
+            withTimeout(SESSION_TIMEOUT_MS) {
+                onLog("⏱ Starting 120-second BLE sync session timeout...")
                 connectAndSync(device)
             }
             onLog("✓ syncWithPeer completed successfully for ${device.address}")
@@ -290,7 +292,7 @@ class GattClient(
         characteristic.value = "manifest".toByteArray(Charsets.UTF_8)
         val wrote = gatt.writeCharacteristic(characteristic)
         onLog("  write manifest request sent: $wrote")
-        val json = withTimeoutOrNull(8_000) { manifestDeferred?.await() } ?: run {
+        val json = withTimeoutOrNull(MANIFEST_TIMEOUT_MS) { manifestDeferred?.await() } ?: run {
             onLog("✗ Manifest notification timeout")
             return null
         }
@@ -319,7 +321,7 @@ class GattClient(
             onLog("✗ Write characteristic failed for $id")
             return null
         }
-        val payload = withTimeoutOrNull(8_000) { payloadDeferred?.await() } ?: run {
+        val payload = withTimeoutOrNull(PAYLOAD_TIMEOUT_MS) { payloadDeferred?.await() } ?: run {
             onLog("✗ Payload timeout for $id")
             return null
         }

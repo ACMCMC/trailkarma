@@ -3,6 +3,9 @@
 
 *.salive
 
+gradle-local/
+.gradle-local/
+
 # Log file
 *.log
 

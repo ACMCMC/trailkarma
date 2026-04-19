@@ -58,7 +58,15 @@ class BleService : Service() {
                 Log.i(TAG, "✓ BleRepository ready")
 
                 Log.i(TAG, "🖥 Starting GattServer...")
-                gattServer = GattServer(applicationContext, db.trailReportDao(), db.relayPacketDao())
+                gattServer = GattServer(
+                    applicationContext,
+                    db.trailReportDao(),
+                    db.relayPacketDao(),
+                    onPeerServed = { address ->
+                        Log.i(TAG, "↩ Peer pulled data from us; scheduling reciprocal sync to $address")
+                        bleRepo.onInboundSyncServed(address)
+                    }
+                )
                 gattServer.start()
                 Log.i(TAG, "✓ GattServer started")
 

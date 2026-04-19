@@ -34,7 +34,8 @@ val CCCD_UUID: UUID = UUID.fromString("00002902-0000-1000-8000-00805F9B34FB")
 class GattServer(
     private val context: Context,
     private val reportDao: TrailReportDao,
-    private val relayPacketDao: RelayPacketDao
+    private val relayPacketDao: RelayPacketDao,
+    private val onPeerServed: (String) -> Unit = {}
 ) {
     private data class PendingNotification(
         val device: BluetoothDevice,
@@ -48,6 +49,7 @@ class GattServer(
     private val notificationLock = Any()
     private val pendingNotifications = ArrayDeque<PendingNotification>()
     private var notificationInFlight: PendingNotification? = null
+    private val peersServedThisConnection = mutableSetOf<String>()
 
     private val reportCache = mutableMapOf<String, String>()
     private val packetCache = mutableMapOf<String, String>()
@@ -111,6 +113,9 @@ class GattServer(
             val state = if (newState == BluetoothProfile.STATE_CONNECTED) "CONNECTED" else "DISCONNECTED"
             Log.d(TAG, "Peer $state: ${device.address}")
             if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                val servedPeer = synchronized(notificationLock) {
+                    peersServedThisConnection.remove(device.address)
+                }
                 synchronized(notificationLock) {
                     pendingNotifications.removeAll { it.device.address == device.address }
                     if (notificationInFlight?.device?.address == device.address) {
@@ -118,6 +123,9 @@ class GattServer(
                     }
                 }
                 drainNotificationQueue()
+                if (servedPeer) {
+                    onPeerServed(device.address)
+                }
             }
         }
 
@@ -147,6 +155,7 @@ class GattServer(
 
             when (characteristic.uuid) {
                 MANIFEST_CHAR_UUID -> scope.launch {
+                    markPeerServed(device.address)
                     Log.d(TAG, "📋 Building report manifest...")
                     val ids = reportDao.getIds()
                     val json = ids.joinToString(prefix = "[", postfix = "]") { "\"$it\"" }
@@ -156,17 +165,20 @@ class GattServer(
                 }
 
                 PACKET_MANIFEST_CHAR_UUID -> scope.launch {
+                    markPeerServed(device.address)
                     val ids = relayPacketDao.getIds()
                     val json = ids.joinToString(prefix = "[", postfix = "]") { "\"$it\"" }
                     notifyJson(device, PACKET_MANIFEST_CHAR_UUID, json)
                 }
 
                 REPORT_CHAR_UUID -> scope.launch {
+                    markPeerServed(device.address)
                     val json = buildReportJson(request)
                     if (json != null) notifyJson(device, REPORT_CHAR_UUID, json)
                 }
 
                 PACKET_CHAR_UUID -> scope.launch {
+                    markPeerServed(device.address)
                     val json = buildPacketJson(request)
                     if (json != null) notifyJson(device, PACKET_CHAR_UUID, json)
                 }
@@ -302,5 +314,11 @@ class GattServer(
         }
 
         Log.d(TAG, "✓ Notification enqueued for ${next.device.address}")
+    }
+
+    private fun markPeerServed(address: String) {
+        synchronized(notificationLock) {
+            peersServedThisConnection.add(address)
+        }
     }
 }

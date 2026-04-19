@@ -1,6 +1,7 @@
 package fyi.acmc.trailkarma.models
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import java.util.UUID
 
@@ -75,7 +76,10 @@ data class TrailReport(
     val lastUpdatedAt: String? = null  // tracks when this record was last changed (locally or from cloud)
 )
 
-@Entity(tableName = "biodiversity_contributions")
+@Entity(
+    tableName = "biodiversity_contributions",
+    indices = [Index(value = ["observationId"], unique = true)]
+)
 data class BiodiversityContribution(
     @PrimaryKey val id: String,
     val type: String = "biodiversity_audio_detection",
@@ -121,7 +125,10 @@ data class BiodiversityContribution(
     val sharedWithOrgAt: String? = null
 )
 
-@Entity(tableName = "karma_events")
+@Entity(
+    tableName = "karma_events",
+    indices = [Index(value = ["observationId"], unique = true)]
+)
 data class KarmaEvent(
     @PrimaryKey val id: String,
     val observationId: String,
