@@ -52,6 +52,7 @@ class DatabricksSyncRepository(context: Context, private val db: AppDatabase) {
             val confVal = if (conf != null) conf.toString() else "NULL"
 
             // MERGE INTO = Delta Lake's "insert if not exists" — deduplicates by report_id UUID
+            // h3_cell is computed server-side by Databricks — no JNI library needed on Android
             val sql = """
                 MERGE INTO workspace.trailkarma.trail_reports AS target
                 USING (SELECT
@@ -62,7 +63,7 @@ class DatabricksSyncRepository(context: Context, private val db: AppDatabase) {
                     '${report.description}' AS description,
                     ${report.lat}         AS lat,
                     ${report.lng}         AS lng,
-                    ${if (report.h3Cell != null) "'${report.h3Cell}'" else "NULL"} AS h3_cell,
+                    h3_longlatash3(${report.lng}, ${report.lat}, 9) AS h3_cell,
                     '${report.timestamp}' AS timestamp,
                     $species              AS species_name,
                     $confVal              AS confidence,
@@ -180,6 +181,7 @@ class DatabricksSyncRepository(context: Context, private val db: AppDatabase) {
         var success = true
         for (location in locations) {
             // MERGE INTO = Delta Lake's "insert if not exists" — deduplicates by location UUID
+            // h3_cell computed server-side so no JNI needed on Android
             val sql = """
                 MERGE INTO workspace.trailkarma.location_updates AS target
                 USING (SELECT
@@ -188,7 +190,7 @@ class DatabricksSyncRepository(context: Context, private val db: AppDatabase) {
                     '${location.timestamp}' AS timestamp,
                     ${location.lat}         AS lat,
                     ${location.lng}         AS lng,
-                    ${if (location.h3Cell != null) "'${location.h3Cell}'" else "NULL"} AS h3_cell
+                    h3_longlatash3(${location.lng}, ${location.lat}, 9) AS h3_cell
                 ) AS source ON target.id = source.id
                 WHEN NOT MATCHED THEN INSERT *
             """.trimIndent()
