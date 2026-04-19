@@ -67,6 +67,36 @@ interface TrailReportDao {
 }
 
 @Dao
+interface BiodiversityContributionDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(contribution: BiodiversityContribution)
+
+    @Update
+    suspend fun update(contribution: BiodiversityContribution)
+
+    @Query("SELECT * FROM biodiversity_contributions ORDER BY createdAt DESC")
+    fun getAll(): Flow<List<BiodiversityContribution>>
+
+    @Query("SELECT * FROM biodiversity_contributions WHERE savedLocally = 1 ORDER BY createdAt DESC")
+    fun getSaved(): Flow<List<BiodiversityContribution>>
+
+    @Query("SELECT * FROM biodiversity_contributions WHERE observationId = :observationId LIMIT 1")
+    fun observeByObservationId(observationId: String): Flow<BiodiversityContribution?>
+
+    @Query("SELECT * FROM biodiversity_contributions WHERE observationId = :observationId LIMIT 1")
+    suspend fun getByObservationId(observationId: String): BiodiversityContribution?
+
+    @Query("SELECT * FROM biodiversity_contributions WHERE inferenceState IN ('PENDING_LOCAL', 'FAILED_LOCAL') ORDER BY createdAt ASC")
+    suspend fun getPendingLocalInference(): List<BiodiversityContribution>
+
+    @Query("SELECT * FROM biodiversity_contributions WHERE cloudSyncState IN ('SYNC_QUEUED', 'SYNC_FAILED') AND finalLabel IS NOT NULL ORDER BY createdAt ASC")
+    suspend fun getPendingCloudSync(): List<BiodiversityContribution>
+
+    @Query("SELECT * FROM biodiversity_contributions WHERE photoUri IS NOT NULL AND photoSyncState IN ('LOCAL_ONLY', 'FAILED') AND finalLabel IS NOT NULL")
+    suspend fun getPendingPhotoUploads(): List<BiodiversityContribution>
+}
+
+@Dao
 interface LocationUpdateDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE) // UUID PK — duplicate pings are silently dropped
     suspend fun insert(update: LocationUpdate)
@@ -167,4 +197,13 @@ interface TrailDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(trails: List<Trail>)
+}
+
+@Dao
+interface KarmaEventDao {
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insert(event: KarmaEvent)
+
+    @Query("SELECT * FROM karma_events WHERE observationId = :observationId LIMIT 1")
+    suspend fun findByObservationId(observationId: String): KarmaEvent?
 }

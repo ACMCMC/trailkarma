@@ -38,6 +38,7 @@ import com.squareup.moshi.Moshi
 
 @Composable
 fun MapScreen(
+    onNavigateToBiodiversity: () -> Unit = {},
     onNavigateToCamera: () -> Unit = {},
     onNavigateToReport: () -> Unit = {},
     onNavigateToReportDetail: (String) -> Unit = {},
@@ -388,6 +389,9 @@ fun MapScreen(
                 .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            IconButton(onClick = onNavigateToBiodiversity, modifier = Modifier.size(40.dp)) {
+                Icon(Icons.Default.Mic, contentDescription = "Record Trail Sound", tint = Color.Black)
+            }
             IconButton(onClick = onNavigateToCamera, modifier = Modifier.size(40.dp)) {
                 Icon(Icons.Default.PhotoCamera, contentDescription = "Camera", tint = Color.Black)
             }

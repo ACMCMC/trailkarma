@@ -11,6 +11,14 @@ class Converters {
     @TypeConverter fun stringToReportType(v: String) = ReportType.valueOf(v)
     @TypeConverter fun reportSourceToString(v: ReportSource) = v.name
     @TypeConverter fun stringToReportSource(v: String) = ReportSource.valueOf(v)
+    @TypeConverter fun inferenceStateToString(v: InferenceState) = v.name
+    @TypeConverter fun stringToInferenceState(v: String) = InferenceState.valueOf(v)
+    @TypeConverter fun cloudSyncStateToString(v: CloudSyncState) = v.name
+    @TypeConverter fun stringToCloudSyncState(v: String) = CloudSyncState.valueOf(v)
+    @TypeConverter fun photoSyncStateToString(v: PhotoSyncState) = v.name
+    @TypeConverter fun stringToPhotoSyncState(v: String) = PhotoSyncState.valueOf(v)
+    @TypeConverter fun karmaStatusToString(v: KarmaStatus) = v.name
+    @TypeConverter fun stringToKarmaStatus(v: String) = KarmaStatus.valueOf(v)
 }
 
 class DatabaseCallback : RoomDatabase.Callback() {
@@ -25,8 +33,19 @@ class DatabaseCallback : RoomDatabase.Callback() {
 }
 
 @Database(
-    entities = [User::class, TrustedContact::class, TrailReport::class, LocationUpdate::class, RelayPacket::class, RelayJobIntent::class, RelayInboxMessage::class, Trail::class],
-    version = 8,
+    entities = [
+        User::class,
+        TrustedContact::class,
+        TrailReport::class,
+        BiodiversityContribution::class,
+        KarmaEvent::class,
+        LocationUpdate::class,
+        RelayPacket::class,
+        RelayJobIntent::class,
+        RelayInboxMessage::class,
+        Trail::class
+    ],
+    version = 9,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -34,6 +53,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun userDao(): UserDao
     abstract fun trustedContactDao(): TrustedContactDao
     abstract fun trailReportDao(): TrailReportDao
+    abstract fun biodiversityContributionDao(): BiodiversityContributionDao
+    abstract fun karmaEventDao(): KarmaEventDao
     abstract fun locationUpdateDao(): LocationUpdateDao
     abstract fun relayPacketDao(): RelayPacketDao
     abstract fun relayJobIntentDao(): RelayJobIntentDao

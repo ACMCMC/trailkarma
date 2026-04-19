@@ -44,6 +44,10 @@ data class LocationUpdate(
 
 enum class ReportType { hazard, water, species }
 enum class ReportSource { self, relayed }
+enum class InferenceState { PENDING_LOCAL, CLASSIFYING_LOCAL, CLASSIFIED_LOCAL, FAILED_LOCAL }
+enum class CloudSyncState { NOT_SYNCED, SYNC_QUEUED, SYNCING, SYNCED, SYNC_FAILED }
+enum class PhotoSyncState { NONE, LOCAL_ONLY, UPLOADING, SYNCED, FAILED }
+enum class KarmaStatus { none, pending, awarded }
 
 @Entity(tableName = "trail_reports")
 data class TrailReport(
@@ -68,6 +72,47 @@ data class TrailReport(
     val photoUri: String? = null,
     val audioUri: String? = null,
     val highConfidenceBonus: Boolean = false
+)
+
+@Entity(tableName = "biodiversity_contributions")
+data class BiodiversityContribution(
+    @PrimaryKey val id: String,
+    val type: String = "biodiversity_audio_detection",
+    val observationId: String,
+    val createdAt: String,
+    val lat: Double,
+    val lon: Double,
+    val audioUri: String,
+    val photoUri: String? = null,
+    val topKJson: String? = null,
+    val finalLabel: String? = null,
+    val finalTaxonomicLevel: String? = null,
+    val confidence: Float? = null,
+    val confidenceBand: String? = null,
+    val explanation: String? = null,
+    val verificationStatus: String = "provisional",
+    val relayable: Boolean = false,
+    val contributionType: String = "biodiversity",
+    val karmaStatus: KarmaStatus = KarmaStatus.none,
+    val inferenceState: InferenceState = InferenceState.PENDING_LOCAL,
+    val cloudSyncState: CloudSyncState = CloudSyncState.NOT_SYNCED,
+    val photoSyncState: PhotoSyncState = PhotoSyncState.NONE,
+    val safeForRewarding: Boolean = false,
+    val savedLocally: Boolean = false,
+    val synced: Boolean = false,
+    val modelMetadataJson: String? = null,
+    val classificationSource: String? = null,
+    val localModelVersion: String? = null
+)
+
+@Entity(tableName = "karma_events")
+data class KarmaEvent(
+    @PrimaryKey val id: String,
+    val observationId: String,
+    val createdAt: String,
+    val status: String = "pending",
+    val reason: String = "biodiversity_reward_pending",
+    val synced: Boolean = false
 )
 
 @Entity(tableName = "relay_packets")
