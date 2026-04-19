@@ -149,6 +149,7 @@ class BiodiversityCaptureViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    @SuppressLint("MissingPermission")
     suspend fun awaitLocationSnapshot(): BiodiversityLocationSnapshot = suspendCancellableCoroutine { continuation ->
         fusedLocation.lastLocation
             .addOnSuccessListener { location ->

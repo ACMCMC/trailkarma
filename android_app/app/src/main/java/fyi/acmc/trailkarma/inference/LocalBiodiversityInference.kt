@@ -632,7 +632,7 @@ class LocalBiodiversityInferenceEngine(private val context: Context) {
         val bytes = readAllBytes(source, relativePath)
         val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
         return when (dtype.lowercase()) {
-            "float16", "f16" -> FloatArray(bytes.size / 2) { Half.toFloat(buffer.short) }
+            "float16", "f16" -> FloatArray(bytes.size / 2) { Half(buffer.short).toFloat() }
             else -> FloatArray(bytes.size / 4) { buffer.float }
         }
     }

@@ -3,7 +3,9 @@ package fyi.acmc.trailkarma.ui.navigation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.layout.padding
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -60,8 +62,8 @@ fun TrailKarmaNavGraph(navController: NavHostController, startDestination: Strin
     Scaffold(
         containerColor = Color.Transparent,
         snackbarHost = { SnackbarHost(snackbars) }
-    ) { _ ->
-        NavHost(navController = navController, startDestination = startDestination) {
+    ) { padding ->
+        NavHost(navController = navController, startDestination = startDestination, modifier = Modifier.padding(padding)) {
             composable(Routes.LOGIN) {
                 LoginScreen(onLoginSuccess = {
                     navController.navigate(Routes.MAP) {
