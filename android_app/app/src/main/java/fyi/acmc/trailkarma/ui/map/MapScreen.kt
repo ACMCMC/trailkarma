@@ -76,6 +76,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.squareup.moshi.JsonAdapter
@@ -513,20 +514,21 @@ fun MapScreen(
                     )
                 }
             }
+        }
 
-            TrailBriefingSheet(
-                reports = displayReports,
-                biodiversity = displayBiodiversity,
-                walletState = walletState,
-                onOpenReport = { onNavigateToReportDetail(it.reportId) },
-                onOpenReportComposer = onNavigateToReport,
-                onOpenRelay = onNavigateToBle,
-                onOpenRewards = onNavigateToRewards,
-                onOpenProfile = onNavigateToProfile,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(horizontal = 12.dp, vertical = 12.dp)
-            )
+        TrailBriefingSheet(
+            reports = displayReports,
+            biodiversity = displayBiodiversity,
+            walletState = walletState,
+            onOpenReport = { onNavigateToReportDetail(it.reportId) },
+            onOpenReportComposer = onNavigateToReport,
+            onOpenRelay = onNavigateToBle,
+            onOpenRewards = onNavigateToRewards,
+            onOpenProfile = onNavigateToProfile,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(horizontal = 12.dp, vertical = 12.dp)
+        )
         }
     }
 }

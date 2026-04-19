@@ -240,9 +240,10 @@ fun RewardsScreen(
     val activityFeed = remember(timelineItems) {
         if (timelineItems.isNotEmpty()) timelineItems else demoRewardActivity()
     }
-    val badgeGallery = remember(wallet, reports, relayJobs, biodiversity) {
-        if (!wallet?.badgeDetails.isNullOrEmpty()) {
-            wallet!!.badgeDetails
+    val badgeGallery: List<BadgeStatusResponse> = remember(wallet, reports, relayJobs, biodiversity) {
+        val details = wallet?.badgeDetails
+        if (details != null && details.isNotEmpty()) {
+            details
         } else {
             demoBadgeGallery(reports, relayJobs, biodiversity)
         }
@@ -508,7 +509,7 @@ private fun RewardsHeroCard(
     val walletBalance = wallet?.karmaBalance?.toIntOrNull() ?: 0
     val localEstimatedKarma = estimateLocalKarma(localReports, relayJobs, biodiversity)
     val displayedKarma = when {
-        walletBalance > 0 -> wallet!!.karmaBalance
+        walletBalance > 0 -> wallet?.karmaBalance ?: "0"
         localEstimatedKarma > 0 -> localEstimatedKarma.toString()
         useDemoProfile -> "42"
         else -> "0"

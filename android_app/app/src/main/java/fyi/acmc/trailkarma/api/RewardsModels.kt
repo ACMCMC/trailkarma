@@ -8,7 +8,8 @@ data class WalletStateResponse(
     val walletPublicKey: String = "",
     val rewardStats: RewardStats? = null,
     val karmaBalance: String? = "0",
-    val badgeDetails: List<BadgeStatusResponse>? = emptyList()
+    val badgeDetails: List<BadgeStatusResponse>? = emptyList(),
+    val badges: List<String>? = emptyList()
 )
 
 @JsonClass(generateAdapter = true)
@@ -28,6 +29,7 @@ data class BadgeStatusResponse(
     val category: String,
     val accentHex: String,
     val earned: Boolean,
+    val badgeLabel: String? = null,
     val currentCount: Int = 0,
     val targetCount: Int = 0,
     val mint: String? = null
@@ -42,5 +44,6 @@ data class RewardActivityItemResponse(
     val karmaDelta: Int? = 0,
     val occurredAt: String,
     val txSignature: String? = null,
-    val status: String? = null
+    val status: String? = null,
+    val badgeLabel: String? = null
 )
