@@ -161,10 +161,18 @@ class GattClient(
     }
 
     private suspend fun syncReports(gatt: BluetoothGatt, senderDevice: String) {
-        val peerIds = readIdManifest(gatt, MANIFEST_CHAR_UUID) ?: return
+        val peerIds = readIdManifest(gatt, MANIFEST_CHAR_UUID) ?: run {
+            onLog("⚠ Could not read peer report manifest from $senderDevice")
+            return
+        }
         val localIds = reportDao.getIds().toSet()
         val missing = peerIds - localIds
-        if (missing.isEmpty()) return
+        onLog("📊 Report sync: peer has ${peerIds.size}, local has ${localIds.size}, missing ${missing.size}")
+
+        if (missing.isEmpty()) {
+            onLog("✓ All reports up-to-date with $senderDevice")
+            return
+        }
 
         var pulledCount = 0
         for (reportId in missing) {
@@ -173,7 +181,7 @@ class GattClient(
             pulledCount++
         }
 
-        onLog("Pulled $pulledCount new reports from $senderDevice")
+        onLog("✓ Synced $pulledCount new reports from $senderDevice")
     }
 
     private suspend fun syncPackets(gatt: BluetoothGatt, senderDevice: String) {
@@ -218,17 +226,19 @@ class GattClient(
     private suspend fun insertRelayedReport(json: String) {
         try {
             val obj = JSONObject(json)
+            val reportId = obj.getString("report_id")
+            val title = obj.getString("title")
             val confidence = if (obj.isNull("confidence")) null else obj.optDouble("confidence").toFloat()
             reportDao.insert(
                 TrailReport(
-                    reportId = obj.getString("report_id"),
+                    reportId = reportId,
                     userId = obj.getString("user_id"),
                     type = try {
                         ReportType.valueOf(obj.getString("type"))
                     } catch (_: Exception) {
                         ReportType.hazard
                     },
-                    title = obj.getString("title"),
+                    title = title,
                     description = obj.optString("description", ""),
                     lat = obj.getDouble("lat"),
                     lng = obj.getDouble("lng"),
@@ -240,8 +250,9 @@ class GattClient(
                     synced = false
                 )
             )
+            onLog("✓ Received via BLE: $title ($reportId)")
         } catch (error: Exception) {
-            onLog("Failed to parse relayed report: ${error.message}")
+            onLog("✗ Failed to parse relayed report: ${error.message}")
         }
     }
 
