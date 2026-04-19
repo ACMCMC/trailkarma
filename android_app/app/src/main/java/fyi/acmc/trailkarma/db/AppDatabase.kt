@@ -21,8 +21,8 @@ class DatabaseCallback : RoomDatabase.Callback() {
 }
 
 @Database(
-    entities = [User::class, TrailReport::class, LocationUpdate::class, RelayPacket::class],
-    version = 2,
+    entities = [User::class, TrailReport::class, LocationUpdate::class, RelayPacket::class, Trail::class],
+    version = 3,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -31,6 +31,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun trailReportDao(): TrailReportDao
     abstract fun locationUpdateDao(): LocationUpdateDao
     abstract fun relayPacketDao(): RelayPacketDao
+    abstract fun trailDao(): TrailDao
 
     companion object {
         @Volatile private var INSTANCE: AppDatabase? = null

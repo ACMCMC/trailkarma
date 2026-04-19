@@ -7,6 +7,8 @@ import fyi.acmc.trailkarma.db.AppDatabase
 import fyi.acmc.trailkarma.models.LocationUpdate
 import fyi.acmc.trailkarma.models.TrailReport
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import org.osmdroid.util.GeoPoint
 
 data class MapMarker(
@@ -22,7 +24,31 @@ class MapViewModel(app: Application) : AndroidViewModel(app) {
 
     val reports: Flow<List<TrailReport>> = db.trailReportDao().getAll()
     val userLocation: Flow<LocationUpdate?> = db.locationUpdateDao().getLatest()
+    val trails: Flow<List<fyi.acmc.trailkarma.models.Trail>> = db.trailDao().getAll()
     val selectedReport = MutableStateFlow<TrailReport?>(null)
+
+    init {
+        startPolling()
+    }
+
+    private fun startPolling() {
+        viewModelScope.launch {
+            val syncRepo = fyi.acmc.trailkarma.repository.DatabricksSyncRepository(getApplication(), db)
+            while (true) {
+                if (syncRepo.isOnline()) {
+                    try {
+                        syncRepo.syncReports()
+                        syncRepo.pullReportsFromCloud()
+                        syncRepo.pullTrailsFromCloud()
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
+                // Poll every 15 seconds for near real-time updates
+                kotlinx.coroutines.delay(15_000)
+            }
+        }
+    }
 
     // Combined markers for the map
     val mapMarkers: Flow<List<MapMarker>> = combine(

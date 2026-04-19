@@ -17,6 +17,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.camera.core.CameraSelector
+import androidx.camera.core.Preview
+import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.view.PreviewView
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.compose.ui.platform.LocalContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -24,6 +36,20 @@ fun CameraScreen(onSpeciesIdentified: () -> Unit, vm: CameraViewModel = viewMode
     var photoTaken by remember { mutableStateOf(false) }
     var identifiedSpecies by remember { mutableStateOf<String?>(null) }
     var confidence by remember { mutableStateOf(0f) }
+
+    val context = LocalContext.current
+    var hasCameraPermission by remember { mutableStateOf(false) }
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+        hasCameraPermission = isGranted
+    }
+
+    LaunchedEffect(Unit) {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+            hasCameraPermission = true
+        } else {
+            launcher.launch(Manifest.permission.CAMERA)
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -59,21 +85,46 @@ fun CameraScreen(onSpeciesIdentified: () -> Unit, vm: CameraViewModel = viewMode
                         .background(Color.Black),
                     contentAlignment = Alignment.Center
                 ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.PhotoCamera,
-                            contentDescription = null,
-                            modifier = Modifier.size(80.dp),
-                            tint = Color.Gray
+                    if (hasCameraPermission) {
+                        val lifecycleOwner = LocalLifecycleOwner.current
+                        AndroidView(
+                            modifier = Modifier.fillMaxSize(),
+                            factory = { ctx ->
+                                val previewView = PreviewView(ctx)
+                                val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
+                                cameraProviderFuture.addListener({
+                                    val cameraProvider = cameraProviderFuture.get()
+                                    val preview = Preview.Builder().build().also {
+                                        it.setSurfaceProvider(previewView.surfaceProvider)
+                                    }
+                                    val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+                                    try {
+                                        cameraProvider.unbindAll()
+                                        cameraProvider.bindToLifecycle(lifecycleOwner, cameraSelector, preview)
+                                    } catch (e: Exception) {
+                                        e.printStackTrace()
+                                    }
+                                }, ContextCompat.getMainExecutor(ctx))
+                                previewView
+                            }
                         )
-                        Text(
-                            "Point camera at species",
-                            color = Color.Gray,
-                            fontSize = 16.sp
-                        )
+                    } else {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.PhotoCamera,
+                                contentDescription = null,
+                                modifier = Modifier.size(80.dp),
+                                tint = Color.Gray
+                            )
+                            Text(
+                                "Camera permission required",
+                                color = Color.Gray,
+                                fontSize = 16.sp
+                            )
+                        }
                     }
                 }
 

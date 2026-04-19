@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.automirrored.filled.List
@@ -44,6 +45,7 @@ fun MapScreen(
     val selectedReport by vm.selectedReport.collectAsState(initial = null)
 
     var mapView: MapView? by remember { mutableStateOf(null) }
+    var currentMapStyle by remember { mutableStateOf(TileSourceFactory.USGS_TOPO) }
 
     val displayReports = reports
 
@@ -53,7 +55,6 @@ fun MapScreen(
             modifier = Modifier.fillMaxSize(),
             factory = { ctx ->
                 MapView(ctx).apply {
-                    setTileSource(TileSourceFactory.USGS_TOPO)
                     setBuiltInZoomControls(true)
                     setMultiTouchControls(true)
                     controller.apply {
@@ -65,6 +66,7 @@ fun MapScreen(
             },
             update = { map ->
                 map.overlays.clear()
+                map.setTileSource(currentMapStyle)
 
                 // Add report markers with custom colored icons
                 displayReports.forEach { report ->
@@ -82,9 +84,9 @@ fun MapScreen(
                     map.overlays.add(marker)
                 }
 
-                // Add user location marker (blue circle with white dot at 32.88, -117.24)
+                // Add user location marker
                 val userMarker = Marker(map).apply {
-                    position = GeoPoint(32.88, -117.24)
+                    position = userLocation?.let { GeoPoint(it.lat, it.lng) } ?: GeoPoint(32.88, -117.24)
                     title = "Your Location"
                     snippet = "Current position"
                     icon = MarkerFactory.createUserMarkerDrawable(context)
@@ -96,23 +98,61 @@ fun MapScreen(
         )
 
         // Top status bar (respects status bar inset)
+        val trails by vm.trails.collectAsState(initial = emptyList())
+        var expanded by remember { mutableStateOf(false) }
+        var selectedTrail by remember { mutableStateOf<fyi.acmc.trailkarma.models.Trail?>(null) }
+
+        LaunchedEffect(trails) {
+            if (selectedTrail == null && trails.isNotEmpty()) {
+                selectedTrail = trails.first()
+            }
+        }
+
         Card(
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .padding(WindowInsets.systemBars.asPaddingValues())
-                .padding(12.dp),
+                .padding(12.dp)
+                .clickable { expanded = true },
             shape = RoundedCornerShape(8.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
         ) {
             Column(Modifier.padding(12.dp)) {
-                Text("Trail Status", style = MaterialTheme.typography.labelSmall, fontSize = 11.sp)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(selectedTrail?.name ?: "Select a Trail", style = MaterialTheme.typography.titleSmall)
+                    Icon(Icons.Default.ArrowDropDown, contentDescription = "Select Trail")
+                }
+
+                DropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false }
+                ) {
+                    if (trails.isEmpty()) {
+                        DropdownMenuItem(
+                            text = { Text("No trails synced yet", style = MaterialTheme.typography.bodyMedium) },
+                            onClick = { expanded = false }
+                        )
+                    } else {
+                        trails.forEach { trail ->
+                            DropdownMenuItem(
+                                text = { Text(trail.name, style = MaterialTheme.typography.bodyMedium) },
+                                onClick = {
+                                    selectedTrail = trail
+                                    expanded = false
+                                    // In a real app, this would trigger vm.loadTrailData(trail)
+                                }
+                            )
+                        }
+                    }
+                }
+
                 Text(
-                    "32.88°N, 117.24°W",
+                    userLocation?.let { "${String.format("%.4f", it.lat)}°N, ${String.format("%.4f", it.lng)}°W" } ?: "32.88°N, 117.24°W",
                     style = MaterialTheme.typography.bodyMedium,
                     fontSize = 13.sp
                 )
                 Text(
-                    "Offline • ${displayReports.size} reports",
+                    "Syncing • ${displayReports.size} reports",
                     style = MaterialTheme.typography.labelSmall,
                     fontSize = 10.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -162,6 +202,41 @@ fun MapScreen(
             shape = CircleShape
         ) {
             Icon(Icons.Default.Add, contentDescription = "Add Report", tint = Color.White)
+        }
+
+        // Recenter FAB
+        FloatingActionButton(
+            onClick = {
+                val center = userLocation?.let { GeoPoint(it.lat, it.lng) } ?: GeoPoint(32.88, -117.24)
+                mapView?.controller?.animateTo(center)
+            },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(20.dp)
+                .padding(bottom = 440.dp),
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = CircleShape
+        ) {
+            Icon(Icons.Default.MyLocation, contentDescription = "Recenter", tint = MaterialTheme.colorScheme.onSurface)
+        }
+
+        // Layers Toggle FAB
+        FloatingActionButton(
+            onClick = {
+                currentMapStyle = when (currentMapStyle) {
+                    TileSourceFactory.USGS_TOPO -> TileSourceFactory.USGS_SAT
+                    TileSourceFactory.USGS_SAT -> TileSourceFactory.MAPNIK
+                    else -> TileSourceFactory.USGS_TOPO
+                }
+            },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(20.dp)
+                .padding(bottom = 520.dp),
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = CircleShape
+        ) {
+            Icon(Icons.Default.Layers, contentDescription = "Toggle Map Style", tint = MaterialTheme.colorScheme.onSurface)
         }
 
         // Bottom sheet - reports or detail

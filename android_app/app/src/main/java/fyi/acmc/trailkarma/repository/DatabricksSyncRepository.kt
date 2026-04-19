@@ -183,4 +183,42 @@ class DatabricksSyncRepository(context: Context, private val db: AppDatabase) {
     }
 
     fun isOnline(): Boolean = networkUtil.isOnlineNow()
+
+    suspend fun pullTrailsFromCloud(): Boolean {
+        if (!networkUtil.isOnlineNow() || warehouseId.isEmpty()) return false
+
+        return try {
+            val api = DatabricksApiClient.create(databricksUrl, databricksToken)
+            val request = DatabricksSyncRequest(
+                warehouse_id = warehouseId,
+                statement = "SELECT trail_id, name, description, total_length_miles, region, geometry_json FROM workspace.trailkarma.trails"
+            )
+
+            val response = api.executeSql(request)
+            val rows = response.result?.data_array ?: return true
+
+            val trails = mutableListOf<fyi.acmc.trailkarma.models.Trail>()
+            for (row in rows) {
+                if (row.size < 6) continue
+                val trailId = row.getOrNull(0)?.toString() ?: continue
+                val name = row.getOrNull(1)?.toString() ?: continue
+                val description = row.getOrNull(2)?.toString()
+                val length = row.getOrNull(3)?.toString()?.toDoubleOrNull()
+                val region = row.getOrNull(4)?.toString()
+                val geometry = row.getOrNull(5)?.toString()
+
+                trails.add(fyi.acmc.trailkarma.models.Trail(trailId, name, description, length, region, geometry))
+            }
+
+            if (trails.isNotEmpty()) {
+                db.trailDao().insertAll(trails)
+                Log.d("DatabricksSync", "✓ Pulled ${trails.size} trails from Databricks")
+            }
+
+            true
+        } catch (e: Exception) {
+            Log.e("DatabricksSync", "✗ Error pulling trails from cloud", e)
+            false
+        }
+    }
 }

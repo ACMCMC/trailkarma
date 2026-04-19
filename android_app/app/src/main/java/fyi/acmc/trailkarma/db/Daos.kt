@@ -51,9 +51,21 @@ interface RelayPacketDao {
     @Query("SELECT * FROM relay_packets WHERE uploaded = 0")
     suspend fun getPending(): List<RelayPacket>
 
+    @Query("UPDATE relay_packets SET uploaded = 1 WHERE packetId IN (:ids)")
+    suspend fun markSynced(ids: List<String>)
+
     @Query("UPDATE relay_packets SET uploaded = 1 WHERE packetId = :id")
     suspend fun markUploaded(id: String)
 
     @Query("SELECT COUNT(*) FROM relay_packets WHERE packetId = :id")
     suspend fun exists(id: String): Int
+}
+
+@Dao
+interface TrailDao {
+    @Query("SELECT * FROM trails ORDER BY name ASC")
+    fun getAll(): Flow<List<Trail>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(trails: List<Trail>)
 }

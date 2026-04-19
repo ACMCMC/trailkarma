@@ -46,3 +46,13 @@ data class RelayPacket(
     val senderDevice: String,
     val uploaded: Boolean = false
 )
+
+@Entity(tableName = "trails")
+data class Trail(
+    @PrimaryKey val trailId: String,
+    val name: String,
+    val description: String?,
+    val totalLengthMiles: Double?,
+    val region: String?,
+    val geometryJson: String?
+)
