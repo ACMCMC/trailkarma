@@ -1,6 +1,13 @@
 package fyi.acmc.trailkarma.ui.ble
 
+import android.Manifest
 import android.app.Application
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,6 +25,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.BluetoothSearching
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.BluetoothDisabled
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.MarkEmailRead
 import androidx.compose.material.icons.filled.Phone
@@ -27,6 +35,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -41,6 +51,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -50,9 +61,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import fyi.acmc.trailkarma.ble.BleRepository
@@ -362,6 +378,27 @@ fun BleScreen(
     onBack: () -> Unit = {},
     vm: BleViewModel = viewModel()
 ) {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    fun blePermissionsGranted() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED &&
+        ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_ADVERTISE) == PackageManager.PERMISSION_GRANTED
+    } else {
+        // On Android 11, BLUETOOTH + BLUETOOTH_ADMIN are install-time permissions (always granted)
+        true
+    }
+
+    var permissionsGranted by remember { mutableStateOf(blePermissionsGranted()) }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) permissionsGranted = blePermissionsGranted()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     val devices by vm.nearbyDevices.collectAsState()
     val log by vm.log.collectAsState()
     val relayJobs by vm.relayJobs.collectAsState(initial = emptyList())
@@ -598,9 +635,16 @@ fun BleScreen(
                             subtitle = "BLE peers can carry your queued relay jobs if they later regain service."
                         )
                     }
+                    if (!permissionsGranted) {
+                        item { BlePermissionBanner(context) }
+                    }
                     item {
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Button(onClick = vm::startScan, modifier = Modifier.weight(1f)) {
+                            Button(
+                                onClick = vm::startScan,
+                                modifier = Modifier.weight(1f),
+                                enabled = permissionsGranted
+                            ) {
                                 Text(if (devices.isEmpty()) "Start scan" else "Refresh scan")
                             }
                             OutlinedButton(onClick = vm::stopScan, modifier = Modifier.weight(1f)) {
@@ -632,6 +676,50 @@ fun BleScreen(
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BlePermissionBanner(context: Context) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = RewardsPalette.Clay.copy(alpha = 0.10f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(
+                Icons.Default.BluetoothDisabled,
+                contentDescription = null,
+                tint = RewardsPalette.Clay
+            )
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    "Bluetooth permission required",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = RewardsPalette.Clay
+                )
+                Text(
+                    "Grant \"Nearby devices\" access so this device can be detected by others on the trail.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Button(
+                onClick = {
+                    context.startActivity(
+                        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                            data = Uri.fromParts("package", context.packageName, null)
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                    )
+                }
+            ) {
+                Text("Settings")
             }
         }
     }

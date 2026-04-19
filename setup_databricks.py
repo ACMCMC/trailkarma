@@ -308,11 +308,22 @@ def main():
     ]
 
     # Locations — now include h3_cell
-    locations = [
-        (str(uuid.uuid4()), iso_z(now), base_lat, base_lng, latlng_to_h3(base_lat, base_lng)),
-        (str(uuid.uuid4()), iso_z(now - timedelta(minutes=30)), base_lat + 0.002, base_lng - 0.002, latlng_to_h3(base_lat + 0.002, base_lng - 0.002)),
-        (str(uuid.uuid4()), iso_z(now - timedelta(minutes=60)), base_lat - 0.002, base_lng + 0.002, latlng_to_h3(base_lat - 0.002, base_lng + 0.002)),
-    ]
+    # Locations — generate 3 entries per user for interesting "last seen" history
+    locations = []
+    for i, (u_id, name, _, _, _) in enumerate(users):
+        for j in range(3):
+            # Spread locations around the base area (UCSD / Library Walk)
+            # Offset based on user and sequence to create distinct trails
+            l_lat = base_lat + (i * 0.004) + (j * 0.0015)
+            l_lng = base_lng + (i * 0.004) - (j * 0.0015)
+            locations.append((
+                str(uuid.uuid4()), 
+                u_id,
+                iso_z(now - timedelta(minutes=j * 15 + i * 2)), 
+                round(l_lat, 6), 
+                round(l_lng, 6), 
+                latlng_to_h3(l_lat, l_lng)
+            ))
 
     # Relay Packets
     relay_packets = [
@@ -514,8 +525,7 @@ def main():
             f"'{source}', 0, true, current_timestamp(), current_timestamp())"
         )
 
-    for i, (loc_id, ts, lat, lng, h3_cell) in enumerate(locations):
-        user_id = users[i % len(users)][0]
+    for loc_id, user_id, ts, lat, lng, h3_cell in locations:
         sql_statements.append(
             f"INSERT INTO {full_schema}.location_updates VALUES "
             f"('{loc_id}', '{user_id}', '{ts}', {lat}, {lng}, {sql_str(h3_cell)}, true, current_timestamp(), current_timestamp())"

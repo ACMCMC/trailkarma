@@ -36,8 +36,11 @@ interface TrustedContactDao {
 
 @Dao
 interface TrailReportDao {
-    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(report: TrailReport)
+
+    @Query("SELECT COUNT(*) FROM trail_reports WHERE reportId = :reportId")
+    suspend fun exists(reportId: String): Int
 
     @Query("SELECT * FROM trail_reports ORDER BY timestamp DESC")
     fun getAll(): Flow<List<TrailReport>>
@@ -218,6 +221,9 @@ interface TrailDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(trails: List<Trail>)
+
+    @Query("SELECT COUNT(*) FROM trails WHERE trailId = :trailId")
+    suspend fun exists(trailId: String): Int
 }
 
 @Dao

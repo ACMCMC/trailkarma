@@ -152,6 +152,12 @@ class DatabricksSyncRepository(context: Context, private val db: AppDatabase) {
                     val sourceStr    = row.getOrNull(10)?.toString() ?: "self"
                     val source       = try { ReportSource.valueOf(sourceStr) } catch (e: Exception) { ReportSource.self }
 
+                    // Skip if we already have this reportId — preserves local state (synced, rewards, verification)
+                    if (db.trailReportDao().exists(reportId) > 0) {
+                        Log.d("DatabricksSync", "⊘ Already have reportId=$reportId, skipping")
+                        continue
+                    }
+
                     val report = TrailReport(
                         reportId    = reportId,
                         userId      = userId,
@@ -257,6 +263,13 @@ class DatabricksSyncRepository(context: Context, private val db: AppDatabase) {
             for (row in rows) {
                 if (row.size < 6) continue
                 val trailId = row.getOrNull(0)?.toString() ?: continue
+
+                // Skip if we already have this trailId
+                if (db.trailDao().exists(trailId) > 0) {
+                    Log.d("DatabricksSync", "⊘ Already have trailId=$trailId, skipping")
+                    continue
+                }
+
                 val name = row.getOrNull(1)?.toString() ?: continue
                 val description = row.getOrNull(2)?.toString()
                 val length = row.getOrNull(3)?.toString()?.toDoubleOrNull()
@@ -268,7 +281,9 @@ class DatabricksSyncRepository(context: Context, private val db: AppDatabase) {
 
             if (trails.isNotEmpty()) {
                 db.trailDao().insertAll(trails)
-                Log.d("DatabricksSync", "✓ Pulled ${trails.size} trails from Databricks")
+                Log.d("DatabricksSync", "✓ Pulled ${trails.size} new trails from Databricks")
+            } else {
+                Log.d("DatabricksSync", "⊘ No new trails to sync (all already present)")
             }
 
             true
