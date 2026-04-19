@@ -378,9 +378,6 @@ def main():
     for packet_id, payload, ts, device in relay_packets:
         sql_statements.append(f"INSERT INTO {full_schema}.relay_packets VALUES ('{packet_id}', '{payload}', '{ts}', '{device}', true, current_timestamp(), current_timestamp())")
 
-    # Species reports from iNaturalist (Southern California only)
-    sql_statements.extend(load_species_report_statements(full_schema))
-
     # Contacts
     # Aldan and Qianqian are contacts
     sql_statements.append(f"INSERT INTO {full_schema}.user_contacts VALUES ('{str(uuid.uuid4())}', '{users[0][0]}', '{users[1][0]}', 'accepted', current_timestamp(), current_timestamp())")

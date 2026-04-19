@@ -60,6 +60,9 @@ fun MapScreen(
     var currentMapStyle by remember { mutableStateOf(TileSourceFactory.MAPNIK) }
     var selectedTrail by remember { mutableStateOf<Trail?>(null) }
     var zoomLevel by remember { mutableStateOf(13) }
+    // Tracks the data snapshot that was last rendered — overlays are only rebuilt when this changes.
+    data class OverlayKey(val reports: List<Any>, val loc: Any?, val trail: Any?, val zoom: Int, val style: Any)
+    var lastOverlayKey by remember { mutableStateOf<OverlayKey?>(null) }
 
     LaunchedEffect(trails) {
         if (selectedTrail == null && trails.isNotEmpty()) {
@@ -80,6 +83,7 @@ fun MapScreen(
 
     ModalNavigationDrawer(
         drawerState = drawerState,
+        gesturesEnabled = false,
         drawerContent = {
             ModalDrawerSheet(modifier = Modifier.fillMaxWidth(0.75f)) {
                 Column(
@@ -178,16 +182,21 @@ fun MapScreen(
                 }
             },
             update = { map ->
-                // Update zoom level and scale markers accordingly
                 val currentZoom = map.zoomLevelDouble.toInt()
                 if (currentZoom != zoomLevel) {
                     zoomLevel = currentZoom
                 }
 
-                val markerSize = (20 + (zoomLevel - 10) * 4).coerceIn(20, 80)
+                val markerSize = (48 + (zoomLevel - 10) * 6).coerceIn(48, 120)
+
+                val overlayKey = OverlayKey(displayReports, userLocation, selectedTrail, markerSize, currentMapStyle)
+                if (overlayKey == lastOverlayKey) return@AndroidView
+                lastOverlayKey = overlayKey
 
                 map.overlays.clear()
-                map.setTileSource(currentMapStyle)
+                if (map.tileProvider.tileSource != currentMapStyle) {
+                    map.setTileSource(currentMapStyle)
+                }
 
                 // Add selected trail geometry if available
                 selectedTrail?.geometryJson?.let { geoJsonStr ->
