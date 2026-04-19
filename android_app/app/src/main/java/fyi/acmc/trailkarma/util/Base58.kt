@@ -10,9 +10,10 @@ object Base58 {
         if (input.isEmpty()) return ""
 
         val copy = input.copyOf()
+        val zeros = copy.indexOfFirst { it.toInt() != 0 }.let { if (it == -1) copy.size else it }
         val encoded = CharArray(copy.size * 2)
         var outputStart = encoded.size
-        var inputStart = copy.indexOfFirst { it.toInt() != 0 }.let { if (it == -1) copy.size else it }
+        var inputStart = zeros
 
         while (inputStart < copy.size) {
             val mod = divmod58(copy, inputStart)
@@ -20,9 +21,14 @@ object Base58 {
             encoded[--outputStart] = ALPHABET[mod]
         }
 
-        while (inputStart > 0) {
+        // Drop Base58 zeroes introduced by the division loop, then prepend
+        // only the original zero-prefix bytes as leading '1' characters.
+        while (outputStart < encoded.size && encoded[outputStart] == ALPHABET[0]) {
+            outputStart++
+        }
+
+        repeat(zeros) {
             encoded[--outputStart] = ALPHABET[0]
-            inputStart--
         }
 
         return String(encoded, outputStart, encoded.size - outputStart)
