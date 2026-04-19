@@ -13,6 +13,7 @@ import fyi.acmc.trailkarma.db.TrailReportDao
 import fyi.acmc.trailkarma.models.RelayPacket
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import java.time.Instant
@@ -26,6 +27,7 @@ private const val TAG = "TrailKarma/BLE"
 // We pack: version(1) | hikerId(up to 19 chars, UTF-8, null-trimmed)
 private const val PAYLOAD_VERSION: Byte = 0x01
 private const val MAX_HOP_BROADCAST = 5   // don't re-advertise relay packets beyond this hop
+private const val RECIPROCAL_SYNC_COOLDOWN_SECS = 30L
 
 @SuppressLint("MissingPermission")
 class BleRepository(
@@ -46,11 +48,13 @@ class BleRepository(
     private var scanCallback: ScanCallback? = null
     private var advertiser: BluetoothLeAdvertiser? = null
     private var advertiseCallback: AdvertiseCallback? = null
+    private var localHikerId: String? = null
 
     // Track last sync time per device (map of address -> epochSecond)
     // Allow re-sync every 10 seconds to handle data updates
     private val lastSyncTime = mutableMapOf<String, Long>()
     private var syncInProgress = false
+    private var activeSyncAddress: String? = null
 
     private val gattClient by lazy {
         GattClient(
@@ -74,6 +78,7 @@ class BleRepository(
      */
     fun startAdvertising(hikerId: String) {
         Log.d(TAG, "startAdvertising: hikerId=$hikerId btAdapter=${btAdapter != null}")
+        localHikerId = hikerId
         advertiser = btAdapter?.bluetoothLeAdvertiser
         if (advertiser == null) {
             val msg = "BLE advertising not supported on this device (adapter=${btAdapter != null}, isEnabled=${btAdapter?.isEnabled})"
@@ -184,18 +189,20 @@ class BleRepository(
                     val now = Instant.now().epochSecond
                     val lastSync = lastSyncTime[address] ?: 0L
                     if (syncInProgress) {
-                        Log.d(TAG, "Sync already in progress with another device, skipping $address")
+                        Log.d(
+                            TAG,
+                            "Sync already in progress with ${activeSyncAddress ?: "another device"}, skipping $address"
+                        )
+                    } else if (!shouldInitiateSyncWith(hikerId, address)) {
+                        Log.d(TAG, "Peer $hikerId won initiator election, waiting for inbound GATT connection")
                     } else if (now - lastSync >= 10) {
                         lastSyncTime[address] = now
                         val msg2 = "🔗 Syncing reports with $hikerId ($address)…"
                         log(msg2); Log.i(TAG, msg2)
                         syncInProgress = true
+                        activeSyncAddress = address
                         scope.launch {
-                            try {
-                                gattClient.syncWithPeer(device)
-                            } finally {
-                                syncInProgress = false
-                            }
+                            runSyncSession(device)
                         }
                     } else {
                         val remaining = 10 - (now - lastSync)
@@ -233,8 +240,39 @@ class BleRepository(
 
     fun stopScan() {
         scanCallback?.let { scanner?.stopScan(it) }
-        lastSyncTime.clear()
         log("Scan stopped"); Log.d(TAG, "Scan stopped")
+    }
+
+    fun onInboundSyncServed(address: String) {
+        val now = Instant.now().epochSecond
+        val lastSync = lastSyncTime[address] ?: 0L
+        if (syncInProgress) {
+            Log.d(TAG, "Inbound sync served for $address but a sync is already in progress")
+            return
+        }
+        if (now - lastSync < RECIPROCAL_SYNC_COOLDOWN_SECS) {
+            Log.d(TAG, "Skipping reciprocal sync for $address; last sync was ${now - lastSync}s ago")
+            return
+        }
+
+        val device = try {
+            btAdapter?.getRemoteDevice(address)
+        } catch (_: IllegalArgumentException) {
+            null
+        }
+        if (device == null) {
+            Log.w(TAG, "Unable to create remote BLE device for reciprocal sync: $address")
+            return
+        }
+
+        syncInProgress = true
+        activeSyncAddress = address
+        lastSyncTime[address] = now
+        scope.launch {
+            delay(750)
+            log("↩ Scheduling reciprocal sync with $address after inbound session")
+            runSyncSession(device)
+        }
     }
 
     // ── Logging ───────────────────────────────────────────────────────────────
@@ -242,5 +280,32 @@ class BleRepository(
     private fun log(msg: String) {
         Log.d(TAG, msg)
         eventLog.value = (listOf(msg) + eventLog.value).take(100)
+    }
+
+    private suspend fun runSyncSession(device: android.bluetooth.BluetoothDevice) {
+        try {
+            stopScan()
+            gattClient.syncWithPeer(device)
+        } finally {
+            syncInProgress = false
+            activeSyncAddress = null
+            lastSyncTime[device.address] = Instant.now().epochSecond
+            startScan()
+        }
+    }
+
+    private fun shouldInitiateSyncWith(remoteHikerId: String, remoteAddress: String): Boolean {
+        val local = localHikerId
+        if (local.isNullOrBlank()) return true
+
+        val comparison = local.compareTo(remoteHikerId, ignoreCase = true)
+        return when {
+            comparison < 0 -> true
+            comparison > 0 -> false
+            else -> {
+                val localAddress = btAdapter?.address
+                localAddress.isNullOrBlank() || localAddress.compareTo(remoteAddress, ignoreCase = true) < 0
+            }
+        }
     }
 }
