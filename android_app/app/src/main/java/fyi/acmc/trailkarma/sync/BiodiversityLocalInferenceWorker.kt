@@ -73,7 +73,7 @@ class BiodiversityLocalInferenceWorker(
                     explanation = result.decision.explanation,
                     safeForRewarding = result.decision.safeForRewarding,
                     modelMetadataJson = metadataAdapter.toJson(result.modelMetadata),
-                    classificationSource = "local_android",
+                    classificationSource = result.modelMetadata["provider"] as? String ?: "local_android",
                     localModelVersion = result.modelMetadata["model_version"] as? String
                 )
                 BiodiversitySyncWorker.schedule(applicationContext)
