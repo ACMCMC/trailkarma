@@ -101,19 +101,7 @@ class GattServer(
             offset: Int,
             characteristic: BluetoothGattCharacteristic
         ) {
-            when (characteristic.uuid) {
-                MANIFEST_CHAR_UUID -> scope.launch {
-                    val ids = reportDao.getIds()
-                    respondJson(device, requestId, offset, ids.joinToString(prefix = "[", postfix = "]") { "\"$it\"" })
-                }
-
-                PACKET_MANIFEST_CHAR_UUID -> scope.launch {
-                    val ids = relayPacketDao.getIds()
-                    respondJson(device, requestId, offset, ids.joinToString(prefix = "[", postfix = "]") { "\"$it\"" })
-                }
-
-                else -> gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_FAILURE, 0, null)
-            }
+            gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_FAILURE, 0, null)
         }
 
         override fun onCharacteristicWriteRequest(
@@ -125,19 +113,31 @@ class GattServer(
             offset: Int,
             value: ByteArray
         ) {
-            val requestedId = String(value, Charsets.UTF_8)
+            val request = String(value, Charsets.UTF_8)
             if (responseNeeded) {
                 gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null)
             }
 
             when (characteristic.uuid) {
+                MANIFEST_CHAR_UUID -> scope.launch {
+                    val ids = reportDao.getIds()
+                    val json = ids.joinToString(prefix = "[", postfix = "]") { "\"$it\"" }
+                    notifyJson(device, MANIFEST_CHAR_UUID, json)
+                }
+
+                PACKET_MANIFEST_CHAR_UUID -> scope.launch {
+                    val ids = relayPacketDao.getIds()
+                    val json = ids.joinToString(prefix = "[", postfix = "]") { "\"$it\"" }
+                    notifyJson(device, PACKET_MANIFEST_CHAR_UUID, json)
+                }
+
                 REPORT_CHAR_UUID -> scope.launch {
-                    val json = buildReportJson(requestedId)
+                    val json = buildReportJson(request)
                     if (json != null) notifyJson(device, REPORT_CHAR_UUID, json)
                 }
 
                 PACKET_CHAR_UUID -> scope.launch {
-                    val json = buildPacketJson(requestedId)
+                    val json = buildPacketJson(request)
                     if (json != null) notifyJson(device, PACKET_CHAR_UUID, json)
                 }
             }

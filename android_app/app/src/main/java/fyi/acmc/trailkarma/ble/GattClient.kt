@@ -59,11 +59,12 @@ class GattClient(
             onLog("📱 syncWithPeer called for ${device.address}")
             try {
                 withTimeout(CONNECT_TIMEOUT_MS) {
+                    onLog("⏱ Starting 15-second connection timeout...")
                     connectAndSync(device)
                 }
                 onLog("✓ syncWithPeer completed successfully for ${device.address}")
             } catch (error: Exception) {
-                onLog("✗ BLE sync error with ${device.address}: ${error.message}")
+                onLog("✗ BLE sync error with ${device.address}: ${error.javaClass.simpleName} - ${error.message}")
             }
         }
     }
@@ -254,11 +255,13 @@ class GattClient(
             onLog("✗ Characteristic $characteristicUuid not found")
             return null
         }
+        activeTransferUuid = characteristicUuid
         manifestDeferred = CompletableDeferred()
-        val wrote = gatt.readCharacteristic(characteristic)
-        onLog("  read request sent: $wrote")
+        characteristic.value = "manifest".toByteArray(Charsets.UTF_8)
+        val wrote = gatt.writeCharacteristic(characteristic)
+        onLog("  write manifest request sent: $wrote")
         val json = withTimeoutOrNull(8_000) { manifestDeferred?.await() } ?: run {
-            onLog("✗ Manifest read timeout")
+            onLog("✗ Manifest notification timeout")
             return null
         }
         onLog("  manifest received: ${json?.length} bytes")
