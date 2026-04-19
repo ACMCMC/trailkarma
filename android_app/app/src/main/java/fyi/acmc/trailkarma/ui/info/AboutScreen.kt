@@ -56,6 +56,68 @@ fun AboutScreen(onBack: () -> Unit) {
                     style = MaterialTheme.typography.bodySmall
                 )
             }
+            item {
+                Text(
+                    "Team",
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.padding(top = 12.dp, bottom = 8.dp)
+                )
+            }
+            item {
+                Text(
+                    "Aldan Creo",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(bottom = 2.dp)
+                )
+            }
+            item {
+                Text(
+                    "Android app, contact tracing, DB sync",
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+            }
+            item {
+                Text(
+                    "Qianqian Zhang",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(bottom = 2.dp)
+                )
+            }
+            item {
+                Text(
+                    "Online data processing, hazard prediction, GIS data",
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+            }
+            item {
+                Text(
+                    "Edith Gu",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(bottom = 2.dp)
+                )
+            }
+            item {
+                Text(
+                    "Website, cloud deployment",
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+            }
+            item {
+                Text(
+                    "Suraj Ranganath",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(bottom = 2.dp)
+                )
+            }
+            item {
+                Text(
+                    "Blockchain, ML training",
+                    style = MaterialTheme.typography.labelSmall
+                )
+            }
         }
     }
 }
