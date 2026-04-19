@@ -57,7 +57,7 @@ object DatabricksApiClient {
                 com.squareup.moshi.Moshi.Builder()
                     .add(it)
                     .build()
-            }.let { com.squareup.retrofit2.converter.moshi.MoshiConverterFactory.create(it) })
+            }.let { retrofit2.converter.moshi.MoshiConverterFactory.create(it) })
             .client(okHttpClient)
             .build()
             .create(DatabricksApi::class.java)

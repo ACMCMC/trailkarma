@@ -48,3 +48,6 @@ captures/
 *.swo
 *.swp
 *.swn
+
+*.env
+.env
