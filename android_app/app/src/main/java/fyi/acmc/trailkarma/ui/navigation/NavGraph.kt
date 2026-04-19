@@ -17,12 +17,14 @@ import fyi.acmc.trailkarma.ui.info.AboutScreen
 import fyi.acmc.trailkarma.ui.info.SyncStatusScreen
 import fyi.acmc.trailkarma.ui.info.ContactScreen
 import fyi.acmc.trailkarma.ui.info.ContactTracingScreen
+import fyi.acmc.trailkarma.ui.rewards.RewardsScreen
 
 object Routes {
     const val LOGIN           = "login"
     const val MAP             = "map"
     const val CAMERA          = "camera"
     const val CREATE_REPORT   = "create_report"
+    const val REWARDS         = "rewards"
     const val HISTORY         = "history"
     const val BLE             = "ble"
     const val REPORT_DETAIL   = "report/{reportId}"
@@ -51,12 +53,20 @@ fun TrailKarmaNavGraph(navController: NavHostController, startDestination: Strin
                 onNavigateToReportDetail = { reportId ->
                     navController.navigate(Routes.reportDetail(reportId))
                 },
+                onNavigateToRewards = { navController.navigate(Routes.REWARDS) },
                 onNavigateToBle = { navController.navigate(Routes.BLE) },
                 onNavigateToHistory = { navController.navigate(Routes.HISTORY) },
                 onNavigateToAbout = { navController.navigate(Routes.ABOUT) },
                 onNavigateToSyncStatus = { navController.navigate(Routes.SYNC_STATUS) },
                 onNavigateToContact = { navController.navigate(Routes.CONTACT) },
                 onNavigateToContactTracing = { navController.navigate(Routes.CONTACT_TRACING) }
+            )
+        }
+        composable(Routes.REWARDS) {
+            RewardsScreen(
+                onBack = { navController.popBackStack() },
+                onOpenRelayMissions = { navController.navigate(Routes.BLE) },
+                onOpenHistory = { navController.navigate(Routes.HISTORY) }
             )
         }
         composable(Routes.CAMERA) {
@@ -66,10 +76,10 @@ fun TrailKarmaNavGraph(navController: NavHostController, startDestination: Strin
             CreateReportScreen(onReportSaved = { navController.popBackStack() })
         }
         composable(Routes.HISTORY) {
-            ReportHistoryScreen()
+            ReportHistoryScreen(onBack = { navController.popBackStack() })
         }
         composable(Routes.BLE) {
-            BleScreen()
+            BleScreen(onBack = { navController.popBackStack() })
         }
         composable(
             route = Routes.REPORT_DETAIL,

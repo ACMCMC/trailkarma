@@ -19,6 +19,9 @@ class RewardsRepository(context: Context, private val db: AppDatabase) {
     private val api = RewardsApiClient.create(BuildConfig.REWARDS_BASE_URL)
     private val walletManager = WalletManager(context)
     private val networkUtil = NetworkUtil(context)
+    private val userRepository = UserRepository(context, db.userDao())
+
+    private suspend fun currentUser(): User? = userRepository.currentUser()
 
     suspend fun ensureLocalWallet(user: User): User {
         val wallet = walletManager.ensureWallet(user.userId)
@@ -30,7 +33,7 @@ class RewardsRepository(context: Context, private val db: AppDatabase) {
 
     suspend fun syncCurrentUserRegistration(): WalletStateResponse? {
         if (!networkUtil.isOnlineNow()) return null
-        val current = db.userDao().getFirst() ?: return null
+        val current = currentUser() ?: return null
         val user = ensureLocalWallet(current)
         val response = api.registerUser(
             RegisterUserRequest(
@@ -47,9 +50,21 @@ class RewardsRepository(context: Context, private val db: AppDatabase) {
 
     suspend fun fetchWalletState(): WalletStateResponse? {
         if (!networkUtil.isOnlineNow()) return null
-        val user = db.userDao().getFirst() ?: return null
+        val user = currentUser() ?: return null
         if (user.walletPublicKey.isBlank()) return syncCurrentUserRegistration()
-        return api.getWallet(user.userId).body()
+        val response = api.getWallet(user.userId)
+        return if (response.isSuccessful) response.body() else null
+    }
+
+    suspend fun fetchRewardsActivity(): List<RewardActivityItemResponse> {
+        if (!networkUtil.isOnlineNow()) return emptyList()
+        val user = currentUser() ?: return emptyList()
+        val response = api.getRewardsActivity(user.userId)
+        return if (response.isSuccessful) {
+            response.body()?.items.orEmpty()
+        } else {
+            emptyList()
+        }
     }
 
     suspend fun claimRewardsForPendingReports() {
@@ -86,8 +101,9 @@ class RewardsRepository(context: Context, private val db: AppDatabase) {
         }
     }
 
-    suspend fun createRelayIntent(destinationLabel: String, payloadReference: String): RelayJobIntent {
-        val user = ensureLocalWallet(db.userDao().getFirst() ?: error("No current user"))
+    suspend fun createRelayIntent(destinationLabel: String, payloadReference: String): RelayJobIntent? {
+        val baseUser = currentUser() ?: return null
+        val user = ensureLocalWallet(baseUser)
         val jobId = CryptoUtil.sha256Hex("${user.userId}:${UUID.randomUUID()}:${System.currentTimeMillis()}")
         val destinationHash = CryptoUtil.sha256Hex(destinationLabel)
         val payloadHash = CryptoUtil.sha256Hex(payloadReference)
@@ -148,7 +164,7 @@ class RewardsRepository(context: Context, private val db: AppDatabase) {
 
     suspend fun fulfillRelayJob(jobId: String, proofRef: String): Boolean {
         if (!networkUtil.isOnlineNow()) return false
-        val user = db.userDao().getFirst() ?: return false
+        val user = currentUser() ?: return false
         val response = api.fulfillRelayJob(
             FulfillRelayJobRequest(
                 appUserId = user.userId,
@@ -163,13 +179,14 @@ class RewardsRepository(context: Context, private val db: AppDatabase) {
     }
 
     suspend fun prepareTip(recipientWallet: String, amount: Int): PrepareTipResponse? {
-        val user = db.userDao().getFirst() ?: return null
+        val user = currentUser() ?: return null
         if (!networkUtil.isOnlineNow()) return null
-        return api.prepareTip(PrepareTipRequest(user.userId, recipientWallet, amount)).body()
+        val response = api.prepareTip(PrepareTipRequest(user.userId, recipientWallet, amount))
+        return if (response.isSuccessful) response.body() else null
     }
 
     suspend fun submitTip(prepared: PrepareTipResponse): Boolean {
-        val user = db.userDao().getFirst() ?: return false
+        val user = currentUser() ?: return false
         val signature = walletManager.sign(
             user.userId,
             Base64.decode(prepared.signedMessageBase64, Base64.NO_WRAP)

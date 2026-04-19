@@ -12,6 +12,9 @@ interface UserDao {
     @Query("SELECT * FROM users LIMIT 1")
     suspend fun getFirst(): User?
 
+    @Query("SELECT * FROM users WHERE userId = :userId LIMIT 1")
+    suspend fun getById(userId: String): User?
+
     @Query("UPDATE users SET solanaRegistered = :registered, lastWalletSyncAt = :timestamp, walletPublicKey = :walletPublicKey WHERE userId = :userId")
     suspend fun updateWalletRegistration(userId: String, walletPublicKey: String, registered: Boolean, timestamp: String)
 }

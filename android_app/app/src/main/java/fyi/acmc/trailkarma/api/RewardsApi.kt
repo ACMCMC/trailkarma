@@ -25,7 +25,51 @@ data class WalletStateResponse(
     @Json(name = "displayName") val displayName: String,
     @Json(name = "walletPublicKey") val walletPublicKey: String,
     @Json(name = "karmaBalance") val karmaBalance: String,
-    val badges: List<String> = emptyList()
+    val badges: List<String> = emptyList(),
+    @Json(name = "badgeDetails") val badgeDetails: List<BadgeStatusResponse> = emptyList(),
+    @Json(name = "rewardStats") val rewardStats: RewardStatsResponse? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class BadgeStatusResponse(
+    val code: String,
+    val label: String,
+    val description: String,
+    val category: String,
+    @Json(name = "accentHex") val accentHex: String,
+    val earned: Boolean,
+    @Json(name = "currentCount") val currentCount: Int,
+    @Json(name = "targetCount") val targetCount: Int,
+    val mint: String
+)
+
+@JsonClass(generateAdapter = true)
+data class RewardStatsResponse(
+    @Json(name = "totalKarmaEarned") val totalKarmaEarned: Int,
+    @Json(name = "verifiedContributionCount") val verifiedContributionCount: Int,
+    @Json(name = "hazardCount") val hazardCount: Int,
+    @Json(name = "waterCount") val waterCount: Int,
+    @Json(name = "speciesCount") val speciesCount: Int,
+    @Json(name = "relayCount") val relayCount: Int,
+    @Json(name = "badgeCount") val badgeCount: Int
+)
+
+@JsonClass(generateAdapter = true)
+data class RewardsActivityResponse(
+    val items: List<RewardActivityItemResponse> = emptyList()
+)
+
+@JsonClass(generateAdapter = true)
+data class RewardActivityItemResponse(
+    val id: String,
+    val kind: String,
+    val title: String,
+    val subtitle: String,
+    @Json(name = "occurredAt") val occurredAt: String,
+    @Json(name = "karmaDelta") val karmaDelta: Int? = null,
+    @Json(name = "badgeLabel") val badgeLabel: String? = null,
+    @Json(name = "txSignature") val txSignature: String? = null,
+    val status: String? = null
 )
 
 @JsonClass(generateAdapter = true)
@@ -110,6 +154,9 @@ interface RewardsApi {
 
     @GET("/v1/users/{appUserId}/wallet")
     suspend fun getWallet(@Path("appUserId") appUserId: String): Response<WalletStateResponse>
+
+    @GET("/v1/users/{appUserId}/rewards/activity")
+    suspend fun getRewardsActivity(@Path("appUserId") appUserId: String): Response<RewardsActivityResponse>
 
     @POST("/v1/contributions/claim")
     suspend fun claimContribution(@Body body: ClaimContributionRequest): Response<ClaimContributionResponse>
