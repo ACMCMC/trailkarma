@@ -195,6 +195,25 @@ data class RelayInboxResponse(
 )
 
 @JsonClass(generateAdapter = true)
+data class MeshRelayReplyItemResponse(
+    @Json(name = "replyId") val replyId: String,
+    @Json(name = "originalJobId") val originalJobId: String,
+    @Json(name = "targetUserId") val targetUserId: String,
+    @Json(name = "senderLabel") val senderLabel: String,
+    @Json(name = "senderPhoneNumber") val senderPhoneNumber: String,
+    @Json(name = "messageSummary") val messageSummary: String,
+    @Json(name = "messageBody") val messageBody: String,
+    @Json(name = "contextJson") val contextJson: String = "{}",
+    @Json(name = "createdAt") val createdAt: String,
+    val status: String
+)
+
+@JsonClass(generateAdapter = true)
+data class MeshRelayReplyResponse(
+    val items: List<MeshRelayReplyItemResponse> = emptyList()
+)
+
+@JsonClass(generateAdapter = true)
 data class PrepareTipRequest(
     @Json(name = "appUserId") val appUserId: String,
     @Json(name = "recipientWallet") val recipientWallet: String,
@@ -252,6 +271,9 @@ interface RewardsApi {
 
     @GET("/v1/voice-relay/inbox/{appUserId}")
     suspend fun getRelayInbox(@Path("appUserId") appUserId: String): Response<RelayInboxResponse>
+
+    @GET("/v1/voice-relay/mesh/{appUserId}")
+    suspend fun getMeshRelayReplies(@Path("appUserId") appUserId: String): Response<MeshRelayReplyResponse>
 
     @POST("/v1/voice-relay/inbox/{replyId}/ack")
     suspend fun acknowledgeRelayInbox(@Path("replyId") replyId: String): Response<TxSignatureResponse>

@@ -208,7 +208,16 @@ Current voice relay API surface:
 - `POST /v1/voice-relay/jobs/open`
 - `GET /v1/voice-relay/jobs/:appUserId`
 - `GET /v1/voice-relay/inbox/:appUserId`
+- `GET /v1/voice-relay/mesh/:appUserId`
 - `POST /v1/voice-relay/inbox/:replyId/ack`
+
+Mesh reply redistribution:
+
+- replies captured by the backend stay pending until explicitly acknowledged
+- any online carrier phone can fetch pending reply payloads from `/v1/voice-relay/mesh/:appUserId`
+- Android converts those payloads into `relay_reply` packets in Room
+- BLE GATT sync carries those packets phone-to-phone like other relay packets
+- once the original user has received and acknowledged a reply, it disappears from the carrier mesh feed
 
 Runtime status validated on this branch:
 
@@ -218,6 +227,10 @@ Runtime status validated on this branch:
 - ElevenLabs agent configuration was updated successfully from the local backend environment
 - the imported Twilio number is assigned to the TrailKarma relay agent
 - a live outbound call request succeeded and returned a real `conversation_id` and `callSid`
+- pending reply redistribution was validated through the backend:
+  - a synthetic pending reply appeared in both the user inbox and carrier mesh feed
+  - explicit ack moved it to `delivered`
+  - the carrier mesh feed then returned an empty result for that reply
 
 Known remaining caveats:
 

@@ -28,6 +28,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
             rewardsRepo.claimRewardsForPendingReports()
             rewardsRepo.openPendingRelayJobs()
             rewardsRepo.openPendingVoiceRelayJobs()
+            rewardsRepo.syncMeshRelayReplies()
             rewardsRepo.syncRelayInbox()
             Result.success()
         } catch (e: CancellationException) {

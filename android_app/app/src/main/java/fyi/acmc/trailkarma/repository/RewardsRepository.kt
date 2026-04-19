@@ -326,12 +326,37 @@ class RewardsRepository(context: Context, private val db: AppDatabase) {
                 )
             }
         )
-        val pendingAck = db.relayInboxMessageDao().getPendingAcknowledgements(user.userId)
-        for (message in pendingAck) {
-            val ackResponse = api.acknowledgeRelayInbox(message.replyId)
-            if (ackResponse.isSuccessful) {
-                db.relayInboxMessageDao().markAcknowledged(message.replyId)
-            }
+    }
+
+    suspend fun syncMeshRelayReplies() {
+        if (!networkUtil.isOnlineNow()) return
+        val carrier = currentUser() ?: return
+        val response = api.getMeshRelayReplies(carrier.userId)
+        if (!response.isSuccessful) return
+        val now = Instant.now().toString()
+        for (item in response.body()?.items.orEmpty()) {
+            db.relayPacketDao().insert(
+                RelayPacket(
+                    packetId = "reply:${item.replyId}",
+                    payloadJson = JSONObject()
+                        .put("type", "relay_reply")
+                        .put("reply_id", item.replyId)
+                        .put("original_job_id", item.originalJobId)
+                        .put("user_id", item.targetUserId)
+                        .put("sender_label", item.senderLabel)
+                        .put("sender_phone_number", item.senderPhoneNumber)
+                        .put("message_summary", item.messageSummary)
+                        .put("message_body", item.messageBody)
+                        .put("context_json", JSONObject(item.contextJson))
+                        .put("created_at", item.createdAt)
+                        .put("status", item.status)
+                        .toString(),
+                    receivedAt = now,
+                    senderDevice = "cloud",
+                    hopCount = 0,
+                    uploaded = true
+                )
+            )
         }
     }
 

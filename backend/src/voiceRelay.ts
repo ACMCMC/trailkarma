@@ -270,6 +270,46 @@ export async function listRelayInbox(appUserId: string) {
   };
 }
 
+export async function listPendingMeshRelayReplies(carrierAppUserId: string) {
+  await refreshActiveVoiceRelayJobs();
+  const rows = db
+    .prepare(`
+      SELECT *
+      FROM voice_relay_inbox
+      WHERE acknowledged = 0
+      ORDER BY created_at ASC
+      LIMIT 50
+    `)
+    .all() as Array<{
+      reply_id: string;
+      original_job_id: string;
+      user_app_id: string;
+      sender_label: string;
+      sender_phone_number: string;
+      message_summary: string;
+      message_body: string;
+      context_json: string;
+      created_at: string;
+      status: string;
+    }>;
+
+  return {
+    items: rows.map((row) => ({
+      replyId: row.reply_id,
+      originalJobId: row.original_job_id,
+      targetUserId: row.user_app_id,
+      senderLabel: row.sender_label,
+      senderPhoneNumber: row.sender_phone_number,
+      messageSummary: row.message_summary,
+      messageBody: row.message_body,
+      contextJson: row.context_json,
+      createdAt: row.created_at,
+      status: row.status,
+      carrierAppUserId,
+    })),
+  };
+}
+
 export async function acknowledgeRelayInbox(replyId: string) {
   db.prepare(`
     UPDATE voice_relay_inbox
@@ -339,6 +379,23 @@ async function refreshVoiceRelayJob(jobId: string) {
   });
 
   return getVoiceRelayJob(jobId);
+}
+
+async function refreshActiveVoiceRelayJobs() {
+  const rows = db
+    .prepare(`
+      SELECT job_id
+      FROM voice_relay_jobs
+      WHERE status NOT IN ('fulfilled', 'failed')
+        AND conversation_id IS NOT NULL
+      ORDER BY updated_at ASC
+      LIMIT 25
+    `)
+    .all() as Array<{ job_id: string }>;
+
+  for (const row of rows) {
+    await refreshVoiceRelayJob(row.job_id);
+  }
 }
 
 async function ensureVoiceBootstrap() {

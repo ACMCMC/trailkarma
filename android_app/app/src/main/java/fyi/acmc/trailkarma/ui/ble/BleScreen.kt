@@ -131,12 +131,13 @@ class BleViewModel(app: Application) : AndroidViewModel(app) {
 
     fun syncVoiceRelayNow() = viewModelScope.launch {
         rewardsRepository.openPendingVoiceRelayJobs()
+        rewardsRepository.syncMeshRelayReplies()
         rewardsRepository.syncRelayInbox()
         val currentUser = userRepository.currentUser()
         if (currentUser != null) {
             _inbox.value = db.relayInboxMessageDao().getForUser(currentUser.userId).first()
         }
-        statusMessage.value = "Synced relay queue and inbox."
+        statusMessage.value = "Synced relay queue, carried replies, and inbox."
     }
 }
 

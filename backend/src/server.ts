@@ -17,6 +17,7 @@ import {
 import {
   acknowledgeRelayInbox,
   listRelayInbox,
+  listPendingMeshRelayReplies,
   listVoiceRelayJobs,
   openVoiceRelayJob,
 } from "./voiceRelay.js";
@@ -253,6 +254,15 @@ app.get("/v1/voice-relay/jobs/:appUserId", async (req, res) => {
 app.get("/v1/voice-relay/inbox/:appUserId", async (req, res) => {
   try {
     const result = await listRelayInbox(req.params.appUserId);
+    res.json(result);
+  } catch (error) {
+    respondError(res, error);
+  }
+});
+
+app.get("/v1/voice-relay/mesh/:appUserId", async (req, res) => {
+  try {
+    const result = await listPendingMeshRelayReplies(req.params.appUserId);
     res.json(result);
   } catch (error) {
     respondError(res, error);
