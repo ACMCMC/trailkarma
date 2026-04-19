@@ -1,6 +1,7 @@
 package fyi.acmc.trailkarma.ui.history
 
 import android.app.Application
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -12,6 +13,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import fyi.acmc.trailkarma.db.AppDatabase
@@ -48,8 +50,17 @@ private fun ReportItem(report: TrailReport) {
                 Text(report.title, style = MaterialTheme.typography.titleSmall)
                 Text("${report.type.name} • ${report.timestamp.take(10)}", style = MaterialTheme.typography.bodySmall)
             }
-            Badge(containerColor = if (report.synced) Color(0xFF4CAF50) else Color(0xFFFF9800)) {
-                Text(if (report.synced) "synced" else "offline")
+            if (report.synced) {
+                Badge(containerColor = Color(0xFF4CAF50)) {
+                    Text("synced", fontSize = 9.sp)
+                }
+            } else {
+                // Pending cloud upload — show animated spinner
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    strokeWidth = 2.dp,
+                    color = Color(0xFFFF9800)
+                )
             }
         }
     }

@@ -64,8 +64,9 @@ main.trailkarma/
 
 ### 📍 H3 Spatial Indexing (Advanced Analytics)
 To win the **Cloud/Analytics tracks**, we are leveraging **Uber H3 Indexing**. Instead of slow raw-coordinate queries, we index all trail data and reports into hexagonal cells.
-- **Table Change**: All spatial tables now support an `h3_index` column (Resolution 9).
-- **Z-Ordering**: The Delta Lake is clustered using `OPTIMIZE ... ZORDER BY (h3_index)` for O(1) spatial lookups.
+- **Server-Side Computation**: The Android client sends raw lat/lng; Databricks uses the built-in `h3_longlatash3()` function during `MERGE INTO` to compute the cell ID (Resolution 9) server-side.
+- **Z-Ordering**: The Delta Lake is clustered using `OPTIMIZE ... ZORDER BY (h3_cell)` for O(1) spatial lookups.
+- **Trail Snapping**: The `trail_segments` table allows for instant snapping of hiker positions to the nearest trail index.
 
 
 ### trails (Master Data)
@@ -127,6 +128,7 @@ type STRING (hazard | water | species)
 title STRING
 description STRING
 lat DOUBLE, lng DOUBLE (coordinates)
+h3_cell STRING (Computed server-side: Res-9)
 timestamp STRING (ISO 8601)
 image_url STRING (optional)
 species_name STRING (optional)
@@ -143,8 +145,17 @@ id STRING (PK)
 user_id STRING (FK to users.user_id)
 timestamp STRING
 lat DOUBLE, lng DOUBLE
+h3_cell STRING (Computed server-side: Res-9)
 synced BOOLEAN
 created_at TIMESTAMP, updated_at TIMESTAMP
+```
+
+### trail_segments (Path Geometry)
+```
+segment_id STRING (PK)
+trail_id STRING (FK to trails)
+h3_cell STRING (Index for fast line-snapping)
+geometry_json STRING (GeoJSON LineString segment)
 ```
 
 ### relay_packets
@@ -187,29 +198,26 @@ Great for demo resets between pitches!
 Run these in Databricks SQL to impress judges:
 
 ```sql
--- Active hazards on PCT around current location
+-- Active hazards on PCT using H3 optimization
 SELECT title, description, lat, lng, timestamp
 FROM workspace.trailkarma.trail_reports
 WHERE type = 'hazard'
-AND ABS(lat - 32.88) < 0.05
-AND ABS(lng + 117.24) < 0.05
+AND h3_cell = h3_longlatash3(-117.24, 32.88, 9)
 ORDER BY timestamp DESC;
 
--- Species sightings heatmap
-SELECT lat, lng, species_name, confidence, COUNT(*) as sightings
+-- Species sightings heatmap (Hexagonal Aggregation)
+SELECT h3_cell, species_name, AVG(confidence) as avg_conf, COUNT(*) as sightings
 FROM workspace.trailkarma.trail_reports
 WHERE type = 'species'
-GROUP BY lat, lng, species_name, confidence;
+GROUP BY h3_cell, species_name;
 
--- Real-time hiker positions
-SELECT * FROM workspace.trailkarma.location_updates
-ORDER BY timestamp DESC LIMIT 10;
-
--- H3 Hexagonal Aggregation (Hackathon Flex)
--- This aggregates reports into 1km hexagons for heatmap rendering
-SELECT h3_longlatash3(lng, lat, 9) as h3_cell, COUNT(*) as report_density
-FROM workspace.trailkarma.trail_reports
-GROUP BY h3_cell;
+-- Real-time hiker trail snapping
+-- Finds hikers currently in the same H3 cell as a known trail segment
+SELECT u.display_name, r.h3_cell, t.name as trail_name
+FROM workspace.trailkarma.location_updates r
+JOIN workspace.trailkarma.users u ON r.user_id = u.user_id
+JOIN workspace.trailkarma.trail_segments s ON r.h3_cell = s.h3_cell
+JOIN workspace.trailkarma.trails t ON s.trail_id = t.trail_id;
 ```
 
 ## Troubleshooting

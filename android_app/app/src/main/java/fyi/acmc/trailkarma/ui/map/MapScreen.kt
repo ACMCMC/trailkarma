@@ -23,26 +23,23 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.systemBars
-import fyi.acmc.trailkarma.models.ReportSource
 import fyi.acmc.trailkarma.models.ReportType
 import fyi.acmc.trailkarma.models.TrailReport
 import org.osmdroid.views.MapView
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.overlay.Marker
-import java.time.Instant
-import java.util.*
 
 @Composable
 fun MapScreen(
     onNavigateToCamera: () -> Unit = {},
     onNavigateToReport: () -> Unit = {},
+    onNavigateToReportDetail: (String) -> Unit = {},
     vm: MapViewModel = viewModel()
 ) {
     val context = LocalContext.current
     val reports by vm.reports.collectAsState(initial = emptyList())
     val userLocation by vm.userLocation.collectAsState(initial = null)
-    val selectedReport by vm.selectedReport.collectAsState(initial = null)
 
     var mapView: MapView? by remember { mutableStateOf(null) }
     var currentMapStyle by remember { mutableStateOf(TileSourceFactory.USGS_TOPO) }
@@ -77,7 +74,7 @@ fun MapScreen(
                         icon = MarkerFactory.createMarkerDrawable(context, report.type)
 
                         setOnMarkerClickListener { _, _ ->
-                            vm.selectReport(report)
+                            onNavigateToReportDetail(report.reportId)
                             true
                         }
                     }
@@ -239,20 +236,12 @@ fun MapScreen(
             Icon(Icons.Default.Layers, contentDescription = "Toggle Map Style", tint = MaterialTheme.colorScheme.onSurface)
         }
 
-        // Bottom sheet - reports or detail
-        if (selectedReport != null) {
-            ReportDetailSheet(
-                report = selectedReport!!,
-                onDismiss = { vm.selectReport(null) },
-                modifier = Modifier.align(Alignment.BottomCenter)
-            )
-        } else {
-            ReportListSheet(
-                reports = displayReports,
-                onSelectReport = { vm.selectReport(it) },
-                modifier = Modifier.align(Alignment.BottomCenter)
-            )
-        }
+        // Bottom sheet — always shows the report list; tapping a row navigates to full detail
+        ReportListSheet(
+            reports = displayReports,
+            onSelectReport = { onNavigateToReportDetail(it.reportId) },
+            modifier = Modifier.align(Alignment.BottomCenter)
+        )
     }
 }
 
@@ -281,50 +270,6 @@ private fun LegendItem(label: String, color: Color) {
     }
 }
 
-@Composable
-private fun ReportDetailSheet(report: TrailReport, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
-    Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(12.dp),
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
-    ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(report.title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
-                    Icon(Icons.Default.Close, contentDescription = "Close", modifier = Modifier.size(20.dp))
-                }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Badge(containerColor = when (report.type) {
-                    ReportType.hazard -> Color(0xFFD50000)
-                    ReportType.water -> Color(0xFF00B8CC)
-                    ReportType.species -> Color(0xFF007ACC)
-                }) {
-                    Text(report.type.name, fontSize = 9.sp)
-                }
-                if (report.source == ReportSource.relayed) {
-                    Badge(containerColor = Color(0xFF666666)) {
-                        Text("relayed", fontSize = 8.sp)
-                    }
-                }
-            }
-            Text(report.description, style = MaterialTheme.typography.bodySmall)
-            Text(
-                "${String.format("%.4f", report.lat)}, ${String.format("%.4f", report.lng)}",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(Modifier.height(8.dp))
-        }
-    }
-}
 
 @Composable
 private fun ReportListSheet(
@@ -382,10 +327,16 @@ private fun ReportListSheet(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                            Badge(
-                                containerColor = if (report.synced) Color(0xFF4CAF50) else Color(0xFFFF9800)
-                            ) {
-                                Text(if (report.synced) "✓" else "◯", fontSize = 8.sp)
+                            if (report.synced) {
+                                Badge(containerColor = Color(0xFF4CAF50)) {
+                                    Text("✓", fontSize = 8.sp)
+                                }
+                            } else {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp,
+                                    color = Color(0xFFFF9800)
+                                )
                             }
                         }
                     }

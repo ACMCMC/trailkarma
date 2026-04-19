@@ -69,7 +69,8 @@ class DatabricksSyncRepository(context: Context, private val db: AppDatabase) {
                     $confVal              AS confidence,
                     '${report.source.name}' AS source
                 ) AS source ON target.report_id = source.report_id
-                WHEN NOT MATCHED THEN INSERT *
+                WHEN NOT MATCHED THEN INSERT (report_id, user_id, type, title, description, lat, lng, h3_cell, timestamp, species_name, confidence, source)
+                VALUES (source.report_id, source.user_id, source.type, source.title, source.description, source.lat, source.lng, source.h3_cell, source.timestamp, source.species_name, source.confidence, source.source)
             """.trimIndent()
 
             try {
@@ -80,7 +81,8 @@ class DatabricksSyncRepository(context: Context, private val db: AppDatabase) {
                     Log.d("DatabricksSync", "✓ Uploaded report: ${report.title}")
                     db.trailReportDao().markSynced(report.reportId)
                 } else {
-                    Log.e("DatabricksSync", "✗ Failed to upload: ${report.title}")
+                    val errorMsg = response.status.error?.message ?: "no error detail"
+                    Log.e("DatabricksSync", "✗ Failed to upload: ${report.title} [${response.status.state}] $errorMsg")
                     success = false
                 }
             } catch (e: Exception) {
@@ -195,7 +197,8 @@ class DatabricksSyncRepository(context: Context, private val db: AppDatabase) {
                     ${location.lng}         AS lng,
                     h3_longlatash3(${location.lng}, ${location.lat}, 9) AS h3_cell
                 ) AS source ON target.id = source.id
-                WHEN NOT MATCHED THEN INSERT *
+                WHEN NOT MATCHED THEN INSERT (id, user_id, timestamp, lat, lng, h3_cell)
+                VALUES (source.id, source.user_id, source.timestamp, source.lat, source.lng, source.h3_cell)
             """.trimIndent()
 
             try {
@@ -287,7 +290,8 @@ class DatabricksSyncRepository(context: Context, private val db: AppDatabase) {
                     '${packet.senderDevice}' AS sender_device,
                     ${packet.hopCount}       AS hop_count
                 ) AS source ON target.packet_id = source.packet_id
-                WHEN NOT MATCHED THEN INSERT *
+                WHEN NOT MATCHED THEN INSERT (packet_id, payload_json, received_at, sender_device, hop_count)
+                VALUES (source.packet_id, source.payload_json, source.received_at, source.sender_device, source.hop_count)
             """.trimIndent()
             try {
                 val response = api.executeSql(DatabricksSyncRequest(warehouseId, sql))

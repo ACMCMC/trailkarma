@@ -9,17 +9,15 @@ from datetime import datetime, timedelta
 
 try:
     import h3
-    HAS_H3 = True
 except ImportError:
-    HAS_H3 = False
-    print("⚠️  h3 library not installed. Install with: pip install h3")
-    print("   H3 cells will be stored as NULL in seed data.\n")
+    print("❌ ERROR: 'h3' library is not installed.")
+    print("   H3 spatial indexing is required for this script.")
+    print("   Fix: pip install h3")
+    import sys; sys.exit(1)
 
 def latlng_to_h3(lat, lng, resolution=9):
     """Convert lat/lng to H3 cell string at given resolution."""
-    if HAS_H3:
-        return h3.latlng_to_cell(lat, lng, resolution)
-    return None
+    return h3.latlng_to_cell(lat, lng, resolution)
 
 def sql_str(val):
     """Wrap a value in SQL quotes or return NULL."""

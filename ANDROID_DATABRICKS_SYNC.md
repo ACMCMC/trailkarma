@@ -51,33 +51,43 @@ From your Databricks workspace:
 
 When online, the app automatically syncs in both directions:
 
-- **Pushes Trail Reports**: Pushes locally generated reports (type, title, image_url, etc) to Databricks.
-- **Pulls Trail Reports**: Pulls the most recent global reports from Databricks so the user can see hazards/water updates from others.
-- **Pushes Location Updates**: Pushes GPS pings.
-- **Status**: Each record is marked `synced=true` after successful upload
+- **Pushes Trail Reports**: Pushes locally generated reports (type, title, description, lat, lng) to Databricks.
+- **Pulls Trail Reports**: Pulls the most recent global reports from Databricks (idempotent deduplication via UUID).
+- **Pushes Location Updates**: Pushes GPS pings with ID-based `MERGE INTO` protection.
+- **Pushes Relay Packets**: Synchronizes encounter logs and relayed data from the BLE mesh.
+- **Status**: Records show an animated orange spinner while pending, and a green badge once synced.
+- **Server-Side H3**: The app sends raw coordinates; Databricks computes the `h3_cell` index automatically during ingestion.
 
 ### 4. Sync Behavior
 
-- **Automatic**: WorkManager triggers sync when network becomes available
-- **Manual**: Call `syncRepo.syncReports()` and `syncRepo.syncLocations()` from your ViewModel
-- **Retry**: If sync fails, WorkManager will retry on next network change
-- **Offline**: All data remains accessible locally until sync succeeds
-- **BLE Relay**: Encounter data from nearby hikers is stored as `RelayPacket` and synced to the cloud, allowing reports to propagate even from zero-signal areas.
+- **Automatic**: WorkManager triggers sync when network becomes available.
+- **Manual**: Triggered via `DatabricksSyncRepository` in the ViewModel.
+- **Retry**: If sync fails, WorkManager will retry on next network change.
+- **Offline**: All data remains accessible locally until sync succeeds.
+- **GATT Mesh**: Data from nearby hikers is exchanged via a GATT server/client protocol. Devices "diff" manifests to sync missing reports phone-to-phone.
+
+## 📡 BLE Mesh Networking (The "Wild" Sync)
+The app uses a persistent BLE foreground service (`BleService`) to synchronize data between hikers in zero-signal areas.
+
+- **Persistent Mesh**: Running as a Foreground Service with a custom notification, it ensures you are always "connected" to the trail community even when the app is in your pocket.
+- **Manifest Diffing**: When two hikers meet, their phones exchange "manifests" (lists of report IDs). They then pull only the missing reports from each other.
+- **GATT Sync**: Data is streamed over BLE GATT characteristics using a chunked protocol to handle reports larger than the standard 512-byte MTU.
+- **Relay Logs**: Every peer encounter is logged as a `RelayPacket` and uploaded to Databricks to visualize the "gossiped" path of a report through the mesh.
 
 ## 📱 User Interface Updates
 
+### Full-Screen Report Detail
+Tapping any marker on the map or an item in the history list launches the **Full-Screen Report Detail**. This view provides a rich card layout with:
+- Color-coded hero banners (Red for Hazards, Teal for Water, Green for Species).
+- Species identification confidence badges.
+- Explicit sync status (Animated spinner vs. Green "✓ synced" badge).
+- "via BLE relay" indicator for data that traveled through the mesh.
+
 ### Hiker Nickname (Login)
-The initial login screen asks for your **"Hiker Nickname (Trail Name)"**. This is your personal alias in the TrailKarma community (e.g., "Strider"). Once logged in, this name is attached to all your reports and sightings.
+The initial login screen asks for your **"Hiker Nickname (Trail Name)"**. This is your personal alias in the TrailKarma community (e.g., "Strider").
 
 ### Dynamic Trail Selection
-After login, you can select which physical trail you are currently hiking (e.g., PCT) directly from the Map Screen. This list is pulled live from Databricks, ensuring you always have the latest trail data and community reports for your specific route.
-
-## 📡 BLE Contact Tracing & Relay
-The app uses Bluetooth Low Energy (BLE) to detect other hikers in the vicinity, even in total "dead zones."
-
-- **Broadcasting**: Your phone constantly broadcasts a "TrailKarma Beacon" containing your hiker ID.
-- **Scanning**: Your phone scans for nearby beacons. When a contact is made, it logs an "Encounter" with signal strength (RSSI).
-- **Data Mesh**: If you encounter a hiker who has "relayed" data, your phone will automatically store it and attempt to upload it to Databricks as soon as you hit a pocket of LTE/5G.
+You can select your active trail (e.g., PCT) from the Map Screen. The list is pulled live from Databricks, with spatial data optimized via H3 for the current region.
 
 
 ## Code Examples
@@ -123,15 +133,16 @@ reports.collectAsState().value.forEach { report ->
 ```
 Mobile App (offline-first)
 ├── Local Room DB
-│   ├── reports (synced=false until upload)
-│   └── locations (synced=false until upload)
-└── Databricks Sync (when online)
-    ├── ExecuteSql API
-    ├── INSERT trail_reports / location_updates (Push)
-    └── SELECT from trail_reports (Pull)
+│   ├── reports (animated spinner until synced)
+│   ├── locations (synced=false until upload)
+│   └── relay_packets (BLE mesh encounter logs)
+└── Databricks Sync (WorkManager)
+    ├── ExecuteSql API (idempotent MERGE INTO)
+    ├── PUSH: Reports, Locations, RelayLogs
+    └── PULL: Global Reports (Manifest diffing)
         ↓
-    Databricks SQL Warehouse
-    └── workspace.trailkarma.trail_reports/location_updates/relay_packets
+    Databricks SQL Warehouse (H3 Spatial Cluster)
+    └── workspace.trailkarma.trail_reports (H3 computed on ingest)
 ```
 
 ## 🛠 Android 15 & 16KB Alignment
