@@ -65,6 +65,9 @@ class BleService : Service() {
                     onPeerServed = { address ->
                         Log.i(TAG, "↩ Peer pulled data from us; scheduling reciprocal sync to $address")
                         bleRepo.onInboundSyncServed(address)
+                    },
+                    onPeerConnectionChanged = { address, connected ->
+                        bleRepo.onInboundConnectionStateChanged(address, connected)
                     }
                 )
                 gattServer.start()

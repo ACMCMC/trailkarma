@@ -35,7 +35,8 @@ class GattServer(
     private val context: Context,
     private val reportDao: TrailReportDao,
     private val relayPacketDao: RelayPacketDao,
-    private val onPeerServed: (String) -> Unit = {}
+    private val onPeerServed: (String) -> Unit = {},
+    private val onPeerConnectionChanged: (String, Boolean) -> Unit = { _, _ -> }
 ) {
     private data class PendingNotification(
         val device: BluetoothDevice,
@@ -112,7 +113,11 @@ class GattServer(
         override fun onConnectionStateChange(device: BluetoothDevice, status: Int, newState: Int) {
             val state = if (newState == BluetoothProfile.STATE_CONNECTED) "CONNECTED" else "DISCONNECTED"
             Log.d(TAG, "Peer $state: ${device.address}")
+            if (newState == BluetoothProfile.STATE_CONNECTED) {
+                onPeerConnectionChanged(device.address, true)
+            }
             if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                onPeerConnectionChanged(device.address, false)
                 val servedPeer = synchronized(notificationLock) {
                     peersServedThisConnection.remove(device.address)
                 }
