@@ -6,11 +6,17 @@ import uuid
 import json
 import math
 import glob
+import csv
 import requests
 from datetime import datetime, timedelta
 
 
 PCT_GEOJSON = os.path.join(os.path.dirname(__file__), "data", "Southern_California.geojson")
+SPECIES_CSV = os.path.join(os.path.dirname(__file__), "data", "observations-712152.csv")
+
+SOCAL_LAT_MIN, SOCAL_LAT_MAX = 32.0, 35.0
+SOCAL_LNG_MIN, SOCAL_LNG_MAX = -118.0, -116.0
+INAT_SYSTEM_USER_ID = "inat-system-001"
 
 
 def _haversine_miles(coords):
@@ -80,6 +86,42 @@ def load_pct_trail_statements(full_schema, now):
     print(f"  ✓ Loaded {len(sections)} PCT sections from GeoJSON")
     return statements, first_trail_id
 
+def load_species_report_statements(full_schema):
+    """Read iNaturalist CSV, filter to Southern California, return INSERT statements."""
+    statements = []
+    try:
+        with open(SPECIES_CSV, encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                try:
+                    lat = float(row["latitude"])
+                    lng = float(row["longitude"])
+                except (ValueError, KeyError):
+                    continue
+                if not (SOCAL_LAT_MIN <= lat <= SOCAL_LAT_MAX and SOCAL_LNG_MIN <= lng <= SOCAL_LNG_MAX):
+                    continue
+
+                report_id = str(uuid.uuid4())
+                title = (row.get("common_name") or row.get("species_guess") or "Unknown Species").replace("'", "\\'")
+                desc = (row.get("description") or row.get("place_guess") or "").replace("'", "\\'")
+                ts = row.get("time_observed_at") or row.get("observed_on") or datetime.utcnow().isoformat() + "Z"
+                image_url = (row.get("image_url") or "").replace("'", "\\'")
+                species_name = (row.get("scientific_name") or "").replace("'", "\\'")
+
+                statements.append(
+                    f"INSERT INTO {full_schema}.trail_reports VALUES ("
+                    f"'{report_id}', '{INAT_SYSTEM_USER_ID}', 'species', "
+                    f"'{title}', '{desc}', {lat}, {lng}, '{ts}', "
+                    f"'{image_url}', '{species_name}', NULL, 'self', 0, true, "
+                    f"current_timestamp(), current_timestamp())"
+                )
+    except FileNotFoundError:
+        print(f"  ⚠️  Species CSV not found at {SPECIES_CSV}, skipping")
+
+    print(f"  ✓ Loaded {len(statements)} Southern California species reports")
+    return statements
+
+
 def load_env():
     config = {}
     if os.path.exists('.env'):
@@ -118,6 +160,7 @@ def main():
         (str(uuid.uuid4()), 'Qianqian', 'C9fe...2b', 320, pct_trail_id),
         (str(uuid.uuid4()), 'Suraj', 'A1bc...3c', 50, pct_trail_id),
         (str(uuid.uuid4()), 'Edith', 'D4de...4d', 420, pct_trail_id),
+        (INAT_SYSTEM_USER_ID, 'iNaturalist', None, 0, None),
     ]
 
     base_lat, base_lng = 32.88, -117.24
@@ -262,7 +305,9 @@ def main():
     sql_statements.append(f"INSERT INTO {full_schema}.trail_waypoints VALUES ('{str(uuid.uuid4())}', '{pct_trail_id}', 'Southern Terminus', 'trailhead', 32.5896, -116.4669, 'The official start of the PCT at the US-Mexico border.', current_timestamp(), current_timestamp())")
     
     for user_id, name, wallet, karma, trail_id in users:
-        sql_statements.append(f"INSERT INTO {full_schema}.users VALUES ('{user_id}', '{name}', '{wallet}', {karma}, NULL, '{trail_id}', current_timestamp(), current_timestamp())")
+        wallet_val = f"'{wallet}'" if wallet else "NULL"
+        trail_val = f"'{trail_id}'" if trail_id else "NULL"
+        sql_statements.append(f"INSERT INTO {full_schema}.users VALUES ('{user_id}', '{name}', {wallet_val}, {karma}, NULL, {trail_val}, current_timestamp(), current_timestamp())")
 
     for i, (rid, rtype, title, desc, lat, lng, source, species, conf) in enumerate(reports):
         user_id = users[i % len(users)][0]
@@ -280,6 +325,9 @@ def main():
 
     for packet_id, payload, ts, device in relay_packets:
         sql_statements.append(f"INSERT INTO {full_schema}.relay_packets VALUES ('{packet_id}', '{payload}', '{ts}', '{device}', true, current_timestamp(), current_timestamp())")
+
+    # Species reports from iNaturalist (Southern California only)
+    sql_statements.extend(load_species_report_statements(full_schema))
 
     # Contacts
     # Aldan and Qianqian are contacts
