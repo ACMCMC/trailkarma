@@ -12,7 +12,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material3.*
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.*
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -29,24 +34,86 @@ import org.osmdroid.views.MapView
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.overlay.Marker
+import org.osmdroid.views.overlay.Polyline
+import com.squareup.moshi.JsonAdapter
+import com.squareup.moshi.Moshi
+import com.squareup.moshi.Types
 
 @Composable
 fun MapScreen(
     onNavigateToCamera: () -> Unit = {},
     onNavigateToReport: () -> Unit = {},
     onNavigateToReportDetail: (String) -> Unit = {},
+    onNavigateToAbout: () -> Unit = {},
+    onNavigateToSyncStatus: () -> Unit = {},
+    onNavigateToContact: () -> Unit = {},
     vm: MapViewModel = viewModel()
 ) {
     val context = LocalContext.current
     val reports by vm.reports.collectAsState(initial = emptyList())
     val userLocation by vm.userLocation.collectAsState(initial = null)
+    val trails by vm.trails.collectAsState(initial = emptyList())
 
     var mapView: MapView? by remember { mutableStateOf(null) }
-    var currentMapStyle by remember { mutableStateOf(TileSourceFactory.USGS_TOPO) }
+    var currentMapStyle by remember { mutableStateOf(TileSourceFactory.MAPNIK) }
+    var selectedTrail by remember { mutableStateOf<fyi.acmc.trailkarma.models.Trail?>(null) }
+    var zoomLevel by remember { mutableStateOf(13) }
+
+    LaunchedEffect(trails) {
+        if (selectedTrail == null && trails.isNotEmpty()) {
+            selectedTrail = trails.first()
+        }
+    }
 
     val displayReports = reports
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
 
-    Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            ModalDrawerSheet(modifier = Modifier.fillMaxWidth(0.75f)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .padding(16.dp)
+                ) {
+                    Text("Menu", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 16.dp))
+
+                    NavigationDrawerItem(
+                        label = { Text("About", style = MaterialTheme.typography.bodyMedium) },
+                        selected = false,
+                        onClick = {
+                            onNavigateToAbout()
+                            scope.launch { drawerState.close() }
+                        },
+                        icon = { Icon(Icons.Default.Info, contentDescription = "About") }
+                    )
+
+                    NavigationDrawerItem(
+                        label = { Text("Sync Status", style = MaterialTheme.typography.bodyMedium) },
+                        selected = false,
+                        onClick = {
+                            onNavigateToSyncStatus()
+                            scope.launch { drawerState.close() }
+                        },
+                        icon = { Icon(Icons.Default.Sync, contentDescription = "Sync Status") }
+                    )
+
+                    NavigationDrawerItem(
+                        label = { Text("Contact", style = MaterialTheme.typography.bodyMedium) },
+                        selected = false,
+                        onClick = {
+                            onNavigateToContact()
+                            scope.launch { drawerState.close() }
+                        },
+                        icon = { Icon(Icons.Default.Mail, contentDescription = "Contact") }
+                    )
+                }
+            }
+        }
+    ) {
+        Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         // Map View
         AndroidView(
             modifier = Modifier.fillMaxSize(),
@@ -62,8 +129,45 @@ fun MapScreen(
                 }
             },
             update = { map ->
+                // Update zoom level and scale markers accordingly
+                val currentZoom = map.zoomLevelDouble.toInt()
+                if (currentZoom != zoomLevel) {
+                    zoomLevel = currentZoom
+                }
+
+                val markerSize = (20 + (zoomLevel - 10) * 4).coerceIn(20, 80)
+
                 map.overlays.clear()
                 map.setTileSource(currentMapStyle)
+
+                // Add selected trail geometry if available
+                selectedTrail?.geometryJson?.let { geoJsonStr ->
+                    try {
+                        val moshi = Moshi.Builder().build()
+                        @Suppress("UNCHECKED_CAST")
+                        val adapter = moshi.adapter(Map::class.java) as JsonAdapter<Map<String, Any?>>
+                        val geoJson = adapter.fromJson(geoJsonStr) ?: return@let
+
+                        if (geoJson["type"] == "LineString") {
+                            val coords = geoJson["coordinates"] as? List<*> ?: return@let
+                            val polyline = Polyline(map).apply {
+                                for (coord in coords) {
+                                    val point = coord as? List<*> ?: continue
+                                    if (point.size >= 2) {
+                                        val lng = (point[0] as? Number)?.toDouble() ?: continue
+                                        val lat = (point[1] as? Number)?.toDouble() ?: continue
+                                        addPoint(GeoPoint(lat, lng))
+                                    }
+                                }
+                                color = 0xFF4CAF50.toInt()
+                                width = 6f
+                            }
+                            map.overlays.add(polyline)
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("MapScreen", "Failed to parse trail geometry", e)
+                    }
+                }
 
                 // Add report markers with custom colored icons
                 displayReports.forEach { report ->
@@ -71,7 +175,7 @@ fun MapScreen(
                         position = GeoPoint(report.lat, report.lng)
                         title = report.title
                         snippet = report.description
-                        icon = MarkerFactory.createMarkerDrawable(context, report.type)
+                        icon = MarkerFactory.createMarkerDrawable(context, report.type, markerSize)
 
                         setOnMarkerClickListener { _, _ ->
                             onNavigateToReportDetail(report.reportId)
@@ -86,7 +190,7 @@ fun MapScreen(
                     position = userLocation?.let { GeoPoint(it.lat, it.lng) } ?: GeoPoint(32.88, -117.24)
                     title = "Your Location"
                     snippet = "Current position"
-                    icon = MarkerFactory.createUserMarkerDrawable(context)
+                    icon = MarkerFactory.createUserMarkerDrawable(context, markerSize)
                 }
                 map.overlays.add(userMarker)
 
@@ -94,30 +198,32 @@ fun MapScreen(
             }
         )
 
-        // Top status bar (respects status bar inset)
-        val trails by vm.trails.collectAsState(initial = emptyList())
+        // Top status bar (minimal flat design)
         var expanded by remember { mutableStateOf(false) }
-        var selectedTrail by remember { mutableStateOf<fyi.acmc.trailkarma.models.Trail?>(null) }
 
-        LaunchedEffect(trails) {
-            if (selectedTrail == null && trails.isNotEmpty()) {
-                selectedTrail = trails.first()
-            }
-        }
-
-        Card(
+        // Menu button
+        IconButton(
+            onClick = { scope.launch { drawerState.open() } },
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .padding(WindowInsets.systemBars.asPaddingValues())
-                .padding(12.dp)
+                .padding(8.dp)
+        ) {
+            Icon(Icons.Default.Menu, contentDescription = "Menu", tint = Color.Black, modifier = Modifier.size(24.dp))
+        }
+
+        Surface(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(WindowInsets.systemBars.asPaddingValues())
+                .padding(start = 56.dp, top = 12.dp, end = 12.dp)
                 .clickable { expanded = true },
-            shape = RoundedCornerShape(8.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
+            color = Color.White
         ) {
             Column(Modifier.padding(12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(selectedTrail?.name ?: "Select a Trail", style = MaterialTheme.typography.titleSmall)
-                    Icon(Icons.Default.ArrowDropDown, contentDescription = "Select Trail")
+                    Text(selectedTrail?.name ?: "Select Trail", style = MaterialTheme.typography.titleSmall)
+                    Icon(Icons.Default.ArrowDropDown, contentDescription = "Select Trail", modifier = Modifier.size(16.dp))
                 }
 
                 DropdownMenu(
@@ -126,17 +232,16 @@ fun MapScreen(
                 ) {
                     if (trails.isEmpty()) {
                         DropdownMenuItem(
-                            text = { Text("No trails synced yet", style = MaterialTheme.typography.bodyMedium) },
+                            text = { Text("No trails synced", style = MaterialTheme.typography.bodySmall) },
                             onClick = { expanded = false }
                         )
                     } else {
                         trails.forEach { trail ->
                             DropdownMenuItem(
-                                text = { Text(trail.name, style = MaterialTheme.typography.bodyMedium) },
+                                text = { Text(trail.name, style = MaterialTheme.typography.bodySmall) },
                                 onClick = {
                                     selectedTrail = trail
                                     expanded = false
-                                    // In a real app, this would trigger vm.loadTrailData(trail)
                                 }
                             )
                         }
@@ -145,95 +250,45 @@ fun MapScreen(
 
                 Text(
                     userLocation?.let { "${String.format("%.4f", it.lat)}°N, ${String.format("%.4f", it.lng)}°W" } ?: "32.88°N, 117.24°W",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontSize = 13.sp
+                    style = MaterialTheme.typography.labelSmall,
+                    fontSize = 11.sp
                 )
                 Text(
-                    "Syncing • ${displayReports.size} reports",
+                    "${displayReports.size} reports",
                     style = MaterialTheme.typography.labelSmall,
-                    fontSize = 10.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    fontSize = 10.sp
                 )
             }
         }
 
-        // Legend (top-right)
-        Card(
+        // Minimal flat buttons (bottom-right)
+        Column(
             modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(WindowInsets.systemBars.asPaddingValues())
+                .align(Alignment.BottomEnd)
                 .padding(12.dp),
-            shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Map Legend", style = MaterialTheme.typography.labelSmall, fontSize = 11.sp, modifier = Modifier.padding(bottom = 4.dp))
-                LegendItem("Hazard", Color(0xFFD50000))
-                LegendItem("Water", Color(0xFF00B8CC))
-                LegendItem("Species", Color(0xFF007ACC))
-                LegendItem("You", Color(0xFF007ACC))
+            IconButton(onClick = onNavigateToCamera, modifier = Modifier.size(40.dp)) {
+                Icon(Icons.Default.PhotoCamera, contentDescription = "Camera", tint = Color.Black)
             }
-        }
-
-        // Camera FAB (bottom-right, primary) - identify species
-        FloatingActionButton(
-            onClick = onNavigateToCamera,
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(20.dp)
-                .padding(bottom = 280.dp),
-            containerColor = MaterialTheme.colorScheme.primary
-        ) {
-            Icon(Icons.Default.PhotoCamera, contentDescription = "Identify Species", tint = Color.White)
-        }
-
-        // Report FAB (secondary, above camera) - add report
-        FloatingActionButton(
-            onClick = onNavigateToReport,
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(20.dp)
-                .padding(bottom = 360.dp),
-            containerColor = MaterialTheme.colorScheme.secondary,
-            shape = CircleShape
-        ) {
-            Icon(Icons.Default.Add, contentDescription = "Add Report", tint = Color.White)
-        }
-
-        // Recenter FAB
-        FloatingActionButton(
-            onClick = {
+            IconButton(onClick = onNavigateToReport, modifier = Modifier.size(40.dp)) {
+                Icon(Icons.Default.Add, contentDescription = "Add Report", tint = Color.Black)
+            }
+            IconButton(onClick = {
                 val center = userLocation?.let { GeoPoint(it.lat, it.lng) } ?: GeoPoint(32.88, -117.24)
                 mapView?.controller?.animateTo(center)
-            },
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(20.dp)
-                .padding(bottom = 440.dp),
-            containerColor = MaterialTheme.colorScheme.surface,
-            shape = CircleShape
-        ) {
-            Icon(Icons.Default.MyLocation, contentDescription = "Recenter", tint = MaterialTheme.colorScheme.onSurface)
-        }
-
-        // Layers Toggle FAB
-        FloatingActionButton(
-            onClick = {
+            }, modifier = Modifier.size(40.dp)) {
+                Icon(Icons.Default.MyLocation, contentDescription = "Recenter", tint = Color.Black)
+            }
+            IconButton(onClick = {
                 currentMapStyle = when (currentMapStyle) {
+                    TileSourceFactory.MAPNIK -> TileSourceFactory.USGS_TOPO
                     TileSourceFactory.USGS_TOPO -> TileSourceFactory.USGS_SAT
-                    TileSourceFactory.USGS_SAT -> TileSourceFactory.MAPNIK
-                    else -> TileSourceFactory.USGS_TOPO
+                    else -> TileSourceFactory.MAPNIK
                 }
-            },
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(20.dp)
-                .padding(bottom = 520.dp),
-            containerColor = MaterialTheme.colorScheme.surface,
-            shape = CircleShape
-        ) {
-            Icon(Icons.Default.Layers, contentDescription = "Toggle Map Style", tint = MaterialTheme.colorScheme.onSurface)
+            }, modifier = Modifier.size(40.dp)) {
+                Icon(Icons.Default.Layers, contentDescription = "Layers", tint = Color.Black)
+            }
         }
 
         // Bottom sheet — always shows the report list; tapping a row navigates to full detail
@@ -246,32 +301,6 @@ fun MapScreen(
 }
 
 @Composable
-private fun LegendItem(label: String, color: Color) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier.height(32.dp)
-    ) {
-        Box(
-            modifier = Modifier
-                .size(28.dp)
-                .background(color, shape = CircleShape)
-                .padding(2.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(24.dp)
-                    .background(color, shape = CircleShape)
-                    .border(2.dp, Color.White, CircleShape)
-            )
-        }
-        Text(label, style = MaterialTheme.typography.labelSmall, fontSize = 11.sp)
-    }
-}
-
-
-@Composable
 private fun ReportListSheet(
     reports: List<TrailReport>,
     onSelectReport: (TrailReport) -> Unit,
@@ -280,36 +309,29 @@ private fun ReportListSheet(
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(max = 220.dp)
+            .heightIn(max = 200.dp)
             .padding(12.dp),
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+        color = Color.White
     ) {
         Column(Modifier.fillMaxWidth()) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier
-                    .padding(16.dp)
-                    .fillMaxWidth()
-            ) {
-                Icon(Icons.AutoMirrored.Filled.List, contentDescription = null, modifier = Modifier.size(20.dp))
-                Text("Nearby (${reports.size})", style = MaterialTheme.typography.titleSmall)
-            }
+            Text(
+                "Nearby (${reports.size})",
+                style = MaterialTheme.typography.labelMedium,
+                modifier = Modifier.padding(12.dp)
+            )
 
             LazyColumn(
                 Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 8.dp)
-                    .padding(bottom = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                    .padding(horizontal = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(1.dp)
             ) {
                 items(reports.take(5)) { report ->
-                    Card(
+                    Surface(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(min = 60.dp),
-                        onClick = { onSelectReport(report) }
+                            .clickable { onSelectReport(report) },
+                        color = Color.White
                     ) {
                         Row(
                             Modifier
@@ -319,25 +341,15 @@ private fun ReportListSheet(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column(Modifier.weight(1f)) {
-                                Text(report.title, style = MaterialTheme.typography.labelMedium, maxLines = 1)
+                                Text(report.title, style = MaterialTheme.typography.labelSmall, maxLines = 1)
                                 Text(
                                     report.type.name,
                                     style = MaterialTheme.typography.labelSmall,
                                     fontSize = 9.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = Color.Gray
                                 )
                             }
-                            if (report.synced) {
-                                Badge(containerColor = Color(0xFF4CAF50)) {
-                                    Text("✓", fontSize = 8.sp)
-                                }
-                            } else {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(16.dp),
-                                    strokeWidth = 2.dp,
-                                    color = Color(0xFFFF9800)
-                                )
-                            }
+                            Text(if (report.synced) "✓" else "…", fontSize = 10.sp, color = Color.Gray)
                         }
                     }
                 }
