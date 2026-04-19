@@ -7,6 +7,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import fyi.acmc.trailkarma.db.UserDao
 import fyi.acmc.trailkarma.models.User
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 private val Context.dataStore by preferencesDataStore("user_prefs")
@@ -20,5 +21,11 @@ class UserRepository(private val context: Context, private val dao: UserDao) {
         context.dataStore.edit { it[KEY_USER_ID] = user.userId }
     }
 
-    suspend fun currentUser(): User? = dao.getFirst()
+    suspend fun currentUser(): User? {
+        val preferredId = context.dataStore.data.first()[KEY_USER_ID]
+        return when {
+            !preferredId.isNullOrBlank() -> dao.getById(preferredId) ?: dao.getFirst()
+            else -> dao.getFirst()
+        }
+    }
 }

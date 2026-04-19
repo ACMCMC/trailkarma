@@ -144,6 +144,8 @@ Important Android files:
 - [android_app/app/src/main/java/fyi/acmc/trailkarma/api/RewardsApi.kt](/Users/suraj/Desktop/dhacks/datahacks26/android_app/app/src/main/java/fyi/acmc/trailkarma/api/RewardsApi.kt)
 - [android_app/app/src/main/java/fyi/acmc/trailkarma/wallet/WalletManager.kt](/Users/suraj/Desktop/dhacks/datahacks26/android_app/app/src/main/java/fyi/acmc/trailkarma/wallet/WalletManager.kt)
 - [android_app/app/src/main/java/fyi/acmc/trailkarma/solana/SolanaPayloadCodec.kt](/Users/suraj/Desktop/dhacks/datahacks26/android_app/app/src/main/java/fyi/acmc/trailkarma/solana/SolanaPayloadCodec.kt)
+- [android_app/app/src/main/java/fyi/acmc/trailkarma/ui/rewards/RewardsScreen.kt](/Users/suraj/Desktop/dhacks/datahacks26/android_app/app/src/main/java/fyi/acmc/trailkarma/ui/rewards/RewardsScreen.kt)
+- [android_app/app/src/main/java/fyi/acmc/trailkarma/ui/rewards/RewardsTheme.kt](/Users/suraj/Desktop/dhacks/datahacks26/android_app/app/src/main/java/fyi/acmc/trailkarma/ui/rewards/RewardsTheme.kt)
 - [android_app/app/src/main/java/fyi/acmc/trailkarma/ui/map/MapViewModel.kt](/Users/suraj/Desktop/dhacks/datahacks26/android_app/app/src/main/java/fyi/acmc/trailkarma/ui/map/MapViewModel.kt)
 - [android_app/app/src/main/java/fyi/acmc/trailkarma/ui/ble/BleScreen.kt](/Users/suraj/Desktop/dhacks/datahacks26/android_app/app/src/main/java/fyi/acmc/trailkarma/ui/ble/BleScreen.kt)
 - [android_app/app/src/main/java/fyi/acmc/trailkarma/sync/SyncWorker.kt](/Users/suraj/Desktop/dhacks/datahacks26/android_app/app/src/main/java/fyi/acmc/trailkarma/sync/SyncWorker.kt)
@@ -157,41 +159,63 @@ Current Android behavior:
 - creates offline relay intents and signs them locally
 - opens relay jobs on-chain once the phone regains connectivity
 - fulfills relay jobs through the backend
-- displays KARMA and badge state on the map screen
-- shows reward claim status in report history
+- exposes a dedicated `Rewards` destination from the map drawer and rewards teaser card
+- renders a premium rewards dashboard with KARMA balance, collectible gallery, progress cards, and reward activity feed
+- supports user-facing KARMA tipping from the rewards screen
+- shows redesigned relay mission and report-ledger surfaces that match the rewards system
 
 ## Current GUI Status
 
-The Android rewards GUI is partially built out. The current app exposes the core reward state, but it is not yet a full collectibles or wallet product surface.
+The Android rewards GUI is now a real product surface rather than a set of loose status widgets.
 
-What already exists in the UI:
+What exists now:
 
-- a KARMA and badges summary card on the map screen
-  - shows current KARMA balance
-  - shows earned badge names returned by the backend wallet state
-- reward status indicators in report history
-  - per-report state shows `pending`, `rejected`, or rewarded
-  - rewarded reports also show a transaction signature snippet
-- relay-job reward UI in the BLE screen
-  - create relay jobs
-  - open relay jobs on-chain
-  - fulfill open relay jobs
-  - view relay reward amount and tx snippets
+- dedicated `RewardsScreen`
+  - hero wallet card with live KARMA balance, wallet identity, and contribution summary
+  - collectibles gallery with owned vs locked badge states
+  - milestone progress cards for verified actions, relay pipeline, and owned collectibles
+  - recent reward activity feed for contribution rewards, relay rewards, badges, and KARMA tips
+  - tipping dialog for sponsored KARMA transfers between user wallets
+- upgraded map entry point
+  - drawer now links directly to `Rewards`
+  - map rewards teaser card opens the full rewards destination
+- upgraded report ledger UI
+  - more legible per-report verification and reward state
+  - explicit KARMA amounts and transaction snippets for claimed reports
+- upgraded relay missions UI
+  - clearer mission framing for create/open/fulfill flow
+  - better separation of nearby hikers, mission queue, and event log
+  - status banner for relay workflow feedback
 
-What is not built out yet:
+What is still not built out:
 
-- no dedicated collectibles gallery or badge inventory screen
-- no dedicated wallet screen with KARMA transaction history
-- no user-facing tip screen, even though the backend and Android repository layer support tipping
-- no badge artwork rendering or Token-2022 metadata presentation
-- no reward activity feed explaining when and why badges were earned
+- no custom badge illustrations yet
+  - collectibles are visually designed in Compose, but not backed by bespoke art assets
+- no explorer or deep-link flow for transaction signatures
+- no push-style celebration tied to every reward event outside the rewards screen
+- no physical-phone BLE polish pass yet
 
 Recommended next UI work for a collaborator:
 
-- build a dedicated `RewardsScreen` with KARMA balance, earned badges, and recent reward events
-- build a `CollectiblesScreen` with badge cards, descriptions, and milestone progress
-- build a `TipKarmaScreen` so users can send KARMA from the app
-- add richer badge presentation instead of only rendering badge names inline
+- add bespoke collectible art and richer metadata presentation per badge mint
+- add a shareable “earned collectible” moment after reward settlement
+- add transaction drilldown or Solana explorer deep links
+- test and tune spacing, touch targets, and BLE mission flows on physical phones
+
+## API Surfaces For Rewards UI
+
+The backend now exposes enough structured reward data for the Android UX:
+
+- `GET /v1/users/:appUserId/wallet`
+  - KARMA balance
+  - owned badge labels
+  - structured badge metadata and progress targets
+  - aggregate reward stats for hazards, water, species, relays, and total earned KARMA
+- `GET /v1/users/:appUserId/rewards/activity`
+  - contribution reward events
+  - relay reward events
+  - badge mint events
+  - KARMA tip events
 
 Android configuration:
 
@@ -225,6 +249,8 @@ The branch now includes a few app-side fixes that were necessary to make rewards
 - the sync worker now treats Databricks sync as optional and rewards sync as independent
 - pending reward claims are derived from local unclaimed reports, not just reports already marked as cloud-synced
 - the wallet state can refresh after reward claims so the KARMA card updates without restarting the app
+- relay creation no longer crashes the BLE screen when no local user record exists
+- the BLE screen now shows a small status message for relay create/open/fulfill actions instead of failing silently
 
 ## Databricks Status
 
@@ -277,6 +303,7 @@ Verified end to end on `solana-test-validator`:
 
 Verified end to end on Devnet:
 
+- program rebuilt with Anchor `1.0.0` and upgraded on Devnet successfully
 - program deployed successfully
 - IDL metadata written successfully
 - config and all six mints bootstrapped successfully
@@ -300,10 +327,11 @@ Most recent Devnet smoke-test behavior:
 
 Example successful Devnet smoke-test transactions from the current branch:
 
-- contribution reward: `47pFWV68qEVGfDCh8s4jd32cCX4FfhdHrgZhJ2RseUo5cM5aZX6GrxD6yzozHdTy8je5VWT4roos7Y2TGGL9SJh6`
-- relay open: `ZZurUu1j9Pobp2ckwfahvKtb6jYgvR9xncba27jK3mh6wSwgponGcXhGqPRBB6eJeKg9xfA2Jhvmfhdhyt7EPS6`
-- relay fulfill: `5REdGjWuBefPd8JrcSk7rLiPSB2Ag2yhFB7AqRWfAoDufiUE2pxpq8VeFshTqxYDXzDkXTddoKnCe7AEZo3QLYaB`
-- tip transfer: `2TiDriwG9EBAYabbquBTJ9UZ6GJUQb83DB2u7mcjoNNP5KK6RmbUiGMx6yjzrD2bqcbbQXWk3joBSUgHWkcHSDL2`
+- program upgrade: `4RAPe3MtRcfX9QJwQWRruGGA7TqMeqe5gDPxmR6UE5F5D5odKr2vbfCX8yURDszUoif7sMFBJDEJvzMzgVghkyA2`
+- contribution reward: `5WT9SkzDyH47qFhAi7AK6KPepXmsiPJpFmGCNwdSHwqt6UVej8qJgpAna6yBPFfipH5omwtbcgBjVctr1nqH2jHS`
+- relay open: `32tyjcoNZaQpH1H5aXySMRf8CQCmbwcW5f9fDTckbidQ6yXhDq16hFVczCy2wWt9eyZmvNewA8nJaDpYtfLmivj9`
+- relay fulfill: `4hnhE2Xkf1T6jEvvaXW579U9Edej67KAZUmZeWjZF72oDFkEAD6KvQSgvkwcUBcNZkini61tXndGFV6m1bYi1W7i`
+- tip transfer: `H6XgZmZCMjR77oG7SxTiQcxnfL6SPW9iTxz3VgHyRKSGGCqqqamRDQBDpVqBQaHU1hNiXph42RNtXxwDLcWqEdb`
 
 ## Current Commands
 
@@ -348,20 +376,38 @@ cd solana
 The working toolchain in this repo is currently:
 
 - Solana CLI `3.1.13`
-- Anchor CLI `0.30.1`
+- Anchor CLI `1.0.0`
+- `anchor-lang` / `anchor-spl` `1.0.0`
+- backend TypeScript client package `@anchor-lang/core` `1.0.0`
 
-The repo still uses `anchor-lang` / `anchor-spl` `0.30.1`. To restore reliable local IDL generation, this branch now patches `anchor-syn 0.30.1` through Cargo:
+The workspace now pins Anchor through [solana/Anchor.toml](/Users/suraj/Desktop/dhacks/datahacks26/solana/Anchor.toml):
+
+- `[toolchain]`
+- `anchor_version = "1.0.0"`
+
+The earlier vendored `anchor-syn` workaround was removed. This branch now builds against upstream Anchor `1.0.0` directly.
 
 - [solana/Cargo.toml](/Users/suraj/Desktop/dhacks/datahacks26/solana/Cargo.toml)
-- [solana/patches/anchor-syn/src/idl/defined.rs](/Users/suraj/Desktop/dhacks/datahacks26/solana/patches/anchor-syn/src/idl/defined.rs)
+- [solana/programs/trail_karma_rewards/Cargo.toml](/Users/suraj/Desktop/dhacks/datahacks26/solana/programs/trail_karma_rewards/Cargo.toml)
+- [backend/package.json](/Users/suraj/Desktop/dhacks/datahacks26/backend/package.json)
 
-Reason for the patch:
+Important local shell note:
 
-- upstream `anchor-syn 0.30.1` called `proc_macro2::Span::source_file()`
-- the currently resolved `proc-macro2` no longer exposes that method
-- the local patch switches that logic to `local_file()` / `file()` so `anchor build` works again in this environment
+- `anchor build` needs the real Solana install directory on your shell `PATH`
+- the working path is `~/.local/share/solana/install/active_release/bin`
+- `cargo-build-sbf` should come from that real directory, not from a standalone symlink, because it expects adjacent SDK files
 
-The SBF build also needed an older compatible `blake3` / `constant_time_eq` lockfile resolution so the Solana platform Rust toolchain could compile the workspace.
+Current migration-specific code changes:
+
+- program imports now use the Solana 3-style split crates needed under Anchor `1.0.0`
+- backend imports were moved from `@coral-xyz/anchor` to `@anchor-lang/core`
+- explicit enum discriminants in the program were removed so Anchor `1.0.0` IDL generation works cleanly while preserving the same enum ordering
+
+Current warning status:
+
+- `anchor build` succeeds and emits IDL/artifacts correctly
+- the program still emits non-fatal `unexpected cfg` warnings from Anchor/Solana macros during build
+- those warnings did not block the build, packaging, or Devnet smoke test
 
 ## Known Gaps
 

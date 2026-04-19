@@ -5,6 +5,7 @@ import { config } from "./config.js";
 import {
   claimContribution,
   ensureUserRegistered,
+  fetchRewardsActivity,
   fetchRelayJob,
   fetchWalletState,
   fulfillRelayJob,
@@ -40,6 +41,15 @@ app.post("/v1/users/register", async (req, res) => {
 app.get("/v1/users/:appUserId/wallet", async (req, res) => {
   try {
     const result = await fetchWalletState(req.params.appUserId);
+    res.json(result);
+  } catch (error) {
+    respondError(res, error);
+  }
+});
+
+app.get("/v1/users/:appUserId/rewards/activity", async (req, res) => {
+  try {
+    const result = await fetchRewardsActivity(req.params.appUserId);
     res.json(result);
   } catch (error) {
     respondError(res, error);

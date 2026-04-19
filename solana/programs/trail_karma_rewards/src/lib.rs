@@ -3,10 +3,10 @@ use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::token_interface::{
     self, Mint, MintTo, TokenAccount, TokenInterface, TransferChecked,
 };
-use solana_program::ed25519_program;
-use solana_program::sysvar::instructions::{
+use solana_instructions_sysvar::{
     load_current_index_checked, load_instruction_at_checked,
 };
+use solana_sdk_ids::ed25519_program;
 
 declare_id!("GmRtJ6ghkm26SfdTDXTFDoX4TzHgQstCjwPPs5EpdZGS");
 
@@ -244,7 +244,7 @@ pub mod trail_karma_rewards {
             authority: ctx.accounts.config.to_account_info(),
         };
         let signer_binding = [signer_seeds];
-        let cpi_ctx = CpiContext::new(ctx.accounts.token_program.to_account_info(), cpi_accounts)
+        let cpi_ctx = CpiContext::new(ctx.accounts.token_program.key(), cpi_accounts)
             .with_signer(&signer_binding);
         token_interface::transfer_checked(cpi_ctx, args.amount, ctx.accounts.karma_mint.decimals)?;
 
@@ -302,7 +302,7 @@ fn mint_karma<'info>(
         authority: config.to_account_info(),
     };
     let signer_binding = [signer_seeds];
-    let cpi_ctx = CpiContext::new(token_program.to_account_info(), cpi_accounts)
+    let cpi_ctx = CpiContext::new(token_program.key(), cpi_accounts)
         .with_signer(&signer_binding);
     token_interface::mint_to(cpi_ctx, amount)
 }
@@ -320,7 +320,7 @@ fn mint_badge<'info>(
         authority: config.to_account_info(),
     };
     let signer_binding = [signer_seeds];
-    let cpi_ctx = CpiContext::new(token_program.to_account_info(), cpi_accounts)
+    let cpi_ctx = CpiContext::new(token_program.key(), cpi_accounts)
         .with_signer(&signer_binding);
     token_interface::mint_to(cpi_ctx, 1)
 }
@@ -477,7 +477,7 @@ pub struct CreateRelayJobFromIntent<'info> {
     )]
     pub relay_job: Account<'info, RelayJob>,
     /// CHECK: instructions sysvar for ed25519 verification
-    #[account(address = solana_program::sysvar::instructions::ID)]
+    #[account(address = solana_instructions_sysvar::ID)]
     pub instructions: UncheckedAccount<'info>,
     pub system_program: Program<'info, System>,
 }
@@ -637,7 +637,7 @@ pub struct TipKarma<'info> {
     )]
     pub recipient_karma_ata: Box<InterfaceAccount<'info, TokenAccount>>,
     /// CHECK: instructions sysvar for ed25519 verification
-    #[account(address = solana_program::sysvar::instructions::ID)]
+    #[account(address = solana_instructions_sysvar::ID)]
     pub instructions: UncheckedAccount<'info>,
     pub token_program: Interface<'info, TokenInterface>,
     pub associated_token_program: Program<'info, AssociatedToken>,
@@ -789,33 +789,33 @@ pub struct TipReceipt {
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq)]
 pub enum EventType {
-    Hazard = 0,
-    Water = 1,
-    Species = 2,
-    Relay = 3,
-    Verification = 4,
+    Hazard,
+    Water,
+    Species,
+    Relay,
+    Verification,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq)]
 pub enum VerificationTier {
-    Tier1AutoVerified = 0,
-    Tier2ModelAssisted = 1,
-    Tier3CommunityVerified = 2,
+    Tier1AutoVerified,
+    Tier2ModelAssisted,
+    Tier3CommunityVerified,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq)]
 pub enum BadgeCode {
-    TrailScout = 0,
-    RelayRanger = 1,
-    SpeciesSpotter = 2,
-    WaterGuardian = 3,
-    HazardHerald = 4,
+    TrailScout,
+    RelayRanger,
+    SpeciesSpotter,
+    WaterGuardian,
+    HazardHerald,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq)]
 pub enum RelayJobStatus {
-    Open = 0,
-    Fulfilled = 1,
+    Open,
+    Fulfilled,
 }
 
 #[error_code]

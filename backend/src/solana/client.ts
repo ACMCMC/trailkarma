@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import crypto from "node:crypto";
-import * as anchor from "@coral-xyz/anchor";
+import * as anchor from "@anchor-lang/core";
 import {
   Connection,
   Ed25519Program,
@@ -182,7 +182,7 @@ export async function fetchWalletState(appUserId: string) {
     { code: BadgeCode.HazardHerald, mint: String(cfg.hazardHeraldMint), label: "Hazard Herald" },
   ];
 
-  const badges: string[] = [];
+  const ownedBadgeLabels: string[] = [];
   for (const badge of badgeMap) {
     const badgeMint = new PublicKey(badge.mint);
     const badgeAta = getAssociatedTokenAddressSync(
@@ -194,9 +194,98 @@ export async function fetchWalletState(appUserId: string) {
     );
     const balance = await connection.getTokenAccountBalance(badgeAta).catch(() => null);
     if (balance?.value?.uiAmount && balance.value.uiAmount > 0) {
-      badges.push(badge.label);
+      ownedBadgeLabels.push(badge.label);
     }
   }
+
+  const contributionCounts = db.prepare(`
+    SELECT event_type, COUNT(*) AS count
+    FROM contribution_claims
+    WHERE app_user_id = ?
+    GROUP BY event_type
+  `).all(appUserId) as Array<{ event_type: string; count: number }>;
+  const contributionCountMap = Object.fromEntries(
+    contributionCounts.map((row) => [row.event_type, Number(row.count)]),
+  );
+  const hazardCount = contributionCountMap.hazard ?? 0;
+  const waterCount = contributionCountMap.water ?? 0;
+  const speciesCount = contributionCountMap.species ?? 0;
+  const relayCountRow = db
+    .prepare(`
+      SELECT COUNT(*) AS count
+      FROM relay_jobs
+      WHERE fulfiller_app_user_id = ?
+        AND status = 'fulfilled'
+    `)
+    .get(appUserId) as { count: number };
+  const relayCount = Number(relayCountRow?.count ?? 0);
+  const verifiedContributionCount = hazardCount + waterCount + speciesCount + relayCount;
+  const totalKarmaEarnedRow = db
+    .prepare(`
+      SELECT COALESCE(SUM(reward_amount), 0) AS total
+      FROM contribution_claims
+      WHERE app_user_id = ?
+    `)
+    .get(appUserId) as { total: number };
+  const totalKarmaEarned = Number(totalKarmaEarnedRow?.total ?? 0) + relayCount * Number(cfg.rewardRelay);
+
+  const badgeDetails = [
+    {
+      code: "trail_scout",
+      label: "Trail Scout",
+      description: "Awarded for your first verified contribution.",
+      category: "Contribution",
+      accentHex: "#E7A64F",
+      earned: ownedBadgeLabels.includes("Trail Scout"),
+      currentCount: verifiedContributionCount,
+      targetCount: 1,
+      mint: String(cfg.trailScoutMint),
+    },
+    {
+      code: "relay_ranger",
+      label: "Relay Ranger",
+      description: "Earned after your first successful relay mission.",
+      category: "Relay",
+      accentHex: "#4FB7A5",
+      earned: ownedBadgeLabels.includes("Relay Ranger"),
+      currentCount: relayCount,
+      targetCount: 1,
+      mint: String(cfg.relayRangerMint),
+    },
+    {
+      code: "species_spotter",
+      label: "Species Spotter",
+      description: "Unlocked by contributing a verified biodiversity sighting.",
+      category: "Biodiversity",
+      accentHex: "#6A8E4A",
+      earned: ownedBadgeLabels.includes("Species Spotter"),
+      currentCount: speciesCount,
+      targetCount: 1,
+      mint: String(cfg.speciesSpotterMint),
+    },
+    {
+      code: "water_guardian",
+      label: "Water Guardian",
+      description: "Granted after five verified water condition reports.",
+      category: "Trail Safety",
+      accentHex: "#3D8DCC",
+      earned: ownedBadgeLabels.includes("Water Guardian"),
+      currentCount: waterCount,
+      targetCount: 5,
+      mint: String(cfg.waterGuardianMint),
+    },
+    {
+      code: "hazard_herald",
+      label: "Hazard Herald",
+      description: "Granted after five verified hazard reports.",
+      category: "Trail Safety",
+      accentHex: "#C56A4A",
+      earned: ownedBadgeLabels.includes("Hazard Herald"),
+      currentCount: hazardCount,
+      targetCount: 5,
+      mint: String(cfg.hazardHeraldMint),
+    },
+  ];
 
   db.prepare(`
     INSERT INTO wallet_mappings (wallet_public_key, app_user_id, last_known_karma_balance, last_badges_json, updated_at)
@@ -210,7 +299,7 @@ export async function fetchWalletState(appUserId: string) {
     wallet: wallet.toBase58(),
     appUserId,
     karmaBalance: karmaBalance?.value?.amount ?? "0",
-    badges: JSON.stringify(badges),
+    badges: JSON.stringify(ownedBadgeLabels),
     updatedAt: new Date().toISOString(),
   });
 
@@ -219,9 +308,129 @@ export async function fetchWalletState(appUserId: string) {
     displayName: row.display_name,
     walletPublicKey: wallet.toBase58(),
     karmaBalance: karmaBalance?.value?.uiAmountString ?? "0",
-    badges,
+    badges: ownedBadgeLabels,
+    badgeDetails,
+    rewardStats: {
+      totalKarmaEarned,
+      verifiedContributionCount,
+      hazardCount,
+      waterCount,
+      speciesCount,
+      relayCount,
+      badgeCount: badgeDetails.filter((badge) => badge.earned).length,
+    },
     profile,
   };
+}
+
+export async function fetchRewardsActivity(appUserId: string) {
+  const contributionRows = db.prepare(`
+    SELECT contribution_id, event_type, verification_tier, reward_amount, tx_signature, created_at
+    FROM contribution_claims
+    WHERE app_user_id = ?
+    ORDER BY created_at DESC
+    LIMIT 25
+  `).all(appUserId) as Array<{
+    contribution_id: string;
+    event_type: string;
+    verification_tier: string;
+    reward_amount: number;
+    tx_signature: string;
+    created_at: string;
+  }>;
+
+  const relayRows = db.prepare(`
+    SELECT job_id, status, fulfill_tx_signature, updated_at
+    FROM relay_jobs
+    WHERE fulfiller_app_user_id = ?
+      AND status = 'fulfilled'
+    ORDER BY updated_at DESC
+    LIMIT 25
+  `).all(appUserId) as Array<{
+    job_id: string;
+    status: string;
+    fulfill_tx_signature: string | null;
+    updated_at: string;
+  }>;
+
+  const auditRows = db.prepare(`
+    SELECT id, operation, tx_signature, payload_json, created_at
+    FROM tx_audit
+    WHERE app_user_id = ?
+      AND operation IN ('claim_badge', 'tip_karma')
+    ORDER BY created_at DESC
+    LIMIT 25
+  `).all(appUserId) as Array<{
+    id: number;
+    operation: string;
+    tx_signature: string;
+    payload_json: string;
+    created_at: string;
+  }>;
+
+  const contributionItems = contributionRows.map((row) => ({
+    id: `contribution:${row.contribution_id}`,
+    kind: "contribution_reward",
+    title: `${capitalize(row.event_type)} contribution verified`,
+    subtitle: `Verification tier: ${humanizeTier(row.verification_tier)}`,
+    occurredAt: row.created_at,
+    karmaDelta: Number(row.reward_amount),
+    txSignature: row.tx_signature,
+    status: "confirmed",
+  }));
+
+  const relayItems = relayRows.map((row) => ({
+    id: `relay:${row.job_id}`,
+    kind: "relay_reward",
+    title: "Relay mission fulfilled",
+    subtitle: `First valid relay claimant secured the reward for job ${row.job_id.slice(0, 8)}...`,
+    occurredAt: row.updated_at,
+    karmaDelta: 12,
+    txSignature: row.fulfill_tx_signature ?? undefined,
+    status: row.status,
+  }));
+
+  const auditItems = auditRows
+    .map((row) => {
+      const payload = parseJson(row.payload_json);
+      if (row.operation === "claim_badge") {
+        const badgeLabel = badgeLabelFromPayload(payload);
+        return {
+          id: `audit:${row.id}`,
+          kind: "badge_earned",
+          title: `${badgeLabel} unlocked`,
+          subtitle: "Collectible minted to your wallet on Devnet.",
+          occurredAt: row.created_at,
+          badgeLabel,
+          txSignature: row.tx_signature,
+          status: "confirmed",
+        };
+      }
+
+      if (row.operation === "tip_karma") {
+        const amount = Number(payload.amount ?? 0);
+        const recipientWallet = String(payload.recipientWallet ?? "");
+        return {
+          id: `audit:${row.id}`,
+          kind: "tip_sent",
+          title: "KARMA tip sent",
+          subtitle: `Sent ${amount} KARMA to ${shortWallet(recipientWallet)}`,
+          occurredAt: row.created_at,
+          karmaDelta: amount > 0 ? -amount : amount,
+          txSignature: row.tx_signature,
+          status: "confirmed",
+        };
+      }
+
+      return null;
+    })
+    .filter((item): item is NonNullable<typeof item> => item !== null);
+
+  const items = [...contributionItems, ...relayItems, ...auditItems]
+    .sort((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt))
+    .slice(0, 30);
+
+  return { items };
 }
 
 export async function claimContribution(input: {
@@ -750,4 +959,56 @@ function audit(appUserId: string, walletPublicKey: string, operation: string, tx
     INSERT INTO tx_audit (app_user_id, wallet_public_key, operation, tx_signature, payload_json, created_at)
     VALUES (?, ?, ?, ?, ?, ?)
   `).run(appUserId, walletPublicKey, operation, txSignature, JSON.stringify(payload), new Date().toISOString());
+}
+
+function parseJson(value: string): Record<string, unknown> {
+  try {
+    return JSON.parse(value) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
+function humanizeTier(value: string): string {
+  return value
+    .replace(/tier/i, "Tier ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .trim();
+}
+
+function capitalize(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function shortWallet(value: string): string {
+  if (!value || value.length < 10) return value || "unknown wallet";
+  return `${value.slice(0, 4)}...${value.slice(-4)}`;
+}
+
+function badgeLabelFromPayload(payload: Record<string, unknown>): string {
+  const badgeCode = String(payload.badgeCode ?? "");
+  switch (badgeCode) {
+    case String(BadgeCode.TrailScout):
+    case "trail_scout":
+    case "0":
+      return "Trail Scout";
+    case String(BadgeCode.RelayRanger):
+    case "relay_ranger":
+    case "1":
+      return "Relay Ranger";
+    case String(BadgeCode.SpeciesSpotter):
+    case "species_spotter":
+    case "2":
+      return "Species Spotter";
+    case String(BadgeCode.WaterGuardian):
+    case "water_guardian":
+    case "3":
+      return "Water Guardian";
+    case String(BadgeCode.HazardHerald):
+    case "hazard_herald":
+    case "4":
+      return "Hazard Herald";
+    default:
+      return "Collectible";
+  }
 }

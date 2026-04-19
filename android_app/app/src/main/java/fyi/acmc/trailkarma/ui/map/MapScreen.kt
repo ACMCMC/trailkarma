@@ -41,6 +41,7 @@ fun MapScreen(
     onNavigateToCamera: () -> Unit = {},
     onNavigateToReport: () -> Unit = {},
     onNavigateToReportDetail: (String) -> Unit = {},
+    onNavigateToRewards: () -> Unit = {},
     onNavigateToBle: () -> Unit = {},
     onNavigateToHistory: () -> Unit = {},
     onNavigateToAbout: () -> Unit = {},
@@ -89,7 +90,17 @@ fun MapScreen(
                     Text("Menu", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 16.dp))
 
                     NavigationDrawerItem(
-                        label = { Text("Reward History", style = MaterialTheme.typography.bodyMedium) },
+                        label = { Text("Rewards", style = MaterialTheme.typography.bodyMedium) },
+                        selected = false,
+                        onClick = {
+                            onNavigateToRewards()
+                            scope.launch { drawerState.close() }
+                        },
+                        icon = { Icon(Icons.Default.AutoAwesome, contentDescription = "Rewards") }
+                    )
+
+                    NavigationDrawerItem(
+                        label = { Text("Report History", style = MaterialTheme.typography.bodyMedium) },
                         selected = false,
                         onClick = {
                             onNavigateToHistory()
@@ -304,14 +315,15 @@ fun MapScreen(
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .padding(WindowInsets.systemBars.asPaddingValues())
-                    .padding(start = 56.dp, top = 100.dp),
+                    .padding(start = 56.dp, top = 100.dp)
+                    .clickable(onClick = onNavigateToRewards),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
             ) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("KARMA", style = MaterialTheme.typography.labelSmall, fontSize = 10.sp)
+                    Text("REWARDS", style = MaterialTheme.typography.labelSmall, fontSize = 10.sp)
                     Text(state.karmaBalance, style = MaterialTheme.typography.titleMedium)
                     Text(
-                        if (state.badges.isEmpty()) "No badges yet" else state.badges.joinToString(" • "),
+                        if (state.badges.isEmpty()) "Tap to open collectibles" else state.badges.joinToString(" • "),
                         style = MaterialTheme.typography.labelSmall,
                         fontSize = 9.sp,
                         color = MaterialTheme.colorScheme.onPrimaryContainer
