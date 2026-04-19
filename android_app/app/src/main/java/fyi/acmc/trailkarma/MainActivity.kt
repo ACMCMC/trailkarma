@@ -13,6 +13,7 @@ import androidx.navigation.compose.rememberNavController
 import fyi.acmc.trailkarma.db.AppDatabase
 import fyi.acmc.trailkarma.location.LocationService
 import fyi.acmc.trailkarma.repository.UserRepository
+import fyi.acmc.trailkarma.repository.DatabricksSyncRepository
 import fyi.acmc.trailkarma.sync.SyncWorker
 import fyi.acmc.trailkarma.ui.navigation.Routes
 import fyi.acmc.trailkarma.ui.navigation.TrailKarmaNavGraph
@@ -40,8 +41,19 @@ class MainActivity : ComponentActivity() {
                 var startDest by remember { mutableStateOf<String?>(null) }
 
                 LaunchedEffect(Unit) {
-                    val repo = UserRepository(applicationContext, AppDatabase.get(applicationContext).userDao())
-                    startDest = if (repo.currentUserId.first() != null) Routes.HOME else Routes.LOGIN
+                    val db = AppDatabase.get(applicationContext)
+                    val repo = UserRepository(applicationContext, db.userDao())
+                    val userId = repo.currentUserId.first()
+                    startDest = if (userId != null) Routes.MAP else Routes.LOGIN
+
+                    if (userId != null) {
+                        val syncRepo = DatabricksSyncRepository(applicationContext, db)
+                        syncRepo.setDatabricksConfig(
+                            url = "https://dbc-f1d1578e-8435.cloud.databricks.com",
+                            token = "dapia5720e0dfb4e196415703773b1f4aa78",
+                            warehouse = "5fa7bca37483870e"
+                        )
+                    }
                 }
 
                 startDest?.let {

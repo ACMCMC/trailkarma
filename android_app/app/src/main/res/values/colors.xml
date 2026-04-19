@@ -2,4 +2,11 @@
 <resources>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+
+    <!-- TrailKarma Palette -->
+    <color name="purple_cyber">#C200D6</color>
+    <color name="red_optimistic">#D50000</color>
+    <color name="aqua_bright">#00B8CC</color>
+    <color name="blue_medium">#007ACC</color>
+    <color name="blue_deep">#002D72</color>
 </resources>
