@@ -51,12 +51,23 @@ class DatabricksSyncRepository(context: Context, private val db: AppDatabase) {
             val conf = if (report.type.name == "species") report.confidence else null
             val confVal = if (conf != null) conf.toString() else "NULL"
 
+            // MERGE INTO = Delta Lake's "insert if not exists" — deduplicates by report_id UUID
             val sql = """
-                INSERT INTO workspace.trailkarma.trail_reports
-                (report_id, user_id, type, title, description, lat, lng, timestamp, species_name, confidence, source, synced)
-                VALUES ('${report.reportId}', '${report.userId}', '${report.type.name}', '${report.title}',
-                '${report.description}', ${report.lat}, ${report.lng}, '${report.timestamp}',
-                $species, $confVal, '${report.source.name}', true)
+                MERGE INTO workspace.trailkarma.trail_reports AS target
+                USING (SELECT
+                    '${report.reportId}'  AS report_id,
+                    '${report.userId}'    AS user_id,
+                    '${report.type.name}' AS type,
+                    '${report.title}'     AS title,
+                    '${report.description}' AS description,
+                    ${report.lat}         AS lat,
+                    ${report.lng}         AS lng,
+                    '${report.timestamp}' AS timestamp,
+                    $species              AS species_name,
+                    $confVal              AS confidence,
+                    '${report.source.name}' AS source
+                ) AS source ON target.report_id = source.report_id
+                WHEN NOT MATCHED THEN INSERT *
             """.trimIndent()
 
             try {
@@ -160,9 +171,17 @@ class DatabricksSyncRepository(context: Context, private val db: AppDatabase) {
 
         var success = true
         for (location in locations) {
+            // MERGE INTO = Delta Lake's "insert if not exists" — deduplicates by location UUID
             val sql = """
-                INSERT INTO workspace.trailkarma.location_updates (id, user_id, timestamp, lat, lng, synced)
-                VALUES ('${location.id}', '${location.userId}', '${location.timestamp}', ${location.lat}, ${location.lng}, true)
+                MERGE INTO workspace.trailkarma.location_updates AS target
+                USING (SELECT
+                    '${location.id}'        AS id,
+                    '${location.userId}'    AS user_id,
+                    '${location.timestamp}' AS timestamp,
+                    ${location.lat}         AS lat,
+                    ${location.lng}         AS lng
+                ) AS source ON target.id = source.id
+                WHEN NOT MATCHED THEN INSERT *
             """.trimIndent()
 
             try {

@@ -26,26 +26,30 @@ interface TrailReportDao {
 
     @Query("UPDATE trail_reports SET synced = 1 WHERE reportId = :id")
     suspend fun markSynced(id: String)
+
+    // Used by BLE set-diff: "what IDs do I already have?"
+    @Query("SELECT reportId FROM trail_reports")
+    suspend fun getIds(): List<String>
 }
 
 @Dao
 interface LocationUpdateDao {
-    @Insert
+    @Insert(onConflict = OnConflictStrategy.IGNORE) // UUID PK — duplicate pings are silently dropped
     suspend fun insert(update: LocationUpdate)
 
     @Query("SELECT * FROM location_updates WHERE synced = 0")
     suspend fun getUnsynced(): List<LocationUpdate>
 
     @Query("UPDATE location_updates SET synced = 1 WHERE id = :id")
-    suspend fun markSynced(id: Long)
+    suspend fun markSynced(id: String) // String UUID now
 
-    @Query("SELECT * FROM location_updates ORDER BY id DESC LIMIT 1")
+    @Query("SELECT * FROM location_updates ORDER BY rowid DESC LIMIT 1")
     fun getLatest(): Flow<LocationUpdate?>
 }
 
 @Dao
 interface RelayPacketDao {
-    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    @Insert(onConflict = OnConflictStrategy.IGNORE) // packetId UUID — dupes silently dropped
     suspend fun insert(packet: RelayPacket)
 
     @Query("SELECT * FROM relay_packets WHERE uploaded = 0")
@@ -57,8 +61,9 @@ interface RelayPacketDao {
     @Query("UPDATE relay_packets SET uploaded = 1 WHERE packetId = :id")
     suspend fun markUploaded(id: String)
 
-    @Query("SELECT COUNT(*) FROM relay_packets WHERE packetId = :id")
-    suspend fun exists(id: String): Int
+    // Used by BLE set-diff
+    @Query("SELECT packetId FROM relay_packets")
+    suspend fun getIds(): List<String>
 }
 
 @Dao

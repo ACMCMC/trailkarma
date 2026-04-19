@@ -20,9 +20,12 @@ class DatabaseCallback : RoomDatabase.Callback() {
     }
 }
 
+// v3 -> v4: LocationUpdate.id changed from autoGenerate Long -> UUID String
+// No migration needed — fallbackToDestructiveMigration wipes and rebuilds.
+// The cloud (Databricks) is the source of truth; local DB re-syncs on next launch.
 @Database(
     entities = [User::class, TrailReport::class, LocationUpdate::class, RelayPacket::class, Trail::class],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

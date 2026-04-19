@@ -2,6 +2,7 @@ package fyi.acmc.trailkarma.models
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import java.util.UUID
 
 @Entity(tableName = "users")
 data class User(
@@ -11,7 +12,8 @@ data class User(
 
 @Entity(tableName = "location_updates")
 data class LocationUpdate(
-    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    // UUID so any device can dedup this record — same ping seen by two phones = same row
+    @PrimaryKey val id: String = UUID.randomUUID().toString(),
     val userId: String,
     val timestamp: String,
     val lat: Double,
