@@ -23,7 +23,7 @@ class UserRepository(private val context: Context, private val dao: UserDao) {
         val userId = UUID.randomUUID().toString()
         val user = User(
             userId = userId,
-            displayName = "Trail Hiker ${userId.take(4).uppercase()}",
+            displayName = "Trail Demo ${userId.take(4).uppercase()}",
         )
         saveUser(user)
         return user

@@ -189,8 +189,27 @@ interface RelayJobIntentDao {
     @Query("SELECT * FROM relay_job_intents WHERE source = 'self' AND status = 'pending'")
     suspend fun getPendingToOpen(): List<RelayJobIntent>
 
-    @Query("SELECT * FROM relay_job_intents WHERE relayType IN ('voice_outbound', 'voice_reply') AND status NOT IN ('fulfilled', 'failed') ORDER BY createdAt ASC")
+    @Query("SELECT * FROM relay_job_intents WHERE relayType IN ('voice_outbound', 'voice_reply') AND status IN ('queued_offline', 'pending') ORDER BY createdAt ASC")
     suspend fun getVoiceJobsToSync(): List<RelayJobIntent>
+
+    @Query(
+        """
+        SELECT * FROM relay_job_intents
+        WHERE source = 'self'
+          AND relayType = 'voice_outbound'
+          AND recipientPhoneNumber = :recipientPhoneNumber
+          AND messageBody = :messageBody
+          AND status NOT IN ('fulfilled', 'failed')
+          AND createdAt >= :createdAfter
+        ORDER BY createdAt DESC
+        LIMIT 1
+        """
+    )
+    suspend fun findRecentSelfVoiceRelay(
+        recipientPhoneNumber: String,
+        messageBody: String,
+        createdAfter: String
+    ): RelayJobIntent?
 
     @Query("UPDATE relay_job_intents SET status = :status, openedTxSignature = :txSignature, synced = 1 WHERE jobId = :jobId")
     suspend fun markOpened(jobId: String, status: String, txSignature: String)

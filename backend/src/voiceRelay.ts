@@ -16,6 +16,10 @@ type OpenVoiceRelayJobInput = {
   rewardAmount: number;
   nonce: number;
   encryptedBlob: string; // The encrypted JSON containing recipient details and message
+  recipientName?: string;
+  recipientPhoneNumber?: string;
+  messageBody?: string;
+  contextJson?: string;
 };
 
 type VoiceRelayJobRow = {
@@ -83,6 +87,7 @@ Dynamic variables:
 
 const DEFAULT_FIRST_MESSAGE =
   "Hello {{recipient_name}}, this is TrailKarma Relay with a message from {{sender_name}}.";
+const VOICE_RELAY_DEDUP_WINDOW_MS = 2 * 60 * 1000;
 
 export async function openVoiceRelayJob(input: OpenVoiceRelayJobInput) {
   const sender = db
@@ -111,12 +116,21 @@ export async function openVoiceRelayJob(input: OpenVoiceRelayJobInput) {
     return toVoiceRelayResponse(refreshed ?? existing);
   }
 
-  // PRIVACY: Decrypt the sensitive payload sent via the mesh
-  if (!config.relayEncryptionPrivateKey) {
-      throw new Error("Backend encryption key is not configured.");
+  const decrypted = decodeRelayPayload(input);
+  const recipientName = decrypted.recipientName.trim();
+  const recipientPhoneNumber = decrypted.recipientPhoneNumber.trim();
+  const messageBody = decrypted.messageBody.trim();
+  const contextJson = decrypted.contextJson;
+  const normalizedRecipientPhone = normalizePhone(recipientPhoneNumber);
+  const duplicate = findRecentDuplicateVoiceRelay({
+    senderAppUserId: sender.app_user_id,
+    recipientPhoneNumber: normalizedRecipientPhone,
+    messageBody,
+  });
+  if (duplicate) {
+    const refreshed = await refreshVoiceRelayJob(duplicate.job_id);
+    return toVoiceRelayResponse(refreshed ?? duplicate);
   }
-  const decrypted = JSON.parse(decryptRelayPayload(input.encryptedBlob, config.relayEncryptionPrivateKey));
-  const { recipientName, recipientPhoneNumber, messageBody, contextJson } = decrypted;
   const summary = `Relay message from ${sender.display_name}: "${messageBody}"`;
 
   const bootstrap = await ensureVoiceBootstrap();
@@ -200,13 +214,13 @@ export async function openVoiceRelayJob(input: OpenVoiceRelayJobInput) {
     senderAppUserId: sender.app_user_id,
     carrierAppUserId: input.appUserId,
     senderWallet: input.senderWalletPublicKey,
-    recipient_name: recipientName,
-    recipient_phone_number: normalizePhone(recipientPhoneNumber),
-    message_body: messageBody,
-    context_summary: summary,
-    context_json: contextJson,
-    destination_hash: input.destinationHashHex,
-    payload_hash: input.payloadHashHex,
+    recipientName,
+    recipientPhoneNumber: normalizedRecipientPhone,
+    messageBody,
+    contextSummary: summary,
+    contextJson,
+    destinationHash: input.destinationHashHex,
+    payloadHash: input.payloadHashHex,
     status: "calling",
     openedTxSignature: openResult.txSignature,
     callSid: call.callSid,
@@ -500,7 +514,9 @@ async function initiateOutboundCall(input: {
 }) {
   const response = await elevenlabsRequest<{
     conversation_id?: string | null;
+    conversationId?: string | null;
     callSid?: string | null;
+    call_sid?: string | null;
   }>("/v1/convai/twilio/outbound-call", {
     method: "POST",
     body: JSON.stringify({
@@ -514,8 +530,8 @@ async function initiateOutboundCall(input: {
   });
 
   return {
-    conversationId: response.conversation_id ?? null,
-    callSid: response.callSid ?? null,
+    conversationId: response.conversation_id ?? response.conversationId ?? null,
+    callSid: response.callSid ?? response.call_sid ?? null,
   };
 }
 
@@ -657,6 +673,32 @@ function getVoiceRelayJob(jobId: string) {
   return db.prepare("SELECT * FROM voice_relay_jobs WHERE job_id = ?").get(jobId) as VoiceRelayJobRow | undefined;
 }
 
+function findRecentDuplicateVoiceRelay(input: {
+  senderAppUserId: string;
+  recipientPhoneNumber: string;
+  messageBody: string;
+}) {
+  const createdAfter = new Date(Date.now() - VOICE_RELAY_DEDUP_WINDOW_MS).toISOString();
+  return db
+    .prepare(`
+      SELECT *
+      FROM voice_relay_jobs
+      WHERE sender_app_user_id = @senderAppUserId
+        AND recipient_phone_number = @recipientPhoneNumber
+        AND message_body = @messageBody
+        AND status NOT IN ('fulfilled', 'failed')
+        AND updated_at >= @createdAfter
+      ORDER BY updated_at DESC
+      LIMIT 1
+    `)
+    .get({
+      senderAppUserId: input.senderAppUserId,
+      recipientPhoneNumber: input.recipientPhoneNumber,
+      messageBody: input.messageBody,
+      createdAfter,
+    }) as VoiceRelayJobRow | undefined;
+}
+
 function toVoiceRelayResponse(row: VoiceRelayJobRow) {
   return {
     jobId: row.job_id,
@@ -689,9 +731,47 @@ function normalizePhone(value: string) {
   const trimmed = value.trim();
   if (!trimmed) return "";
   if (trimmed.startsWith("+")) {
-    return `+${trimmed.slice(1).replace(/\\D/g, "")}`;
+    return `+${trimmed.slice(1).replace(/\D/g, "")}`;
   }
-  return `+${trimmed.replace(/\\D/g, "")}`;
+  return `+${trimmed.replace(/\D/g, "")}`;
+}
+
+function decodeRelayPayload(input: OpenVoiceRelayJobInput) {
+  if (config.relayEncryptionPrivateKey) {
+    try {
+      return JSON.parse(decryptRelayPayload(input.encryptedBlob, config.relayEncryptionPrivateKey)) as {
+        recipientName: string;
+        recipientPhoneNumber: string;
+        messageBody: string;
+        contextJson: string;
+      };
+    } catch (error) {
+      const fallback = plaintextRelayPayload(input);
+      if (fallback) return fallback;
+      throw error;
+    }
+  }
+
+  const fallback = plaintextRelayPayload(input);
+  if (fallback) return fallback;
+  throw new Error("Backend encryption key is not configured and no plaintext relay payload was provided.");
+}
+
+function plaintextRelayPayload(input: OpenVoiceRelayJobInput) {
+  if (
+    input.recipientName?.trim() &&
+    input.recipientPhoneNumber?.trim() &&
+    input.messageBody?.trim() &&
+    input.contextJson?.trim()
+  ) {
+    return {
+      recipientName: input.recipientName.trim(),
+      recipientPhoneNumber: input.recipientPhoneNumber.trim(),
+      messageBody: input.messageBody.trim(),
+      contextJson: input.contextJson,
+    };
+  }
+  return null;
 }
 
 function blankOr(value: string, fallback: string) {

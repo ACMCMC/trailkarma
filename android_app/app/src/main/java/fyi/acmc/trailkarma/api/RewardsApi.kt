@@ -101,7 +101,11 @@ data class OpenVoiceRelayJobRequest(
     @Json(name = "expiryTs") val expiryTs: Long,
     @Json(name = "rewardAmount") val rewardAmount: Int,
     val nonce: Long,
-    @Json(name = "encryptedBlob") val encryptedBlob: String
+    @Json(name = "encryptedBlob") val encryptedBlob: String,
+    @Json(name = "recipientName") val recipientName: String? = null,
+    @Json(name = "recipientPhoneNumber") val recipientPhoneNumber: String? = null,
+    @Json(name = "messageBody") val messageBody: String? = null,
+    @Json(name = "contextJson") val contextJson: String? = null
 )
 
 @JsonClass(generateAdapter = true)
