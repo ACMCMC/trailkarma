@@ -20,3 +20,44 @@ Contributors should preserve these constraints:
 - treat backend attestations as the bridge from real-world events to on-chain settlement
 - treat the current ElevenLabs voice relay as the preferred delayed-message transport instead of SMS
 - keep voice delivery hybrid: offline intent locally, carrier sync over BLE, outbound call/reply capture in the backend, settlement on-chain
+
+## Android Agent Loop
+
+For Android work in this repo, prefer a repeatable emulator loop instead of manual Android Studio clicking.
+
+Terminal control plane:
+
+- `scripts/android-sdk-bootstrap.sh`
+  - installs Android command-line tools if missing
+  - installs the API 36.1 Google APIs ARM64 system image used by the repo smoke loop
+- `scripts/android-avd-create.sh [trailkarma-api36-1]`
+  - creates the named AVD used for local testing
+- `scripts/android-emulator-start.sh [trailkarma-api36-1]`
+  - starts the emulator, waits for boot completion, and disables animations
+- `scripts/android-install-debug.sh`
+  - builds `:app:assembleDebug`, installs the APK, and grants runtime permissions
+- `scripts/android-ui-dump.sh [.artifacts/android-ui]`
+  - saves a screenshot and `uiautomator` XML dump for debugging
+- `scripts/android-smoke-loop.sh`
+  - starts emulator, installs app, checks launch for `AndroidRuntime` crashes, runs connected Android smoke tests, and captures UI artifacts
+
+Current smoke test coverage:
+
+- `android_app/app/src/androidTest/java/fyi/acmc/trailkarma/SmokeNavigationTest.kt`
+- verifies launch and common navigation to:
+  - Rewards
+  - Profile
+  - Relay Hub
+
+Expected local environment:
+
+- backend available at `REWARDS_URL`, defaulting to `http://10.0.2.2:3000` for emulator traffic to the host machine
+- Android SDK rooted at the path in `android_app/local.properties` or `~/Library/Android/sdk`
+
+Preferred workflow after Android edits:
+
+1. `scripts/android-smoke-loop.sh`
+2. if it fails, inspect:
+   - `.artifacts/android-smoke/launch-logcat.txt`
+   - `.artifacts/android-smoke/ui/window_dump.xml`
+   - `.artifacts/android-smoke/ui/screen.png`

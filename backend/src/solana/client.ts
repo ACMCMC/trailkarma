@@ -465,7 +465,29 @@ export async function claimContribution(input: {
     ASSOCIATED_TOKEN_PROGRAM_ID,
   );
 
-  const contributionId = sha256Bytes(`${input.reportId}:${input.timestamp}:${input.type}`);
+  const existingClaim = db.prepare(`
+    SELECT contribution_id, tx_signature, reward_amount, verification_tier
+    FROM contribution_claims
+    WHERE report_id = ?
+    LIMIT 1
+  `).get(input.reportId) as
+    | {
+        contribution_id: string;
+        tx_signature: string;
+        reward_amount: number;
+        verification_tier: string;
+      }
+    | undefined;
+  if (existingClaim) {
+    return {
+      txSignature: existingClaim.tx_signature,
+      contributionId: existingClaim.contribution_id,
+      rewardAmount: Number(existingClaim.reward_amount),
+      verificationTier: existingClaim.verification_tier,
+    };
+  }
+
+  const contributionId = sha256Bytes(`report:${input.reportId}`);
   const metadataHash = sha256Bytes(
     JSON.stringify({
       reportId: input.reportId,
@@ -629,6 +651,27 @@ async function createRelayJobForSender(input: {
   rewardAmount: number;
   nonce: number;
 }) {
+  const existingJob = db
+    .prepare(`
+      SELECT status, open_tx_signature, fulfill_tx_signature
+      FROM relay_jobs
+      WHERE job_id = ?
+      LIMIT 1
+    `)
+    .get(input.jobIdHex) as
+    | {
+        status: string;
+        open_tx_signature: string | null;
+        fulfill_tx_signature: string | null;
+      }
+    | undefined;
+  if (existingJob) {
+    return {
+      txSignature: existingJob.open_tx_signature ?? existingJob.fulfill_tx_signature ?? "",
+      status: existingJob.status,
+    };
+  }
+
   const jobId = Buffer.from(input.jobIdHex, "hex");
   const wallet = new PublicKey(input.senderWalletPublicKey);
   const profilePda = userProfilePda(wallet);
@@ -714,6 +757,27 @@ export async function fulfillRelayJob(input: {
     | undefined;
   if (!user) {
     throw new Error(`Unknown app user: ${input.appUserId}`);
+  }
+
+  const existingJob = db
+    .prepare(`
+      SELECT status, fulfill_tx_signature
+      FROM relay_jobs
+      WHERE job_id = ?
+      LIMIT 1
+    `)
+    .get(input.jobIdHex) as
+    | {
+        status: string;
+        fulfill_tx_signature: string | null;
+      }
+    | undefined;
+  if (existingJob?.status === "fulfilled" && existingJob.fulfill_tx_signature) {
+    const cfg = await fetchConfigAccount();
+    return {
+      txSignature: existingJob.fulfill_tx_signature,
+      rewardAmount: Number(cfg.rewardRelay),
+    };
   }
 
   const wallet = new PublicKey(user.wallet_public_key);

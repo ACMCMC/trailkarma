@@ -58,3 +58,4 @@ backend/keys/
 backend/.env
 .localnet-ledger/
 solana/target/
+.artifacts/

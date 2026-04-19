@@ -27,6 +27,7 @@ class RewardsRepository(context: Context, private val db: AppDatabase) {
     private val userRepository = UserRepository(context, db.userDao())
 
     private suspend fun currentUser(): User? = userRepository.currentUser()
+    private suspend fun <T> safeApiCall(block: suspend () -> T): T? = runCatching { block() }.getOrNull()
 
     suspend fun ensureLocalWallet(user: User): User {
         val wallet = walletManager.ensureWallet(user.userId)
@@ -40,23 +41,27 @@ class RewardsRepository(context: Context, private val db: AppDatabase) {
         if (!networkUtil.isOnlineNow()) return null
         val current = currentUser() ?: userRepository.ensureLocalUser()
         val user = ensureLocalWallet(current)
-        api.upsertProfile(
-            UpsertProfileRequest(
-                appUserId = user.userId,
-                displayName = user.displayName,
-                walletPublicKey = user.walletPublicKey,
-                realName = user.realName,
-                phoneNumber = user.phoneNumber.ifBlank { null },
-                defaultRelayPhoneNumber = user.defaultRelayPhoneNumber.ifBlank { null }
+        safeApiCall {
+            api.upsertProfile(
+                UpsertProfileRequest(
+                    appUserId = user.userId,
+                    displayName = user.displayName,
+                    walletPublicKey = user.walletPublicKey,
+                    realName = user.realName,
+                    phoneNumber = user.phoneNumber.ifBlank { null },
+                    defaultRelayPhoneNumber = user.defaultRelayPhoneNumber.ifBlank { null }
+                )
             )
-        )
-        val response = api.registerUser(
-            RegisterUserRequest(
-                appUserId = user.userId,
-                displayName = user.displayName,
-                walletPublicKey = user.walletPublicKey
+        } ?: return null
+        val response = safeApiCall {
+            api.registerUser(
+                RegisterUserRequest(
+                    appUserId = user.userId,
+                    displayName = user.displayName,
+                    walletPublicKey = user.walletPublicKey
+                )
             )
-        )
+        } ?: return null
         if (!response.isSuccessful) return null
         val body = response.body() ?: return null
         db.userDao().updateWalletRegistration(user.userId, body.walletPublicKey, true, Instant.now().toString())
@@ -67,14 +72,14 @@ class RewardsRepository(context: Context, private val db: AppDatabase) {
         if (!networkUtil.isOnlineNow()) return null
         val user = currentUser() ?: userRepository.ensureLocalUser()
         if (user.walletPublicKey.isBlank()) return syncCurrentUserRegistration()
-        val response = api.getWallet(user.userId)
+        val response = safeApiCall { api.getWallet(user.userId) } ?: return null
         return if (response.isSuccessful) response.body() else null
     }
 
     suspend fun fetchRewardsActivity(): List<RewardActivityItemResponse> {
         if (!networkUtil.isOnlineNow()) return emptyList()
         val user = currentUser() ?: userRepository.ensureLocalUser()
-        val response = api.getRewardsActivity(user.userId)
+        val response = safeApiCall { api.getRewardsActivity(user.userId) } ?: return emptyList()
         return if (response.isSuccessful) {
             response.body()?.items.orEmpty()
         } else {
@@ -243,7 +248,8 @@ class RewardsRepository(context: Context, private val db: AppDatabase) {
         syncCurrentUserRegistration() ?: return
         val pendingJobs = db.relayJobIntentDao().getPendingToOpen()
         for (job in pendingJobs) {
-            val response = api.openRelayJob(
+            val response = safeApiCall {
+                api.openRelayJob(
                 OpenRelayJobRequest(
                     appUserId = job.userId,
                     signedMessageBase64 = job.signedMessageBase64,
@@ -256,6 +262,7 @@ class RewardsRepository(context: Context, private val db: AppDatabase) {
                     nonce = job.nonce
                 )
             )
+            } ?: continue
             if (response.isSuccessful) {
                 val tx = response.body()?.txSignature.orEmpty()
                 db.relayJobIntentDao().markOpened(job.jobId, "open", tx)
@@ -268,7 +275,8 @@ class RewardsRepository(context: Context, private val db: AppDatabase) {
         val carrier = syncCurrentUserRegistration() ?: return
         val pendingJobs = db.relayJobIntentDao().getVoiceJobsToSync()
         for (job in pendingJobs) {
-            val response = api.openVoiceRelayJob(
+            val response = safeApiCall {
+                api.openVoiceRelayJob(
                 OpenVoiceRelayJobRequest(
                     appUserId = carrier.appUserId,
                     senderWalletPublicKey = job.senderWallet,
@@ -287,6 +295,7 @@ class RewardsRepository(context: Context, private val db: AppDatabase) {
                     contextJson = job.contextJson
                 )
             )
+            } ?: continue
             if (response.isSuccessful) {
                 response.body()?.let {
                     db.relayJobIntentDao().updateVoiceRelayStatus(
@@ -307,7 +316,7 @@ class RewardsRepository(context: Context, private val db: AppDatabase) {
     suspend fun refreshVoiceRelayJobs(): List<VoiceRelayJobResponse> {
         if (!networkUtil.isOnlineNow()) return emptyList()
         val user = currentUser() ?: userRepository.ensureLocalUser()
-        val response = api.getVoiceRelayJobs(user.userId)
+        val response = safeApiCall { api.getVoiceRelayJobs(user.userId) } ?: return emptyList()
         if (!response.isSuccessful) return emptyList()
         val items = response.body()?.items.orEmpty()
         for (item in items) {
@@ -329,7 +338,7 @@ class RewardsRepository(context: Context, private val db: AppDatabase) {
         if (!networkUtil.isOnlineNow()) return 0
         val user = currentUser() ?: userRepository.ensureLocalUser()
         val previousIds = db.relayInboxMessageDao().getForUser(user.userId).first().map { it.replyId }.toSet()
-        val response = api.getRelayInbox(user.userId)
+        val response = safeApiCall { api.getRelayInbox(user.userId) } ?: return 0
         if (!response.isSuccessful) return 0
         val items = response.body()?.items.orEmpty()
         db.relayInboxMessageDao().insertAll(
@@ -350,7 +359,7 @@ class RewardsRepository(context: Context, private val db: AppDatabase) {
         )
         items.forEach {
             if (it.status != "delivered") {
-                api.acknowledgeRelayInbox(it.replyId)
+                safeApiCall { api.acknowledgeRelayInbox(it.replyId) }
                 db.relayInboxMessageDao().markAcknowledged(it.replyId)
             }
         }
@@ -360,7 +369,7 @@ class RewardsRepository(context: Context, private val db: AppDatabase) {
     suspend fun syncMeshRelayReplies() {
         if (!networkUtil.isOnlineNow()) return
         val carrier = currentUser() ?: userRepository.ensureLocalUser()
-        val response = api.getMeshRelayReplies(carrier.userId)
+        val response = safeApiCall { api.getMeshRelayReplies(carrier.userId) } ?: return
         if (!response.isSuccessful) return
         val now = Instant.now().toString()
         for (item in response.body()?.items.orEmpty()) {
@@ -392,13 +401,15 @@ class RewardsRepository(context: Context, private val db: AppDatabase) {
     suspend fun fulfillRelayJob(jobId: String, proofRef: String): Boolean {
         if (!networkUtil.isOnlineNow()) return false
         val user = currentUser() ?: userRepository.ensureLocalUser()
-        val response = api.fulfillRelayJob(
-            FulfillRelayJobRequest(
-                appUserId = user.userId,
-                jobIdHex = jobId,
-                proofRef = proofRef
+        val response = safeApiCall {
+            api.fulfillRelayJob(
+                FulfillRelayJobRequest(
+                    appUserId = user.userId,
+                    jobIdHex = jobId,
+                    proofRef = proofRef
+                )
             )
-        )
+        } ?: return false
         if (!response.isSuccessful) return false
         val tx = response.body()?.txSignature.orEmpty()
         db.relayJobIntentDao().markFulfilled(jobId, proofRef, tx)
@@ -408,27 +419,32 @@ class RewardsRepository(context: Context, private val db: AppDatabase) {
     suspend fun prepareTip(recipientWallet: String, amount: Int): PrepareTipResponse? {
         val user = currentUser() ?: userRepository.ensureLocalUser()
         if (!networkUtil.isOnlineNow()) return null
-        val response = api.prepareTip(PrepareTipRequest(user.userId, recipientWallet, amount))
+        val response = safeApiCall {
+            api.prepareTip(PrepareTipRequest(user.userId, recipientWallet, amount))
+        } ?: return null
         return if (response.isSuccessful) response.body() else null
     }
 
     suspend fun submitTip(prepared: PrepareTipResponse): Boolean {
         val user = currentUser() ?: userRepository.ensureLocalUser()
+        if (!networkUtil.isOnlineNow()) return false
         val signature = walletManager.sign(
             user.userId,
             Base64.decode(prepared.signedMessageBase64, Base64.NO_WRAP)
         )
-        val response = api.submitTip(
-            SubmitTipRequest(
-                appUserId = user.userId,
-                recipientWallet = prepared.recipientWallet,
-                amount = prepared.amount,
-                nonce = prepared.nonce,
-                tipIdHex = prepared.tipIdHex,
-                signedMessageBase64 = prepared.signedMessageBase64,
-                signatureBase64 = Base64.encodeToString(signature, Base64.NO_WRAP)
+        val response = safeApiCall {
+            api.submitTip(
+                SubmitTipRequest(
+                    appUserId = user.userId,
+                    recipientWallet = prepared.recipientWallet,
+                    amount = prepared.amount,
+                    nonce = prepared.nonce,
+                    tipIdHex = prepared.tipIdHex,
+                    signedMessageBase64 = prepared.signedMessageBase64,
+                    signatureBase64 = Base64.encodeToString(signature, Base64.NO_WRAP)
+                )
             )
-        )
+        } ?: return false
         return response.isSuccessful
     }
 
