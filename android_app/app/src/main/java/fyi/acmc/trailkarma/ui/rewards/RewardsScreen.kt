@@ -1,7 +1,11 @@
 package fyi.acmc.trailkarma.ui.rewards
 
 import android.app.Application
+import android.content.Intent
+import android.graphics.Bitmap
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -37,6 +41,8 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Forest
 import androidx.compose.material.icons.filled.LocalActivity
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.QrCode2
+import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Route
 import androidx.compose.material.icons.filled.Schedule
@@ -50,6 +56,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -78,9 +86,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -95,6 +105,10 @@ import fyi.acmc.trailkarma.models.BiodiversityContribution
 import fyi.acmc.trailkarma.models.RelayJobIntent
 import fyi.acmc.trailkarma.models.TrailReport
 import fyi.acmc.trailkarma.repository.RewardsRepository
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.qrcode.QRCodeWriter
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.ZoneId
@@ -111,6 +125,12 @@ data class SpeciesCollectibleCardUi(
     val accentHex: String,
     val discoveredAt: String,
     val owned: Boolean
+)
+
+data class TipRecipientOption(
+    val label: String,
+    val walletAddress: String,
+    val detail: String
 )
 
 class RewardsViewModel(app: Application) : AndroidViewModel(app) {
@@ -200,6 +220,7 @@ fun RewardsScreen(
     onOpenHistory: () -> Unit,
     vm: RewardsViewModel = viewModel()
 ) {
+    val context = LocalContext.current
     val wallet by vm.wallet.collectAsState()
     val activity by vm.activity.collectAsState()
     val loading by vm.loading.collectAsState()
@@ -209,14 +230,32 @@ fun RewardsScreen(
     val message by vm.message.collectAsState()
     val celebrationBadge by vm.celebrationBadge.collectAsState()
     val snackbars = remember { SnackbarHostState() }
-    val speciesCollectibles = remember(biodiversity) { buildSpeciesCollectibles(biodiversity) }
+    val actualSpeciesCollectibles = remember(biodiversity) { buildSpeciesCollectibles(biodiversity) }
+    val speciesCollectibles = remember(actualSpeciesCollectibles) {
+        if (actualSpeciesCollectibles.isNotEmpty()) actualSpeciesCollectibles else demoSpeciesCollectibles()
+    }
     val timelineItems = remember(activity, reports, relayJobs, biodiversity) {
         if (activity.isNotEmpty()) activity else buildLocalRewardActivity(reports, relayJobs, biodiversity)
+    }
+    val activityFeed = remember(timelineItems) {
+        if (timelineItems.isNotEmpty()) timelineItems else demoRewardActivity()
+    }
+    val badgeGallery = remember(wallet, reports, relayJobs, biodiversity) {
+        if (!wallet?.badgeDetails.isNullOrEmpty()) {
+            wallet!!.badgeDetails
+        } else {
+            demoBadgeGallery(reports, relayJobs, biodiversity)
+        }
+    }
+    val tipRecipients = remember(wallet) {
+        demoTipRecipients()
+            .filterNot { it.walletAddress == wallet?.walletPublicKey }
     }
 
     var tipDialogOpen by remember { mutableStateOf(false) }
     var selectedBadge by remember { mutableStateOf<BadgeStatusResponse?>(null) }
     var selectedSpeciesCollectible by remember { mutableStateOf<SpeciesCollectibleCardUi?>(null) }
+    var walletQrOpen by remember { mutableStateOf(false) }
 
     LaunchedEffect(message) {
         message?.let {
@@ -284,13 +323,15 @@ fun RewardsScreen(
                             localReports = reports,
                             relayJobs = relayJobs,
                             biodiversity = biodiversity,
-                            speciesCollectibles = speciesCollectibles
+                            speciesCollectibles = speciesCollectibles,
+                            badgeGallery = badgeGallery
                         )
                     }
 
                     item {
                         ActionDeck(
                             onTip = { tipDialogOpen = true },
+                            onShowWalletQr = { walletQrOpen = true },
                             onRelayMissions = onOpenRelayMissions,
                             onHistory = onOpenHistory
                         )
@@ -303,7 +344,7 @@ fun RewardsScreen(
                         )
                     }
 
-                    if (wallet?.badgeDetails.isNullOrEmpty() && speciesCollectibles.isEmpty()) {
+                    if (badgeGallery.isEmpty() && speciesCollectibles.isEmpty()) {
                         item {
                             RewardEmptyState(
                                 title = "Your first collectible is close",
@@ -311,7 +352,7 @@ fun RewardsScreen(
                             )
                         }
                     } else {
-                        if (!wallet?.badgeDetails.isNullOrEmpty()) {
+                        if (badgeGallery.isNotEmpty()) {
                             item {
                                 GallerySubheader(
                                     title = "Achievement mints",
@@ -320,7 +361,7 @@ fun RewardsScreen(
                             }
                             item {
                                 LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                                    items(wallet?.badgeDetails.orEmpty(), key = { it.code }) { badge ->
+                                    items(badgeGallery, key = { it.code }) { badge ->
                                         CollectibleBadgeCard(
                                             badge = badge,
                                             onClick = { selectedBadge = badge }
@@ -363,7 +404,8 @@ fun RewardsScreen(
                             reports = reports,
                             relayJobs = relayJobs,
                             biodiversity = biodiversity,
-                            speciesCollectibles = speciesCollectibles
+                            speciesCollectibles = speciesCollectibles,
+                            badgeGallery = badgeGallery
                         )
                     }
 
@@ -374,7 +416,7 @@ fun RewardsScreen(
                         )
                     }
 
-                    if (timelineItems.isEmpty()) {
+                    if (activityFeed.isEmpty()) {
                         item {
                             RewardEmptyState(
                                 title = "No reward activity yet",
@@ -382,7 +424,7 @@ fun RewardsScreen(
                             )
                         }
                     } else {
-                        items(timelineItems, key = { it.id }) { item ->
+                        items(activityFeed, key = { it.id }) { item ->
                             RewardActivityRow(item = item)
                         }
                     }
@@ -400,10 +442,17 @@ fun RewardsScreen(
 
     if (tipDialogOpen) {
         TipKarmaDialog(
+            currentWallet = wallet?.walletPublicKey,
+            currentDisplayName = wallet?.displayName,
+            recipients = tipRecipients,
             onDismiss = { tipDialogOpen = false },
             onSend = { walletAddress, amount ->
                 tipDialogOpen = false
                 vm.sendTip(walletAddress, amount)
+            },
+            onShowWalletQr = {
+                tipDialogOpen = false
+                walletQrOpen = true
             }
         )
     }
@@ -421,6 +470,21 @@ fun RewardsScreen(
             onDismiss = { selectedSpeciesCollectible = null }
         )
     }
+
+    if (walletQrOpen && !wallet?.walletPublicKey.isNullOrBlank()) {
+        WalletQrDialog(
+            displayName = wallet?.displayName ?: "TrailKarma hiker",
+            walletAddress = wallet!!.walletPublicKey,
+            onDismiss = { walletQrOpen = false },
+            onShare = { payload ->
+                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_TEXT, payload)
+                }
+                context.startActivity(Intent.createChooser(shareIntent, "Share TrailKarma wallet"))
+            }
+        )
+    }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -431,17 +495,24 @@ private fun RewardsHeroCard(
     localReports: List<TrailReport>,
     relayJobs: List<RelayJobIntent>,
     biodiversity: List<BiodiversityContribution>,
-    speciesCollectibles: List<SpeciesCollectibleCardUi>
+    speciesCollectibles: List<SpeciesCollectibleCardUi>,
+    badgeGallery: List<BadgeStatusResponse>
 ) {
-    val onChainBadgeCount = wallet?.rewardStats?.badgeCount ?: wallet?.badgeDetails?.count { it.earned } ?: 0
+    val useDemoProfile = wallet == null && localReports.isEmpty() && relayJobs.isEmpty() && biodiversity.isEmpty()
+    val onChainBadgeCount = wallet?.rewardStats?.badgeCount ?: badgeGallery.count { it.earned }
     val localOwnedSpeciesCount = speciesCollectibles.count { it.owned }
     val badgeCount = if (onChainBadgeCount > 0) onChainBadgeCount + localOwnedSpeciesCount else localOwnedSpeciesCount
     val localVerifiedCount = localReports.count { it.rewardClaimed } + biodiversity.count { it.verificationStatus == "verified" }
-    val verifiedCount = maxOf(wallet?.rewardStats?.verifiedContributionCount ?: 0, localVerifiedCount)
-    val openRelayCount = relayJobs.count { it.status == "open" || it.status == "pending" }
+    val verifiedCount = maxOf(wallet?.rewardStats?.verifiedContributionCount ?: if (useDemoProfile) 5 else 0, localVerifiedCount)
+    val openRelayCount = maxOf(relayJobs.count { it.status == "open" || it.status == "pending" }, if (useDemoProfile) 1 else 0)
     val walletBalance = wallet?.karmaBalance?.toIntOrNull() ?: 0
     val localEstimatedKarma = estimateLocalKarma(localReports, relayJobs, biodiversity)
-    val displayedKarma = if (walletBalance > 0 || localEstimatedKarma == 0) wallet?.karmaBalance ?: "0" else localEstimatedKarma.toString()
+    val displayedKarma = when {
+        walletBalance > 0 -> wallet!!.karmaBalance
+        localEstimatedKarma > 0 -> localEstimatedKarma.toString()
+        useDemoProfile -> "42"
+        else -> "0"
+    }
 
     Card(
         shape = RoundedCornerShape(28.dp),
@@ -592,6 +663,7 @@ private fun RewardChip(icon: ImageVector, label: String) {
 @Composable
 private fun ActionDeck(
     onTip: () -> Unit,
+    onShowWalletQr: () -> Unit,
     onRelayMissions: () -> Unit,
     onHistory: () -> Unit
 ) {
@@ -606,6 +678,19 @@ private fun ActionDeck(
                 onClick = onTip
             )
             ActionCard(
+                title = "Wallet QR",
+                subtitle = "Share or scan a wallet for tipping",
+                icon = Icons.Default.QrCode2,
+                accent = RewardsPalette.Forest,
+                modifier = Modifier.weight(1f),
+                onClick = onShowWalletQr
+            )
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            ActionCard(
                 title = "Relay missions",
                 subtitle = "Create or fulfill delayed call tasks",
                 icon = Icons.AutoMirrored.Filled.BluetoothSearching,
@@ -613,18 +698,15 @@ private fun ActionDeck(
                 modifier = Modifier.weight(1f),
                 onClick = onRelayMissions
             )
+            ActionCard(
+                title = "Report ledger",
+                subtitle = "Review claims, verification, and reward receipts",
+                icon = Icons.Default.LocalActivity,
+                accent = RewardsPalette.Clay,
+                modifier = Modifier.weight(1f),
+                onClick = onHistory
+            )
         }
-
-        Spacer(Modifier.height(12.dp))
-
-        ActionCard(
-            title = "Report ledger",
-            subtitle = "Review claims, verification, and reward receipts",
-            icon = Icons.Default.LocalActivity,
-            accent = RewardsPalette.Clay,
-            modifier = Modifier.fillMaxWidth(),
-            onClick = onHistory
-        )
     }
 }
 
@@ -900,24 +982,26 @@ private fun ProgressOverview(
     reports: List<TrailReport>,
     relayJobs: List<RelayJobIntent>,
     biodiversity: List<BiodiversityContribution>,
-    speciesCollectibles: List<SpeciesCollectibleCardUi>
+    speciesCollectibles: List<SpeciesCollectibleCardUi>,
+    badgeGallery: List<BadgeStatusResponse>
 ) {
     val stats = wallet?.rewardStats
-    val localCollectibleCount = speciesCollectibles.count { it.owned } + (wallet?.badgeDetails?.count { it.earned } ?: 0)
+    val useDemoProgress = wallet == null && reports.isEmpty() && relayJobs.isEmpty() && biodiversity.isEmpty()
+    val localCollectibleCount = speciesCollectibles.count { it.owned } + badgeGallery.count { it.earned }
     val displayedCollectibleCount = maxOf(stats?.badgeCount ?: 0, localCollectibleCount)
     val biodiversityVerifiedCount = biodiversity.count { it.verificationStatus == "verified" }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             ProgressMetricCard(
                 title = "Verified actions",
-                value = "${maxOf(stats?.verifiedContributionCount ?: 0, reports.count { it.rewardClaimed } + biodiversityVerifiedCount)}",
+                value = "${maxOf(stats?.verifiedContributionCount ?: if (useDemoProgress) 5 else 0, reports.count { it.rewardClaimed } + biodiversityVerifiedCount)}",
                 subtitle = "Real contributions settled into KARMA",
                 accent = RewardsPalette.Forest,
                 modifier = Modifier.weight(1f)
             )
             ProgressMetricCard(
                 title = "Total earned",
-                value = "${stats?.totalKarmaEarned ?: 0}",
+                value = "${stats?.totalKarmaEarned ?: if (useDemoProgress) 42 else 0}",
                 subtitle = "KARMA minted from verified events",
                 accent = RewardsPalette.Gold,
                 modifier = Modifier.weight(1f)
@@ -926,7 +1010,7 @@ private fun ProgressOverview(
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             ProgressMetricCard(
                 title = "Relay pipeline",
-                value = "${relayJobs.count { it.status == "pending" || it.status == "open" }}",
+                value = "${maxOf(relayJobs.count { it.status == "pending" || it.status == "open" }, if (useDemoProgress) 1 else 0)}",
                 subtitle = "Missions waiting for delivery or fulfillment",
                 accent = RewardsPalette.Sky,
                 modifier = Modifier.weight(1f)
@@ -1105,12 +1189,32 @@ private fun RewardEmptyState(title: String, description: String) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TipKarmaDialog(
+    currentWallet: String?,
+    currentDisplayName: String?,
+    recipients: List<TipRecipientOption>,
     onDismiss: () -> Unit,
-    onSend: (walletAddress: String, amount: Int) -> Unit
+    onSend: (walletAddress: String, amount: Int) -> Unit,
+    onShowWalletQr: () -> Unit
 ) {
+    var recipientMenuExpanded by remember { mutableStateOf(false) }
+    var selectedRecipient by remember(recipients) { mutableStateOf<TipRecipientOption?>(recipients.firstOrNull()) }
     var walletAddress by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf(5) }
+    var scanError by remember { mutableStateOf<String?>(null) }
     val presetAmounts = listOf(5, 10, 20, 50)
+    val qrScanner = rememberLauncherForActivityResult(ScanContract()) { result ->
+        val parsedWallet = parseWalletFromQrPayload(result.contents)
+        if (parsedWallet != null) {
+            walletAddress = parsedWallet
+            scanError = null
+        } else if (!result.contents.isNullOrBlank()) {
+            scanError = "Scanned QR did not contain a valid TrailKarma wallet."
+        }
+    }
+
+    LaunchedEffect(selectedRecipient?.walletAddress) {
+        selectedRecipient?.walletAddress?.let { walletAddress = it }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1129,13 +1233,99 @@ private fun TipKarmaDialog(
                     "Transfer KARMA from your app-managed wallet without making the recipient buy SOL.",
                     style = MaterialTheme.typography.bodyMedium
                 )
+                Box {
+                    OutlinedTextField(
+                        value = selectedRecipient?.let { "${it.label} • ${shortWallet(it.walletAddress)}" }.orEmpty(),
+                        onValueChange = {},
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { recipientMenuExpanded = true },
+                        label = { Text("Known hikers") },
+                        readOnly = true,
+                        trailingIcon = {
+                            IconButton(onClick = { recipientMenuExpanded = true }) {
+                                Icon(Icons.Default.Route, contentDescription = "Pick recipient")
+                            }
+                        }
+                    )
+                    DropdownMenu(
+                        expanded = recipientMenuExpanded,
+                        onDismissRequest = { recipientMenuExpanded = false }
+                    ) {
+                        recipients.forEach { recipient ->
+                            DropdownMenuItem(
+                                text = {
+                                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Text(recipient.label)
+                                        Text(
+                                            "${recipient.detail} • ${shortWallet(recipient.walletAddress)}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                },
+                                onClick = {
+                                    selectedRecipient = recipient
+                                    walletAddress = recipient.walletAddress
+                                    recipientMenuExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
                 OutlinedTextField(
                     value = walletAddress,
-                    onValueChange = { walletAddress = it },
+                    onValueChange = {
+                        walletAddress = it
+                        if (selectedRecipient?.walletAddress != it) {
+                            selectedRecipient = null
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text("Recipient wallet") },
                     singleLine = true
                 )
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedButton(
+                        onClick = {
+                            qrScanner.launch(
+                                ScanOptions()
+                                    .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+                                    .setPrompt("Scan a TrailKarma wallet QR")
+                                    .setBeepEnabled(false)
+                                    .setOrientationLocked(false)
+                            )
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.QrCodeScanner, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Scan QR")
+                    }
+                    OutlinedButton(
+                        onClick = onShowWalletQr,
+                        enabled = !currentWallet.isNullOrBlank(),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.QrCode2, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("My QR")
+                    }
+                }
+                if (!currentWallet.isNullOrBlank()) {
+                    Text(
+                        "Share ${currentDisplayName ?: "your"} wallet QR so another hiker can tip without typing the full address.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                scanError?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
                 Text("Amount", style = MaterialTheme.typography.labelLarge)
                 Row(
                     modifier = Modifier.horizontalScroll(rememberScrollState()),
@@ -1153,6 +1343,55 @@ private fun TipKarmaDialog(
                         )
                     }
                 }
+            }
+        }
+    )
+}
+
+@Composable
+private fun WalletQrDialog(
+    displayName: String,
+    walletAddress: String,
+    onDismiss: () -> Unit,
+    onShare: (payload: String) -> Unit
+) {
+    val qrPayload = remember(displayName, walletAddress) { buildWalletQrPayload(displayName, walletAddress) }
+    val qrBitmap = remember(qrPayload) { generateWalletQrBitmap(qrPayload) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            Button(onClick = { onShare(qrPayload) }) {
+                Text("Share")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Done") }
+        },
+        title = { Text("Share your wallet QR") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    "Another hiker can scan this code to tip KARMA directly into your TrailKarma wallet.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                qrBitmap?.let { bitmap ->
+                    Image(
+                        bitmap = bitmap.asImageBitmap(),
+                        contentDescription = "Wallet QR",
+                        modifier = Modifier
+                            .size(220.dp)
+                            .clip(RoundedCornerShape(24.dp))
+                            .background(Color.White)
+                            .padding(14.dp)
+                    )
+                }
+                Text(displayName, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    shortWallet(walletAddress),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     )
@@ -1235,6 +1474,129 @@ private fun badgeProgress(badge: BadgeStatusResponse): Float {
     if (badge.targetCount <= 0) return 0f
     return (badge.currentCount.toFloat() / badge.targetCount.toFloat()).coerceIn(0f, 1f)
 }
+
+private fun demoTipRecipients(): List<TipRecipientOption> = listOf(
+    TipRecipientOption(
+        label = "Maya, Trail Scout",
+        walletAddress = "AuPYqCB9P8Lo98DZUUVcrzKGysN4xdTG5pmStxUm2k4g",
+        detail = "Nearby demo hiker"
+    ),
+    TipRecipientOption(
+        label = "Kai, Relay Ranger",
+        walletAddress = "FTs3cG11QEJqupRVck9mdNugGr6rwXa8YYN9Y6EtPUdw",
+        detail = "Mesh carrier"
+    ),
+    TipRecipientOption(
+        label = "Lena, Species Spotter",
+        walletAddress = "DkKF2WWZUeb9RbYFhyhoUb69GxySvC4x7NheJypqVHxv",
+        detail = "Biodiversity teammate"
+    )
+)
+
+private fun demoBadgeGallery(
+    reports: List<TrailReport>,
+    relayJobs: List<RelayJobIntent>,
+    biodiversity: List<BiodiversityContribution>
+): List<BadgeStatusResponse> {
+    val verifiedReports = reports.count { it.rewardClaimed }
+    val fulfilledRelays = relayJobs.count { it.status == "fulfilled" }
+    val verifiedBiodiversity = biodiversity.count { it.verificationStatus == "verified" }
+
+    return listOf(
+        BadgeStatusResponse(
+            code = "trail_scout",
+            label = "Trail Scout",
+            description = "First verified contribution to the trail ecosystem.",
+            category = "starter",
+            accentHex = "#355844",
+            earned = verifiedReports + verifiedBiodiversity > 0 || reports.isEmpty() && biodiversity.isEmpty(),
+            currentCount = maxOf(1, verifiedReports + verifiedBiodiversity),
+            targetCount = 1,
+            mint = "demo-trail-scout"
+        ),
+        BadgeStatusResponse(
+            code = "relay_ranger",
+            label = "Relay Ranger",
+            description = "First fulfilled delayed relay mission.",
+            category = "relay",
+            accentHex = "#3D8DCC",
+            earned = fulfilledRelays > 0,
+            currentCount = maxOf(fulfilledRelays, if (relayJobs.isEmpty()) 1 else 0),
+            targetCount = 1,
+            mint = "demo-relay-ranger"
+        ),
+        BadgeStatusResponse(
+            code = "species_spotter",
+            label = "Species Spotter",
+            description = "First verified biodiversity contribution on the ledger.",
+            category = "biodiversity",
+            accentHex = "#6A8E4A",
+            earned = verifiedBiodiversity > 0,
+            currentCount = maxOf(verifiedBiodiversity, if (biodiversity.isEmpty()) 1 else 0),
+            targetCount = 1,
+            mint = "demo-species-spotter"
+        )
+    )
+}
+
+private fun demoSpeciesCollectibles(): List<SpeciesCollectibleCardUi> = listOf(
+    SpeciesCollectibleCardUi(
+        id = "demo-owned-pacific-wren",
+        label = "Pacific Wren",
+        description = "Verified by on-device audio and archived as a field-guide collectible.",
+        confidenceBand = "high",
+        collectibleStatus = "verified",
+        collectibleId = "demo-collectible-pacific-wren",
+        accentHex = "#7B9E57",
+        discoveredAt = Instant.now().minusSeconds(86_400).toString(),
+        owned = true
+    ),
+    SpeciesCollectibleCardUi(
+        id = "demo-pending-red-tailed-hawk",
+        label = "Red-tailed Hawk",
+        description = "Queued for verification after a strong ridge-line recording.",
+        confidenceBand = "medium",
+        collectibleStatus = "pending_verification",
+        collectibleId = null,
+        accentHex = "#D0854F",
+        discoveredAt = Instant.now().minusSeconds(7_200).toString(),
+        owned = false
+    )
+)
+
+private fun demoRewardActivity(): List<RewardActivityItemResponse> = listOf(
+    RewardActivityItemResponse(
+        id = "demo-activity-1",
+        kind = "badge_earned",
+        title = "Trail Scout earned",
+        subtitle = "Your first verified trail contribution unlocked a starter collectible.",
+        occurredAt = Instant.now().minusSeconds(36_000).toString(),
+        karmaDelta = 10,
+        badgeLabel = "Trail Scout",
+        txSignature = "demo-signature-trail-scout",
+        status = "demo_seeded"
+    ),
+    RewardActivityItemResponse(
+        id = "demo-activity-2",
+        kind = "relay_reward",
+        title = "Relay mission delivered",
+        subtitle = "A delayed voice message reached a contact after another hiker regained service.",
+        occurredAt = Instant.now().minusSeconds(18_000).toString(),
+        karmaDelta = 12,
+        txSignature = "demo-signature-relay",
+        status = "demo_seeded"
+    ),
+    RewardActivityItemResponse(
+        id = "demo-activity-3",
+        kind = "contribution_reward",
+        title = "Pacific Wren verified",
+        subtitle = "Audio capture moved into the biodiversity field guide and rewards gallery.",
+        occurredAt = Instant.now().minusSeconds(7_200).toString(),
+        karmaDelta = 8,
+        txSignature = "demo-signature-species",
+        status = "demo_seeded"
+    )
+)
 
 private fun buildSpeciesCollectibles(contributions: List<BiodiversityContribution>): List<SpeciesCollectibleCardUi> {
     val verified = contributions
@@ -1483,6 +1845,42 @@ private fun SpeciesCollectibleSpotlightDialog(
 
 private fun colorFromHex(value: String): Color =
     runCatching { Color(android.graphics.Color.parseColor(value)) }.getOrElse { RewardsPalette.Gold }
+
+private fun buildWalletQrPayload(displayName: String, walletAddress: String): String =
+    "TRAILKARMA_WALLET:$walletAddress|$displayName"
+
+private fun parseWalletFromQrPayload(payload: String?): String? {
+    if (payload.isNullOrBlank()) return null
+    val trimmed = payload.trim()
+    return when {
+        trimmed.startsWith("TRAILKARMA_WALLET:") -> trimmed
+            .removePrefix("TRAILKARMA_WALLET:")
+            .substringBefore('|')
+            .takeIf(::looksLikeWalletAddress)
+        trimmed.startsWith("trailkarma://wallet/") -> trimmed
+            .removePrefix("trailkarma://wallet/")
+            .substringBefore('?')
+            .takeIf(::looksLikeWalletAddress)
+        looksLikeWalletAddress(trimmed) -> trimmed
+        else -> null
+    }
+}
+
+private fun looksLikeWalletAddress(value: String): Boolean {
+    if (value.length !in 32..44) return false
+    return value.all { it in "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz" }
+}
+
+private fun generateWalletQrBitmap(payload: String): Bitmap? = runCatching {
+    val matrix = QRCodeWriter().encode(payload, BarcodeFormat.QR_CODE, 768, 768)
+    Bitmap.createBitmap(matrix.width, matrix.height, Bitmap.Config.ARGB_8888).apply {
+        for (x in 0 until matrix.width) {
+            for (y in 0 until matrix.height) {
+                setPixel(x, y, if (matrix[x, y]) android.graphics.Color.BLACK else android.graphics.Color.WHITE)
+            }
+        }
+    }
+}.getOrNull()
 
 private fun shortWallet(value: String): String =
     if (value.length < 10) value else "${value.take(4)}...${value.takeLast(4)}"
