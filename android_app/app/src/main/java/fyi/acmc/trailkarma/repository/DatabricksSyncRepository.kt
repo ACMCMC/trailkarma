@@ -97,17 +97,21 @@ class DatabricksSyncRepository(context: Context, private val db: AppDatabase) {
 
         try {
             val api = DatabricksApiClient.create(databricksUrl, databricksToken)
+            // h3_cell intentionally excluded — it's a server-side analytics column.
+            // Android stores lat/lng; Databricks computes h3_cell during MERGE INTO.
             val selectSql = """
-                SELECT report_id, user_id, type, title, description, lat, lng, h3_cell,
+                SELECT report_id, user_id, type, title, description, lat, lng,
                        timestamp, species_name, confidence, source
                 FROM workspace.trailkarma.trail_reports
                 ORDER BY timestamp DESC
+                LIMIT 500
             """.trimIndent()
             val request = DatabricksSyncRequest(warehouseId, selectSql)
             val response = api.executeSql(request)
 
             if (response.status.state != "SUCCEEDED") {
-                Log.e("DatabricksSync", "✗ Pull failed: ${response.status.state}")
+                val reason = response.status.error?.message ?: "no error detail"
+                Log.e("DatabricksSync", "✗ Pull reports failed [${response.status.state}]: $reason")
                 return false
             }
 
@@ -123,7 +127,7 @@ class DatabricksSyncRepository(context: Context, private val db: AppDatabase) {
             var pulledCount = 0
             for (row in rows) {
                 try {
-                    if (row.size < 12) continue
+                    if (row.size < 11) continue
 
                     val reportId     = row.getOrNull(0) as? String ?: continue
                     val userId       = row.getOrNull(1) as? String ?: continue
@@ -133,11 +137,10 @@ class DatabricksSyncRepository(context: Context, private val db: AppDatabase) {
                     val description  = row.getOrNull(4)?.toString() ?: ""
                     val lat          = row.getOrNull(5)?.toString()?.toDoubleOrNull() ?: 0.0
                     val lng          = row.getOrNull(6)?.toString()?.toDoubleOrNull() ?: 0.0
-                    val h3Cell       = row.getOrNull(7)?.toString()
-                    val timestamp    = row.getOrNull(8)?.toString() ?: ""
-                    val speciesName  = row.getOrNull(9)?.toString()
-                    val confidence   = row.getOrNull(10)?.toString()?.toFloatOrNull()
-                    val sourceStr    = row.getOrNull(11)?.toString() ?: "self"
+                    val timestamp    = row.getOrNull(7)?.toString() ?: ""
+                    val speciesName  = row.getOrNull(8)?.toString()
+                    val confidence   = row.getOrNull(9)?.toString()?.toFloatOrNull()
+                    val sourceStr    = row.getOrNull(10)?.toString() ?: "self"
                     val source       = try { ReportSource.valueOf(sourceStr) } catch (e: Exception) { ReportSource.self }
 
                     val report = TrailReport(
@@ -148,7 +151,7 @@ class DatabricksSyncRepository(context: Context, private val db: AppDatabase) {
                         description = description,
                         lat         = lat,
                         lng         = lng,
-                        h3Cell      = h3Cell,
+                        h3Cell      = null, // populated server-side; not in SELECT
                         timestamp   = timestamp,
                         speciesName = speciesName,
                         confidence  = confidence,
