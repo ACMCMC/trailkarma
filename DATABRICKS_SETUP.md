@@ -53,7 +53,8 @@ Safe to run anytime—drops old tables and creates fresh ones.
 
 ```
 main.trailkarma/
-├── users (3 demo hikers)
+├── users (4 demo hikers)
+├── user_contacts (2 friendships/requests)
 ├── trail_reports (5 reports: 2 hazards, 1 water, 2 species)
 ├── location_updates (3 GPS pings)
 └── relay_packets (BLE mesh data)
@@ -65,21 +66,36 @@ main.trailkarma/
 ```
 user_id STRING (PK)
 display_name STRING
+wallet_address STRING
+karma_points INT
+profile_image_url STRING
 created_at TIMESTAMP
 updated_at TIMESTAMP
+```
+
+### user_contacts
+```
+contact_id STRING (PK)
+user_id STRING (FK to users)
+contact_user_id STRING (FK to users)
+status STRING ('pending' | 'accepted')
+created_at TIMESTAMP, updated_at TIMESTAMP
 ```
 
 ### trail_reports
 ```
 report_id STRING (PK)
+user_id STRING (FK to users.user_id)
 type STRING (hazard | water | species)
 title STRING
 description STRING
 lat DOUBLE, lng DOUBLE (coordinates)
 timestamp STRING (ISO 8601)
+image_url STRING (optional)
 species_name STRING (optional)
 confidence DOUBLE (optional, 0-1)
 source STRING (self | relayed)
+upvotes INT
 synced BOOLEAN
 created_at TIMESTAMP, updated_at TIMESTAMP
 ```
@@ -87,6 +103,7 @@ created_at TIMESTAMP, updated_at TIMESTAMP
 ### location_updates
 ```
 id STRING (PK)
+user_id STRING (FK to users.user_id)
 timestamp STRING
 lat DOUBLE, lng DOUBLE
 synced BOOLEAN

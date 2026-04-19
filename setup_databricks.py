@@ -30,7 +30,7 @@ def main():
     print(f"\n🔧 TrailKarma Databricks Setup")
     print(f"🌐 Workspace: {workspace_url}\n")
 
-    catalog = "hive_metastore"
+    catalog = "workspace"
     schema = "trailkarma"
     full_schema = f"{catalog}.{schema}"
 
@@ -38,10 +38,10 @@ def main():
 
     # The 4 demo hikers
     users = [
-        (str(uuid.uuid4()), 'Aldan'),
-        (str(uuid.uuid4()), 'Qianqian'),
-        (str(uuid.uuid4()), 'Suraj'),
-        (str(uuid.uuid4()), 'Edith'),
+        (str(uuid.uuid4()), 'Aldan', '8Bse...1a', 150),
+        (str(uuid.uuid4()), 'Qianqian', 'C9fe...2b', 320),
+        (str(uuid.uuid4()), 'Suraj', 'A1bc...3c', 50),
+        (str(uuid.uuid4()), 'Edith', 'D4de...4d', 420),
     ]
 
     base_lat, base_lng = 32.88, -117.24
@@ -73,41 +73,62 @@ def main():
         # WIPE OUT EXISTING TABLES
         f"DROP TABLE IF EXISTS {full_schema}.users",
         f"DROP TABLE IF EXISTS {full_schema}.trail_reports",
+        f"DROP TABLE IF EXISTS {full_schema}.user_contacts",
         f"DROP TABLE IF EXISTS {full_schema}.location_updates",
         f"DROP TABLE IF EXISTS {full_schema}.relay_packets",
         
         # RECREATE FULL STRUCTURE
         f"""CREATE TABLE {full_schema}.users (
-            user_id STRING NOT NULL, 
+            user_id STRING NOT NULL PRIMARY KEY, 
             display_name STRING NOT NULL,
+            wallet_address STRING,
+            karma_points INT,
+            profile_image_url STRING,
             created_at TIMESTAMP,
             updated_at TIMESTAMP
         ) USING DELTA""",
         
         f"""CREATE TABLE {full_schema}.trail_reports (
-            report_id STRING NOT NULL, 
+            report_id STRING NOT NULL PRIMARY KEY, 
+            user_id STRING NOT NULL,
             type STRING NOT NULL, 
             title STRING NOT NULL,
             description STRING, 
             lat DOUBLE NOT NULL, 
             lng DOUBLE NOT NULL, 
             timestamp STRING NOT NULL,
+            image_url STRING,
             species_name STRING, 
             confidence DOUBLE, 
             source STRING NOT NULL, 
+            upvotes INT,
             synced BOOLEAN,
             created_at TIMESTAMP,
-            updated_at TIMESTAMP
+            updated_at TIMESTAMP,
+            CONSTRAINT fk_reports_user FOREIGN KEY (user_id) REFERENCES {full_schema}.users(user_id)
         ) USING DELTA""",
         
         f"""CREATE TABLE {full_schema}.location_updates (
-            id STRING NOT NULL, 
+            id STRING NOT NULL PRIMARY KEY, 
+            user_id STRING NOT NULL,
             timestamp STRING NOT NULL, 
             lat DOUBLE NOT NULL,
             lng DOUBLE NOT NULL, 
             synced BOOLEAN,
             created_at TIMESTAMP,
-            updated_at TIMESTAMP
+            updated_at TIMESTAMP,
+            CONSTRAINT fk_locations_user FOREIGN KEY (user_id) REFERENCES {full_schema}.users(user_id)
+        ) USING DELTA""",
+        
+        f"""CREATE TABLE {full_schema}.user_contacts (
+            contact_id STRING NOT NULL PRIMARY KEY,
+            user_id STRING NOT NULL,
+            contact_user_id STRING NOT NULL,
+            status STRING NOT NULL,
+            created_at TIMESTAMP,
+            updated_at TIMESTAMP,
+            CONSTRAINT fk_contacts_user1 FOREIGN KEY (user_id) REFERENCES {full_schema}.users(user_id),
+            CONSTRAINT fk_contacts_user2 FOREIGN KEY (contact_user_id) REFERENCES {full_schema}.users(user_id)
         ) USING DELTA""",
         
         f"""CREATE TABLE {full_schema}.relay_packets (
@@ -122,23 +143,31 @@ def main():
     ]
 
     # PUT IN ALL THE DATA SO WE START FRESH
-    for user_id, name in users:
-        sql_statements.append(f"INSERT INTO {full_schema}.users VALUES ('{user_id}', '{name}', current_timestamp(), current_timestamp())")
+    for user_id, name, wallet, karma in users:
+        sql_statements.append(f"INSERT INTO {full_schema}.users VALUES ('{user_id}', '{name}', '{wallet}', {karma}, NULL, current_timestamp(), current_timestamp())")
 
     for i, (rid, rtype, title, desc, lat, lng, source, species, conf) in enumerate(reports):
+        user_id = users[i % len(users)][0]
         species_val = f"'{species}'" if species else "NULL"
         conf_val = conf if conf is not None else "NULL"
         ts = (now - timedelta(hours=i*2)).isoformat() + 'Z'
         sql_statements.append(
-            f"INSERT INTO {full_schema}.trail_reports VALUES ('{rid}', '{rtype}', '{title}', '{desc}', "
-            f"{lat}, {lng}, '{ts}', {species_val}, {conf_val}, '{source}', true, current_timestamp(), current_timestamp())"
+            f"INSERT INTO {full_schema}.trail_reports VALUES ('{rid}', '{user_id}', '{rtype}', '{title}', '{desc}', "
+            f"{lat}, {lng}, '{ts}', NULL, {species_val}, {conf_val}, '{source}', 0, true, current_timestamp(), current_timestamp())"
         )
 
-    for loc_id, ts, lat, lng in locations:
-        sql_statements.append(f"INSERT INTO {full_schema}.location_updates VALUES ('{loc_id}', '{ts}', {lat}, {lng}, true, current_timestamp(), current_timestamp())")
+    for i, (loc_id, ts, lat, lng) in enumerate(locations):
+        user_id = users[i % len(users)][0]
+        sql_statements.append(f"INSERT INTO {full_schema}.location_updates VALUES ('{loc_id}', '{user_id}', '{ts}', {lat}, {lng}, true, current_timestamp(), current_timestamp())")
 
     for packet_id, payload, ts, device in relay_packets:
         sql_statements.append(f"INSERT INTO {full_schema}.relay_packets VALUES ('{packet_id}', '{payload}', '{ts}', '{device}', true, current_timestamp(), current_timestamp())")
+
+    # Contacts
+    # Aldan and Qianqian are contacts
+    sql_statements.append(f"INSERT INTO {full_schema}.user_contacts VALUES ('{str(uuid.uuid4())}', '{users[0][0]}', '{users[1][0]}', 'accepted', current_timestamp(), current_timestamp())")
+    # Suraj requested Edith
+    sql_statements.append(f"INSERT INTO {full_schema}.user_contacts VALUES ('{str(uuid.uuid4())}', '{users[2][0]}', '{users[3][0]}', 'pending', current_timestamp(), current_timestamp())")
 
     # Get warehouse
     print("🔍 Finding SQL warehouse...")
