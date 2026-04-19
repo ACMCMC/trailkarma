@@ -5,6 +5,7 @@ import android.content.res.AssetManager
 import android.util.Half
 import com.squareup.moshi.Json
 import com.squareup.moshi.Moshi
+import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileInputStream
@@ -106,7 +107,9 @@ private data class LoadedModelBundle(
 )
 
 class LocalBiodiversityInferenceEngine(private val context: Context) {
-    private val moshi = Moshi.Builder().build()
+    private val moshi = Moshi.Builder()
+        .add(KotlinJsonAdapterFactory())
+        .build()
     private val manifestAdapter = moshi.adapter(ModelManifest::class.java)
     private val prototypeListAdapter = moshi.adapter<List<PrototypeEntry>>(
         com.squareup.moshi.Types.newParameterizedType(List::class.java, PrototypeEntry::class.java)

@@ -3,6 +3,7 @@ package fyi.acmc.trailkarma.repository
 import com.squareup.moshi.JsonAdapter
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
+import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import fyi.acmc.trailkarma.db.BiodiversityContributionDao
 import fyi.acmc.trailkarma.db.KarmaEventDao
 import fyi.acmc.trailkarma.db.RelayPacketDao
@@ -35,7 +36,9 @@ class BiodiversityRepository(
     private val relayPacketDao: RelayPacketDao,
     private val karmaEventDao: KarmaEventDao
 ) {
-    private val moshi = Moshi.Builder().build()
+    private val moshi = Moshi.Builder()
+        .add(KotlinJsonAdapterFactory())
+        .build()
     private val relayAdapter: JsonAdapter<RelayableBiodiversityPayload> =
         moshi.adapter(RelayableBiodiversityPayload::class.java)
     private val topKAdapter: JsonAdapter<List<Map<String, Any?>>> =
