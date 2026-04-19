@@ -183,7 +183,7 @@ def load_weather_cache_statements(full_schema, section_centroids):
         statements.append(
             f"INSERT INTO {full_schema}.weather_cache VALUES ("
             f"'{trail_id}', '{name}', {lat}, {lng}, "
-            f"NULL, NULL, NULL, NULL, NULL, current_timestamp())"
+            f"NULL, NULL, NULL, NULL, NULL, NULL, current_timestamp())"
         )
     print(f"  Seeded {len(statements)} weather_cache rows (weather pending first Job run)")
     return statements
@@ -288,6 +288,7 @@ def main():
             windspeed_ms DOUBLE,
             weathercode INT,
             fetched_at TIMESTAMP,
+            snake_risk DOUBLE,
             updated_at TIMESTAMP
         ) USING DELTA""",
 
