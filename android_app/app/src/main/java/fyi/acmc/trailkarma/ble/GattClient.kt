@@ -161,27 +161,38 @@ class GattClient(
     }
 
     private suspend fun syncReports(gatt: BluetoothGatt, senderDevice: String) {
+        onLog("🔄 Reading peer report manifest...")
         val peerIds = readIdManifest(gatt, MANIFEST_CHAR_UUID) ?: run {
-            onLog("⚠ Could not read peer report manifest from $senderDevice")
+            onLog("✗ Could not read peer report manifest from $senderDevice (timeout/error)")
             return
         }
+        onLog("✓ Got peer manifest: ${peerIds.size} reports")
+
         val localIds = reportDao.getIds().toSet()
         val missing = peerIds - localIds
-        onLog("📊 Report sync: peer has ${peerIds.size}, local has ${localIds.size}, missing ${missing.size}")
+        onLog("📊 Report sync: peer=${peerIds.size}, local=${localIds.size}, missing=${missing.size}")
 
         if (missing.isEmpty()) {
-            onLog("✓ All reports up-to-date with $senderDevice")
+            onLog("✓ All reports synced")
             return
         }
 
+        onLog("📥 Requesting ${missing.size} missing reports...")
         var pulledCount = 0
+        var failedCount = 0
         for (reportId in missing) {
-            val reportJson = requestPayload(gatt, REPORT_CHAR_UUID, reportId) ?: continue
+            onLog("  → requesting $reportId...")
+            val reportJson = requestPayload(gatt, REPORT_CHAR_UUID, reportId) ?: run {
+                failedCount++
+                onLog("  ✗ timeout getting $reportId")
+                continue
+            }
+            onLog("  ✓ got $reportId (${reportJson.length} bytes)")
             insertRelayedReport(reportJson)
             pulledCount++
         }
 
-        onLog("✓ Synced $pulledCount new reports from $senderDevice")
+        onLog("✓ Synced $pulledCount/${ missing.size} reports (${failedCount} timeouts)")
     }
 
     private suspend fun syncPackets(gatt: BluetoothGatt, senderDevice: String) {
@@ -201,26 +212,47 @@ class GattClient(
     }
 
     private suspend fun readIdManifest(gatt: BluetoothGatt, characteristicUuid: UUID): Set<String>? {
-        val characteristic = gatt.getService(GATT_SERVICE_UUID)?.getCharacteristic(characteristicUuid) ?: return null
+        val characteristic = gatt.getService(GATT_SERVICE_UUID)?.getCharacteristic(characteristicUuid) ?: run {
+            onLog("✗ Characteristic $characteristicUuid not found")
+            return null
+        }
         manifestDeferred = CompletableDeferred()
-        gatt.readCharacteristic(characteristic)
-        val json = withTimeoutOrNull(8_000) { manifestDeferred?.await() } ?: return null
+        val wrote = gatt.readCharacteristic(characteristic)
+        onLog("  read request sent: $wrote")
+        val json = withTimeoutOrNull(8_000) { manifestDeferred?.await() } ?: run {
+            onLog("✗ Manifest read timeout")
+            return null
+        }
+        onLog("  manifest received: ${json?.length} bytes")
         return try {
             val array = JSONArray(json)
-            (0 until array.length()).map { array.getString(it) }.toSet()
-        } catch (_: Exception) {
+            val ids = (0 until array.length()).map { array.getString(it) }.toSet()
+            onLog("  parsed ${ids.size} IDs")
+            ids
+        } catch (e: Exception) {
+            onLog("✗ Failed to parse manifest: ${e.message}")
             null
         }
     }
 
     private suspend fun requestPayload(gatt: BluetoothGatt, characteristicUuid: UUID, id: String): String? {
-        val characteristic = gatt.getService(GATT_SERVICE_UUID)?.getCharacteristic(characteristicUuid) ?: return null
+        val characteristic = gatt.getService(GATT_SERVICE_UUID)?.getCharacteristic(characteristicUuid) ?: run {
+            onLog("✗ Characteristic not found for payload")
+            return null
+        }
         activeTransferUuid = characteristicUuid
         payloadDeferred = CompletableDeferred()
         characteristic.value = id.toByteArray(Charsets.UTF_8)
         val wrote = gatt.writeCharacteristic(characteristic)
-        if (!wrote) return null
-        return withTimeoutOrNull(8_000) { payloadDeferred?.await() }
+        if (!wrote) {
+            onLog("✗ Write characteristic failed for $id")
+            return null
+        }
+        val payload = withTimeoutOrNull(8_000) { payloadDeferred?.await() } ?: run {
+            onLog("✗ Payload timeout for $id")
+            return null
+        }
+        return payload
     }
 
     private suspend fun insertRelayedReport(json: String) {
