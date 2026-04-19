@@ -31,11 +31,11 @@ def iso_z(dt):
     """Serialize datetimes as RFC3339 with Z suffix."""
     return dt.isoformat().replace("+00:00", "Z")
 
-PCT_GEOJSON = os.path.join(os.path.dirname(__file__), "data", "Southern_California.geojson")
-LIBRARY_WALK_GPX = os.path.join(os.path.dirname(__file__), "data", "library_walk.gpx")
+PCT_GEOJSON        = os.path.join(os.path.dirname(__file__), "data", "Southern_California.geojson")
+MILE_MARKER_GEOJSON = os.path.join(os.path.dirname(__file__), "..", "data", "GeoJSON", "GeoJSON", "Southern_California_Mile_Marker.geojson")
 SPECIES_CSV = os.path.join(os.path.dirname(__file__), "data", "observations-712152.csv")
-WATER_CSV = os.path.join(os.path.dirname(__file__), "data", "water_reports.csv")
-FOOD_CSV  = os.path.join(os.path.dirname(__file__), "data", "food_reports.csv")
+WATER_CSV   = os.path.join(os.path.dirname(__file__), "data", "water_reports.csv")
+FOOD_CSV    = os.path.join(os.path.dirname(__file__), "..", "data", "food_reports.csv")
 
 SOCAL_LAT_MIN, SOCAL_LAT_MAX = 32.0, 35.0
 SOCAL_LNG_MIN, SOCAL_LNG_MAX = -118.0, -116.0
@@ -240,20 +240,39 @@ def load_water_report_statements(full_schema):
 
 
 
-def load_weather_cache_statements(full_schema, section_centroids):
-    """Seed weather_cache with one row per PCT section using pre-computed centroids.
+def load_weather_cache_statements(full_schema, section_centroids=None, mile_step=10):
+    """Seed weather_cache from mile markers, one row every `mile_step` miles.
 
-    section_centroids: list of (trail_id, section_name, centroid_lat, centroid_lng)
-    trail_id matches the trails table — weather columns are NULL until first Job run.
+    Falls back to 6 section centroids if the mile marker GeoJSON is missing.
     """
     statements = []
-    for trail_id, name, lat, lng in section_centroids:
-        statements.append(
-            f"INSERT INTO {full_schema}.weather_cache VALUES ("
-            f"'{trail_id}', '{name}', {lat}, {lng}, "
-            f"NULL, NULL, NULL, NULL, NULL, NULL, current_timestamp())"
-        )
-    print(f"  Seeded {len(statements)} weather_cache rows (weather pending first Job run)")
+    try:
+        with open(MILE_MARKER_GEOJSON, encoding="utf-8") as f:
+            data = json.load(f)
+        features = sorted(data["features"], key=lambda x: x["properties"].get("Mile", 0))
+        sampled, last_mile = [], None
+        for feat in features:
+            mile = feat["properties"].get("Mile", 0)
+            if last_mile is None or (mile - last_mile) >= mile_step:
+                coords = feat["geometry"]["coordinates"]  # [lng, lat]
+                name   = feat["properties"].get("Section_Name", "Unknown")
+                sampled.append((str(uuid.uuid4()), f"{name} Mi {mile}", round(coords[1], 6), round(coords[0], 6)))
+                last_mile = mile
+        for trail_id, name, lat, lng in sampled:
+            statements.append(
+                f"INSERT INTO {full_schema}.weather_cache VALUES ("
+                f"'{trail_id}', '{name}', {lat}, {lng}, "
+                f"NULL, NULL, NULL, NULL, NULL, NULL, current_timestamp())"
+            )
+        print(f"  Seeded {len(statements)} weather_cache rows from mile markers (every {mile_step} mi)")
+    except FileNotFoundError:
+        print(f"  WARNING: Mile marker GeoJSON not found, falling back to {len(section_centroids or [])} section centroids")
+        for trail_id, name, lat, lng in (section_centroids or []):
+            statements.append(
+                f"INSERT INTO {full_schema}.weather_cache VALUES ("
+                f"'{trail_id}', '{name}', {lat}, {lng}, "
+                f"NULL, NULL, NULL, NULL, NULL, NULL, current_timestamp())"
+            )
     return statements
 
 def load_food_report_statements(full_schema):
