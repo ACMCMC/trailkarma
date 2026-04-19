@@ -56,8 +56,10 @@ class DatabricksSyncRepository(context: Context, private val db: AppDatabase) {
             val conf = if (report.type.name == "species") report.confidence else null
             val confVal = if (conf != null) conf.toString() else "NULL"
 
-            // MERGE INTO = Delta Lake's "insert if not exists" — deduplicates by report_id UUID
-            // h3_cell is computed server-side by Databricks — no JNI library needed on Android
+            // MERGE INTO = Delta Lake's "insert if not exists" — deduplicates by report_id UUID.
+            // Keep the inserted column set aligned to the current hosted table schema. The cloud
+            // trail_reports table no longer exposes h3_cell, so Android uploads only the fields
+            // guaranteed to exist remotely.
             val sql = """
                 MERGE INTO workspace.trailkarma.trail_reports AS target
                 USING (SELECT
@@ -68,14 +70,13 @@ class DatabricksSyncRepository(context: Context, private val db: AppDatabase) {
                     '${report.description}' AS description,
                     ${report.lat}         AS lat,
                     ${report.lng}         AS lng,
-                    h3_longlatash3(${report.lng}, ${report.lat}, 9) AS h3_cell,
                     '${report.timestamp}' AS timestamp,
                     $species              AS species_name,
                     $confVal              AS confidence,
                     '${report.source.name}' AS source
                 ) AS source ON target.report_id = source.report_id
-                WHEN NOT MATCHED THEN INSERT (report_id, user_id, type, title, description, lat, lng, h3_cell, timestamp, species_name, confidence, source)
-                VALUES (source.report_id, source.user_id, source.type, source.title, source.description, source.lat, source.lng, source.h3_cell, source.timestamp, source.species_name, source.confidence, source.source)
+                WHEN NOT MATCHED THEN INSERT (report_id, user_id, type, title, description, lat, lng, timestamp, species_name, confidence, source)
+                VALUES (source.report_id, source.user_id, source.type, source.title, source.description, source.lat, source.lng, source.timestamp, source.species_name, source.confidence, source.source)
             """.trimIndent()
 
             try {
@@ -107,8 +108,7 @@ class DatabricksSyncRepository(context: Context, private val db: AppDatabase) {
 
         try {
             val api = DatabricksApiClient.create(databricksUrl, databricksToken)
-            // h3_cell intentionally excluded — it's a server-side analytics column.
-            // Android stores lat/lng; Databricks computes h3_cell during MERGE INTO.
+            // Android reads back only stable columns that exist in the hosted trail_reports table.
             val selectSql = """
                 SELECT report_id, user_id, type, title, description, lat, lng,
                        timestamp, species_name, confidence, source, updated_at

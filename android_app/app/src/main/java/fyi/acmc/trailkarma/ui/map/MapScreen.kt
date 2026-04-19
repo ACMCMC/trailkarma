@@ -2,6 +2,7 @@ package fyi.acmc.trailkarma.ui.map
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -32,6 +33,8 @@ import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Forest
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Mail
 import androidx.compose.material.icons.filled.Menu
@@ -66,6 +69,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -73,6 +77,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -162,10 +167,12 @@ fun MapScreen(
     val showHeroMetrics = walletState != null || pendingRewardCount > 0 || collectibleCount > 0 || earnedBadgeCount > 0
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    var trailBriefingCollapsed by rememberSaveable { mutableStateOf(false) }
+    var controlDeckCollapsed by rememberSaveable { mutableStateOf(false) }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
-        gesturesEnabled = false,
+        gesturesEnabled = drawerState.isOpen,
         drawerContent = {
             ModalDrawerSheet(
                 modifier = Modifier.fillMaxWidth(0.82f),
@@ -247,6 +254,15 @@ fun MapScreen(
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
         ) {
+            if (drawerState.isOpen) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.12f))
+                        .clickable { scope.launch { drawerState.close() } }
+                )
+            }
+
             AndroidView(
                 modifier = Modifier.fillMaxSize(),
                 factory = { ctx ->
@@ -384,12 +400,46 @@ fun MapScreen(
                     modifier = Modifier.padding(18.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("Trail briefing", style = MaterialTheme.typography.labelLarge, color = RewardsPalette.Stone)
-                        Text(
-                            selectedTrail?.name ?: "PCT demo region",
-                            style = MaterialTheme.typography.titleLarge
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { trailBriefingCollapsed = !trailBriefingCollapsed },
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text("Trail briefing", style = MaterialTheme.typography.labelLarge, color = RewardsPalette.Stone)
+                            Text(
+                                selectedTrail?.name ?: "PCT demo region",
+                                style = MaterialTheme.typography.titleLarge,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            if (trailBriefingCollapsed) {
+                                Text(
+                                    if (userLocation != null) {
+                                        "${formatCoordinate(userLocation!!.lat, "N", "S")} • ${formatCoordinate(userLocation!!.lng, "E", "W")}"
+                                    } else {
+                                        "Tap to expand the live trail summary."
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                        Icon(
+                            imageVector = if (trailBriefingCollapsed) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowUp,
+                            contentDescription = if (trailBriefingCollapsed) "Expand trail briefing" else "Collapse trail briefing",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                    }
+
+                    if (!trailBriefingCollapsed) {
                         Text(
                             if (userLocation != null) {
                                 "${formatCoordinate(userLocation!!.lat, "N", "S")} • ${formatCoordinate(userLocation!!.lng, "E", "W")}"
@@ -399,85 +449,85 @@ fun MapScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                    }
 
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.horizontalScroll(rememberScrollState())
-                    ) {
-                        TrailInfoChip(
-                            icon = if (isOnline) Icons.Default.Sync else Icons.Default.Route,
-                            label = if (isOnline) "Online now" else "Offline-ready",
-                            accent = if (isOnline) RewardsPalette.Forest else RewardsPalette.Gold
-                        )
-                        TrailInfoChip(
-                            icon = Icons.Default.Add,
-                            label = "$offlineReportCount local saves",
-                            accent = RewardsPalette.Sky
-                        )
-                        TrailInfoChip(
-                            icon = Icons.Default.AutoAwesome,
-                            label = "$pendingRewardCount rewards pending",
-                            accent = RewardsPalette.Gold
-                        )
-                    }
-
-                    if (showHeroMetrics) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            BriefingMetricCard(
-                                value = walletState?.karmaBalance ?: "--",
-                                label = "KARMA",
-                                accent = RewardsPalette.Gold,
-                                modifier = Modifier.weight(1f)
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.horizontalScroll(rememberScrollState())
+                        ) {
+                            TrailInfoChip(
+                                icon = if (isOnline) Icons.Default.Sync else Icons.Default.Route,
+                                label = if (isOnline) "Online now" else "Offline-ready",
+                                accent = if (isOnline) RewardsPalette.Forest else RewardsPalette.Gold
                             )
-                            BriefingMetricCard(
-                                value = earnedBadgeCount.toString(),
-                                label = "Badges",
-                                accent = RewardsPalette.Forest,
-                                modifier = Modifier.weight(1f)
+                            TrailInfoChip(
+                                icon = Icons.Default.Add,
+                                label = "$offlineReportCount local saves",
+                                accent = RewardsPalette.Sky
                             )
-                            BriefingMetricCard(
-                                value = collectibleCount.toString(),
-                                label = "Species cards",
-                                accent = RewardsPalette.Moss,
-                                modifier = Modifier.weight(1f)
+                            TrailInfoChip(
+                                icon = Icons.Default.AutoAwesome,
+                                label = "$pendingRewardCount rewards pending",
+                                accent = RewardsPalette.Gold
                             )
                         }
-                    }
 
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        FilledTonalButton(
-                            onClick = onNavigateToRewards,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Icon(Icons.Default.AutoAwesome, contentDescription = null)
-                            Text("Rewards")
-                        }
-                        OutlinedButton(
-                            onClick = { trailMenuExpanded = true },
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Icon(Icons.Default.Explore, contentDescription = null)
-                            Text("Trail")
-                        }
-                        DropdownMenu(
-                            expanded = trailMenuExpanded,
-                            onDismissRequest = { trailMenuExpanded = false }
-                        ) {
-                            if (trails.isEmpty()) {
-                                DropdownMenuItem(
-                                    text = { Text("No trails synced yet") },
-                                    onClick = { trailMenuExpanded = false }
+                        if (showHeroMetrics) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                BriefingMetricCard(
+                                    value = walletState?.karmaBalance ?: "--",
+                                    label = "KARMA",
+                                    accent = RewardsPalette.Gold,
+                                    modifier = Modifier.weight(1f)
                                 )
-                            } else {
-                                trails.forEach { trail ->
+                                BriefingMetricCard(
+                                    value = earnedBadgeCount.toString(),
+                                    label = "Badges",
+                                    accent = RewardsPalette.Forest,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                BriefingMetricCard(
+                                    value = collectibleCount.toString(),
+                                    label = "Species cards",
+                                    accent = RewardsPalette.Moss,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            FilledTonalButton(
+                                onClick = onNavigateToRewards,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(Icons.Default.AutoAwesome, contentDescription = null)
+                                Text("Rewards")
+                            }
+                            OutlinedButton(
+                                onClick = { trailMenuExpanded = true },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(Icons.Default.Explore, contentDescription = null)
+                                Text("Trail")
+                            }
+                            DropdownMenu(
+                                expanded = trailMenuExpanded,
+                                onDismissRequest = { trailMenuExpanded = false }
+                            ) {
+                                if (trails.isEmpty()) {
                                     DropdownMenuItem(
-                                        text = { Text(trail.name) },
-                                        onClick = {
-                                            selectedTrail = trail
-                                            trailMenuExpanded = false
-                                        }
+                                        text = { Text("No trails synced yet") },
+                                        onClick = { trailMenuExpanded = false }
                                     )
+                                } else {
+                                    trails.forEach { trail ->
+                                        DropdownMenuItem(
+                                            text = { Text(trail.name) },
+                                            onClick = {
+                                                selectedTrail = trail
+                                                trailMenuExpanded = false
+                                            }
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -509,6 +559,8 @@ fun MapScreen(
                 reports = displayReports,
                 biodiversity = displayBiodiversity,
                 walletState = walletState,
+                collapsed = controlDeckCollapsed,
+                onCollapsedChange = { controlDeckCollapsed = it },
                 onOpenReport = { onNavigateToReportDetail(it.reportId) },
                 onOpenReportComposer = onNavigateToReport,
                 onOpenRelay = onNavigateToBle,
@@ -605,6 +657,8 @@ private fun TrailBriefingSheet(
     reports: List<TrailReport>,
     biodiversity: List<BiodiversityContribution>,
     walletState: WalletStateResponse?,
+    collapsed: Boolean,
+    onCollapsedChange: (Boolean) -> Unit,
     onOpenReport: (TrailReport) -> Unit,
     onOpenReportComposer: () -> Unit,
     onOpenRelay: () -> Unit,
@@ -624,95 +678,133 @@ private fun TrailBriefingSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(max = if (hasActivity) 320.dp else 252.dp)
+                .heightIn(max = if (collapsed) 108.dp else if (hasActivity) 320.dp else 252.dp)
                 .padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("Demo control deck", style = MaterialTheme.typography.titleLarge)
-                Text(
-                    "Show the live trail ecosystem: create intel, relay help, and open rewards without leaving the map.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
+            var dragDelta by remember { mutableStateOf(0f) }
             Row(
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.horizontalScroll(rememberScrollState())
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .pointerInput(collapsed) {
+                        detectVerticalDragGestures(
+                            onVerticalDrag = { _, dragAmount ->
+                                dragDelta += dragAmount
+                            },
+                            onDragEnd = {
+                                when {
+                                    dragDelta > 24f -> onCollapsedChange(true)
+                                    dragDelta < -24f -> onCollapsedChange(false)
+                                }
+                                dragDelta = 0f
+                            },
+                            onDragCancel = { dragDelta = 0f }
+                        )
+                    }
+                    .clickable { onCollapsedChange(!collapsed) },
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                QuickActionCard("New report", "Hazard, water, or species", Icons.Default.Add, RewardsPalette.Clay, onOpenReportComposer)
-                QuickActionCard("Relay hub", "Queue delayed voice calls", Icons.Default.Bluetooth, RewardsPalette.Sky, onOpenRelay)
-                QuickActionCard("Rewards", "Open KARMA and collectibles", Icons.Default.AutoAwesome, RewardsPalette.Gold, onOpenRewards)
-                QuickActionCard("Profile", "Identity and relay defaults", Icons.Default.Person, RewardsPalette.Forest, onOpenProfile)
-            }
-
-            if (hasActivity) {
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    BriefingMetricCard(
-                        value = reports.size.toString(),
-                        label = "Trail intel",
-                        accent = RewardsPalette.Clay,
-                        modifier = Modifier.weight(1f)
-                    )
-                    BriefingMetricCard(
-                        value = biodiversity.size.toString(),
-                        label = "Species sightings",
-                        accent = RewardsPalette.Moss,
-                        modifier = Modifier.weight(1f)
-                    )
-                    BriefingMetricCard(
-                        value = walletState?.rewardStats?.verifiedContributionCount?.toString() ?: "--",
-                        label = "Verified wins",
-                        accent = RewardsPalette.Forest,
-                        modifier = Modifier.weight(1f)
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text("Control deck", style = MaterialTheme.typography.titleLarge)
+                    Text(
+                        if (collapsed) {
+                            "Drag down or tap to tuck it away. Drag up or tap to reopen."
+                        } else {
+                            "Show the live trail ecosystem: create intel, relay help, and open rewards without leaving the map."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+                Icon(
+                    imageVector = if (collapsed) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowUp,
+                    contentDescription = if (collapsed) "Expand control deck" else "Collapse control deck",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
 
-            if (!hasActivity) {
-                Text(
-                    "The map is ready, but there’s no saved local intel yet. Create a report or record biodiversity to populate the demo scene.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            } else {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 4.dp)) {
-                    if (reports.isNotEmpty()) {
-                        item {
-                            Text("Recent trail intel", style = MaterialTheme.typography.titleMedium)
-                        }
-                        items(reports.take(3)) { report ->
-                            IntelCard(
-                                title = report.title,
-                                subtitle = report.description.ifBlank { report.type.name.replaceFirstChar { it.uppercase() } },
-                                meta = buildString {
-                                    append(report.type.name.replaceFirstChar { it.uppercase() })
-                                    append(" • ")
-                                    append(if (report.rewardClaimed) "KARMA settled" else "Awaiting settlement")
-                                },
-                                accent = reportAccent(report.type),
-                                onClick = { onOpenReport(report) }
-                            )
-                        }
-                    }
+            if (!collapsed) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.horizontalScroll(rememberScrollState())
+                ) {
+                    QuickActionCard("New report", "Hazard, water, or species", Icons.Default.Add, RewardsPalette.Clay, onOpenReportComposer)
+                    QuickActionCard("Relay hub", "Queue delayed voice calls", Icons.Default.Bluetooth, RewardsPalette.Sky, onOpenRelay)
+                    QuickActionCard("Rewards", "Open KARMA and collectibles", Icons.Default.AutoAwesome, RewardsPalette.Gold, onOpenRewards)
+                    QuickActionCard("Profile", "Identity and relay defaults", Icons.Default.Person, RewardsPalette.Forest, onOpenProfile)
+                }
 
-                    if (biodiversity.isNotEmpty()) {
-                        item {
-                            Text("Species cards on the map", style = MaterialTheme.typography.titleMedium)
+                if (hasActivity) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        BriefingMetricCard(
+                            value = reports.size.toString(),
+                            label = "Trail intel",
+                            accent = RewardsPalette.Clay,
+                            modifier = Modifier.weight(1f)
+                        )
+                        BriefingMetricCard(
+                            value = biodiversity.size.toString(),
+                            label = "Species sightings",
+                            accent = RewardsPalette.Moss,
+                            modifier = Modifier.weight(1f)
+                        )
+                        BriefingMetricCard(
+                            value = walletState?.rewardStats?.verifiedContributionCount?.toString() ?: "--",
+                            label = "Verified wins",
+                            accent = RewardsPalette.Forest,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+
+                if (!hasActivity) {
+                    Text(
+                        "The map is ready, but there’s no saved local intel yet. Create a report or record biodiversity to populate the demo scene.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 4.dp)) {
+                        if (reports.isNotEmpty()) {
+                            item {
+                                Text("Recent trail intel", style = MaterialTheme.typography.titleMedium)
+                            }
+                            items(reports.take(3)) { report ->
+                                IntelCard(
+                                    title = report.title,
+                                    subtitle = report.description.ifBlank { report.type.name.replaceFirstChar { it.uppercase() } },
+                                    meta = buildString {
+                                        append(report.type.name.replaceFirstChar { it.uppercase() })
+                                        append(" • ")
+                                        append(if (report.rewardClaimed) "KARMA settled" else "Awaiting settlement")
+                                    },
+                                    accent = reportAccent(report.type),
+                                    onClick = { onOpenReport(report) }
+                                )
+                            }
                         }
-                        items(biodiversity.take(3)) { item ->
-                            IntelCard(
-                                title = item.collectibleName ?: item.finalLabel ?: "Biodiversity observation",
-                                subtitle = item.explanation ?: "Saved local species record",
-                                meta = buildString {
-                                    append(item.finalTaxonomicLevel ?: "biodiversity")
-                                    append(" • ")
-                                    append(item.collectibleStatus.replace('_', ' '))
-                                },
-                                accent = biodiversityAccent(item),
-                                onClick = null
-                            )
+
+                        if (biodiversity.isNotEmpty()) {
+                            item {
+                                Text("Species cards on the map", style = MaterialTheme.typography.titleMedium)
+                            }
+                            items(biodiversity.take(3)) { item ->
+                                IntelCard(
+                                    title = item.collectibleName ?: item.finalLabel ?: "Biodiversity observation",
+                                    subtitle = item.explanation ?: "Saved local species record",
+                                    meta = buildString {
+                                        append(item.finalTaxonomicLevel ?: "biodiversity")
+                                        append(" • ")
+                                        append(item.collectibleStatus.replace('_', ' '))
+                                    },
+                                    accent = biodiversityAccent(item),
+                                    onClick = null
+                                )
+                            }
                         }
                     }
                 }
