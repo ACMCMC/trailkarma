@@ -1,4 +1,4 @@
-# datahacks26
+# AGENTS.md
 
 ## Core Idea
 
