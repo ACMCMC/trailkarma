@@ -4,9 +4,9 @@ The TrailKarma Android app now syncs trail reports and location data to Databric
 
 ## How It Works
 
-1. **Offline Mode**: Data is stored locally in Room database
-2. **Online Mode**: When network is available, WorkManager syncs unsynced reports and locations to Databricks
-3. **Cache**: Previously synced data is available offline
+1. **Offline Mode**: Data is stored locally in Room database.
+2. **Online Mode**: When network is available, the app PUSHES unsynced offline data to Databricks and PULLS the latest community data down to the device.
+3. **Cache**: The most recent synced data remains available offline.
 
 ## Setup Instructions
 
@@ -26,6 +26,12 @@ syncRepo.setDatabricksConfig(
     token = "dapi...",  // Your Databricks personal access token
     warehouse = "warehouse-id"  // Your SQL warehouse ID
 )
+
+// Initial sync on app startup
+if (syncRepo.isOnline()) {
+    syncRepo.syncReports() // Push offline data
+    syncRepo.pullReportsFromCloud() // Pull community updates
+}
 ```
 
 ### 2. Get Your Databricks Credentials
@@ -43,10 +49,11 @@ From your Databricks workspace:
 
 ### 3. What Gets Synced
 
-When online, the app automatically syncs:
+When online, the app automatically syncs in both directions:
 
-- **Trail Reports** (all fields): type, title, description, location, species, confidence
-- **Location Updates**: timestamp, lat/lng, synced status
+- **Pushes Trail Reports**: Pushes locally generated reports (type, title, image_url, etc) to Databricks.
+- **Pulls Trail Reports**: Pulls the most recent global reports from Databricks so the user can see hazards/water updates from others.
+- **Pushes Location Updates**: Pushes GPS pings.
 - **Status**: Each record is marked `synced=true` after successful upload
 
 ### 4. Sync Behavior
@@ -91,7 +98,7 @@ reports.collectAsState().value.forEach { report ->
 
 3. Verify in Databricks:
    ```sql
-   SELECT * FROM trailkarma.trail_reports WHERE synced = true;
+   SELECT * FROM workspace.trailkarma.trail_reports WHERE synced = true;
    ```
 
 ## Architecture Diagram
@@ -103,11 +110,11 @@ Mobile App (offline-first)
 │   └── locations (synced=false until upload)
 └── Databricks Sync (when online)
     ├── ExecuteSql API
-    ├── INSERT trail_reports
-    └── INSERT location_updates
+    ├── INSERT trail_reports / location_updates (Push)
+    └── SELECT from trail_reports (Pull)
         ↓
     Databricks SQL Warehouse
-    └── trailkarma.trail_reports/location_updates
+    └── workspace.trailkarma.trail_reports/location_updates
 ```
 
 ## Troubleshooting
@@ -118,7 +125,7 @@ Mobile App (offline-first)
 - Check: Is network connectivity available?
 
 **Data Not in Databricks?**
-- Check Reports: `SELECT COUNT(*) FROM trailkarma.trail_reports;`
+- Check Reports: `SELECT COUNT(*) FROM workspace.trailkarma.trail_reports;`
 - Check Logs: Look for network errors in Android Studio logcat
 - Check Status: Is `synced` column true or false?
 

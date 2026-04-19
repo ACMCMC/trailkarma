@@ -62,6 +62,12 @@ main.trailkarma/
 └── relay_packets (BLE mesh data)
 ```
 
+### trails (Master Data)
+Stores master definitions of trails (like the PCT) to allow hikers to switch context. Includes a `geometry_json` column specifically designed to hold GeoJSON representations. This allows you to import external GIS datasets (Shapefiles, GPX, KMZ converted to GeoJSON) directly into Databricks so the Android client can pull and render the trail path.
+
+### trail_waypoints (Master POIs)
+Stores fixed trail metadata like trailheads, permanent water sources, peaks, and established campsites. This keeps static trail data separate from dynamic, user-generated `trail_reports`.
+
 ## Schema
 
 ### trails (Master Data)
@@ -177,7 +183,7 @@ Run these in Databricks SQL to impress judges:
 ```sql
 -- Active hazards on PCT around current location
 SELECT title, description, lat, lng, timestamp
-FROM main.trailkarma.trail_reports
+FROM workspace.trailkarma.trail_reports
 WHERE type = 'hazard'
 AND ABS(lat - 32.88) < 0.05
 AND ABS(lng + 117.24) < 0.05
@@ -185,12 +191,12 @@ ORDER BY timestamp DESC;
 
 -- Species sightings heatmap
 SELECT lat, lng, species_name, confidence, COUNT(*) as sightings
-FROM main.trailkarma.trail_reports
+FROM workspace.trailkarma.trail_reports
 WHERE type = 'species'
 GROUP BY lat, lng, species_name, confidence;
 
 -- Real-time hiker positions
-SELECT * FROM main.trailkarma.location_updates
+SELECT * FROM workspace.trailkarma.location_updates
 ORDER BY timestamp DESC LIMIT 10;
 ```
 
