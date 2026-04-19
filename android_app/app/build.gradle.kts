@@ -130,7 +130,7 @@ dependencies {
     androidTestImplementation(libs.androidx.espresso.core)
 
     // CameraX
-    val cameraxVersion = "1.3.1"
+    val cameraxVersion = "1.4.1"
     implementation("androidx.camera:camera-core:$cameraxVersion")
     implementation("androidx.camera:camera-camera2:$cameraxVersion")
     implementation("androidx.camera:camera-lifecycle:$cameraxVersion")

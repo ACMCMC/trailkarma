@@ -22,7 +22,7 @@ fun LoginScreen(onLoginSuccess: () -> Unit, vm: LoginViewModel = viewModel()) {
         OutlinedTextField(
             value = name,
             onValueChange = { name = it },
-            label = { Text("Trail name") },
+            label = { Text("Your Hiker Nickname (Trail Name)") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth()
         )

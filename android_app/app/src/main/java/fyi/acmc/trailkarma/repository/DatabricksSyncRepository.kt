@@ -195,7 +195,20 @@ class DatabricksSyncRepository(context: Context, private val db: AppDatabase) {
             )
 
             val response = api.executeSql(request)
-            val rows = response.result?.data_array ?: return true
+            
+            if (response.status.state != "SUCCEEDED") {
+                Log.e("DatabricksSync", "✗ Trails pull failed: ${response.status.state}")
+                if (response.status.state == "FAILED") {
+                    Log.e("DatabricksSync", "✗ Error: ${response.status.error?.message}")
+                }
+                return false
+            }
+
+            val rows = response.result?.data_array
+            if (rows == null) {
+                Log.e("DatabricksSync", "✗ Trails pull succeeded but data_array was null")
+                return false
+            }
 
             val trails = mutableListOf<fyi.acmc.trailkarma.models.Trail>()
             for (row in rows) {
