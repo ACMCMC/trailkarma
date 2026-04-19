@@ -3,6 +3,7 @@ package fyi.acmc.trailkarma.repository
 import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
+import fyi.acmc.trailkarma.models.BiodiversityContribution
 import com.squareup.moshi.JsonAdapter
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
@@ -244,6 +245,78 @@ class DatabricksSyncRepository(context: Context, private val db: AppDatabase) {
 
     fun isOnline(): Boolean = networkUtil.isOnlineNow()
 
+    suspend fun isVerifiedSpeciesKnown(label: String): Boolean? {
+        if (!networkUtil.isOnlineNow() || !isConfigured()) return null
+        val normalized = escapeSqlLiteral(label.lowercase())
+        val sql = """
+            SELECT COUNT(*) AS count
+            FROM workspace.trailkarma.biodiversity_events
+            WHERE lower(final_label) = '$normalized'
+              AND verification_status = 'verified'
+        """.trimIndent()
+
+        return try {
+            val api = DatabricksApiClient.create(databricksUrl, databricksToken)
+            val response = api.executeSql(DatabricksSyncRequest(warehouseId, sql))
+            if (response.status.state != "SUCCEEDED") {
+                Log.e("DatabricksSync", "✗ Species lookup failed: ${response.status.error?.message}")
+                null
+            } else {
+                val count = response.result?.data_array
+                    ?.firstOrNull()
+                    ?.firstOrNull()
+                    ?.toString()
+                    ?.toIntOrNull()
+                count?.let { it > 0 }
+            }
+        } catch (e: Exception) {
+            Log.e("DatabricksSync", "✗ Species lookup error", e)
+            null
+        }
+    }
+
+    suspend fun mirrorBiodiversityContribution(item: BiodiversityContribution): Boolean {
+        if (!networkUtil.isOnlineNow() || !isConfigured()) return false
+        val finalLabel = item.finalLabel ?: return false
+        val finalTaxonomicLevel = item.finalTaxonomicLevel ?: "unknown"
+        val confidence = item.confidence?.toString() ?: "0.0"
+        val confidenceBand = item.confidenceBand ?: "low"
+        val explanation = escapeSqlLiteral(item.explanation ?: "")
+        val photoUri = item.photoUri?.let { "'${escapeSqlLiteral(it)}'" } ?: "NULL"
+
+        val sql = """
+            INSERT INTO workspace.trailkarma.biodiversity_events
+            (observation_id, timestamp, lat, lon, final_label, taxonomic_level, confidence, confidence_band, explanation, verification_status, photo_uri)
+            VALUES (
+                '${escapeSqlLiteral(item.observationId)}',
+                '${escapeSqlLiteral(item.createdAt)}',
+                ${item.lat?.toString() ?: "NULL"},
+                ${item.lon?.toString() ?: "NULL"},
+                '${escapeSqlLiteral(finalLabel)}',
+                '${escapeSqlLiteral(finalTaxonomicLevel)}',
+                $confidence,
+                '${escapeSqlLiteral(confidenceBand)}',
+                '$explanation',
+                '${escapeSqlLiteral(item.verificationStatus)}',
+                $photoUri
+            )
+        """.trimIndent()
+
+        return try {
+            val api = DatabricksApiClient.create(databricksUrl, databricksToken)
+            val response = api.executeSql(DatabricksSyncRequest(warehouseId, sql))
+            if (response.status.state == "SUCCEEDED") {
+                true
+            } else {
+                Log.e("DatabricksSync", "✗ Biodiversity mirror failed: ${response.status.error?.message}")
+                false
+            }
+        } catch (e: Exception) {
+            Log.e("DatabricksSync", "✗ Biodiversity mirror error", e)
+            false
+        }
+    }
+
     suspend fun pullTrailsFromCloud(): Boolean {
         if (!networkUtil.isOnlineNow() || warehouseId.isEmpty()) return false
 
@@ -338,4 +411,6 @@ class DatabricksSyncRepository(context: Context, private val db: AppDatabase) {
         Log.d("DatabricksSync", "✓ Uploaded ${ids.size}/${packets.size} relay packets")
         return ids.size == packets.size
     }
+
+    private fun escapeSqlLiteral(value: String): String = value.replace("'", "''")
 }

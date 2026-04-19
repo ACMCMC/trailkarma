@@ -12,7 +12,7 @@ The current hackathon build implements the following end-to-end pieces:
 - BLE packet exchange for reports and relay packets so nearby phones can carry data without internet.
 - Hybrid Solana rewards flow with app-managed wallets, KARMA balances, badge claims, relay jobs, and KARMA tipping.
 - Voice relay jobs that are signed on-device, carried offline, then opened and fulfilled through the backend when connectivity returns.
-- Offline biodiversity audio capture with on-device inference, optional photo attachment, local ledgering, and backend mirroring.
+- Offline biodiversity audio capture with on-device inference, optional photo attachment, Gemini-backed photo verification on Android, local ledgering, and Databricks mirroring.
 - Android smoke-test scripts for emulator and physical-device loops.
 - A React/Vite landing-page demo that shows the product concept with mock data.
 
@@ -51,7 +51,7 @@ TrailKarma is intentionally hybrid:
 - On-device Solana wallet generation and signing.
 - Rewards screen with KARMA balance, badge progress, collectible UI, and activity feed.
 - Relay Hub screen for voice relay mission creation, sync, and inbox review.
-- Biodiversity capture flow for 5-second audio recording, local inference, save-to-ledger, and photo attachment.
+- Biodiversity capture flow for 5-second audio recording, local inference, save-to-ledger, photo attachment, and Gemini photo verification against a typed species label.
 
 ## Implemented Backend Features
 
@@ -67,7 +67,7 @@ TrailKarma is intentionally hybrid:
 
 ### Python biodiversity service
 
-- Accepts audio observations and photo attachments.
+- Accepts audio observations, photo attachments, and Gemini-backed image verification for typed species claims.
 - Stores observation artifacts locally.
 - Runs backend acoustic inference when using `/api/biodiversity/audio`.
 - Accepts already-classified on-device observations through `/api/biodiversity/audio-sync`.
@@ -158,8 +158,11 @@ Useful scripts:
 
 Android build configuration:
 
-- `api.baseUrl` or `TRAILKARMA_API_BASE_URL` controls the biodiversity API base URL.
-- `rewards.url` or `REWARDS_BASE_URL` controls the rewards backend base URL.
+- Debug builds default to `http://10.0.2.2:3000` for the biodiversity backend and can be overridden with `api.debugBaseUrl`, `api.baseUrl`, or `TRAILKARMA_API_BASE_URL`.
+- Debug rewards calls default to the debug biodiversity URL and can be overridden with `rewards.debugBaseUrl`, `rewards.url`, or `REWARDS_BASE_URL`.
+- Release builds require real hosted URLs so downloaded APKs work without setup. Set `api.releaseBaseUrl` or `TRAILKARMA_PUBLIC_API_BASE_URL` for the biodiversity backend.
+- Set `rewards.releaseBaseUrl` or `TRAILKARMA_PUBLIC_REWARDS_BASE_URL` for the rewards backend.
+- Gemini values can come from `android_app/local.properties`, Gradle properties, or environment variables via `gemini.apiKey`, `gemini.model`, `GEMINI_API_KEY`, and `GEMINI_MODEL`.
 - Databricks values can come from `android_app/local.properties`, Gradle properties, or environment variables.
 
 ### 5. Web demo
@@ -208,7 +211,6 @@ SESSION_NAME=my-session scripts/android-physical-debug-loop.sh
 
 The current implementation already covers the main offline-first Android flow, BLE carriage, Solana rewards, voice-relay settlement, and audio-based biodiversity capture. The largest remaining gaps are:
 
-- photo-based species identification and verification, rather than only photo attachment/upload
 - a real moderation or attestation pipeline for biodiversity verification instead of mostly local/demo collectible bookkeeping
 - generalized backend-to-backend or partner-facing biodiversity export workflows for researchers
 - more mature multi-phone BLE validation for full relay-carrier flows in the wild

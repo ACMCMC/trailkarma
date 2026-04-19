@@ -14,6 +14,7 @@ import fyi.acmc.trailkarma.models.User
 import fyi.acmc.trailkarma.network.NetworkUtil
 import fyi.acmc.trailkarma.solana.SolanaPayloadCodec
 import fyi.acmc.trailkarma.util.CryptoUtil
+import fyi.acmc.trailkarma.util.EncryptionUtil
 import fyi.acmc.trailkarma.wallet.WalletManager
 import org.json.JSONObject
 import java.time.Instant
@@ -231,7 +232,8 @@ class RewardsRepository(context: Context, private val db: AppDatabase) {
                     .put("job_id", jobId)
                     .put("user_id", user.userId)
                     .put("sender_wallet", user.walletPublicKey)
-                    .put("encrypted_blob", encryptedBlob) // CARRIER CANNOT READ THIS
+                    // Carrier devices only forward this payload blob.
+                    .put("encrypted_blob", encryptedBlob)
                     .put("destination_hash", destinationHash)
                     .put("payload_hash", payloadHash)
                     .put("expiry_ts", expiryTs)

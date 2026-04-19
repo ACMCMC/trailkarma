@@ -55,3 +55,23 @@ class PhotoLinkResponse(BaseModel):
 
 class AudioSyncResponse(BaseModel):
     success: bool
+
+
+class PhotoVerificationResponse(BaseModel):
+    claimedLabel: str
+    finalLabel: str
+    finalTaxonomicLevel: TaxonomicLevel
+    detectedLabel: str | None = None
+    matchedClaim: bool
+    animalPresent: bool
+    confidence: float
+    confidenceBand: ConfidenceBand
+    explanation: str
+    verificationStatus: str
+    isUniqueSpecies: bool
+    rewardAmount: int
+    collectibleStatus: str
+    collectibleId: str | None = None
+    collectibleName: str | None = None
+    collectibleImageUri: str | None = None
+    model_metadata: dict[str, Any] = Field(default_factory=dict)

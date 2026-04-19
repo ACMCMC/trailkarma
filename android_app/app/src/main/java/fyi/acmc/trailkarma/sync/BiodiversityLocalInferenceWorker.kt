@@ -39,7 +39,8 @@ class BiodiversityLocalInferenceWorker(
         }
 
         items.forEach { item ->
-            if (!File(item.audioUri).exists()) {
+            val audioPath = item.audioUri
+            if (audioPath.isNullOrBlank() || !File(audioPath).exists()) {
                 repo.markLocalInferenceFailed(item.observationId, "Audio clip is missing from local storage.")
                 return@forEach
             }
@@ -47,7 +48,7 @@ class BiodiversityLocalInferenceWorker(
             repo.markLocalInferenceRunning(item.observationId)
             try {
                 val result = engine.infer(
-                    audioFile = File(item.audioUri),
+                    audioFile = File(audioPath),
                     observationId = item.observationId,
                     lat = item.lat,
                     lon = item.lon,

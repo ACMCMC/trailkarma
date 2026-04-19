@@ -48,7 +48,13 @@ class BiodiversitySyncWorker(context: Context, params: WorkerParameters) : Corou
         repo: BiodiversityRepository,
         api: fyi.acmc.trailkarma.api.BiodiversityApi
     ) {
-        val audioFile = File(item.audioUri)
+        val audioPath = item.audioUri
+        if (audioPath.isNullOrBlank()) {
+            repo.markCloudSyncFailed(item.observationId)
+            return
+        }
+
+        val audioFile = File(audioPath)
         if (!audioFile.exists()) {
             repo.markCloudSyncFailed(item.observationId)
             return

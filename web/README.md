@@ -28,6 +28,12 @@ That means:
 - it does not display real Solana wallet state
 - the Rewards card is present as a concept but not enabled
 
+The landing page now also carries an explicit deployment note for the live stack:
+
+- biodiversity/photo verification can be live in the Android app independently
+- live Solana-backed reward claiming and relay flows require `PROGRAM_ID`, `SPONSOR_SECRET_KEY`, and `ATTESTOR_SECRET_KEY` to be configured on the deployed rewards backend
+- if those environment variables are missing, the website should describe rewards as unavailable rather than implying the on-chain path is active
+
 ## Run Locally
 
 ```bash

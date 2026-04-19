@@ -1312,7 +1312,13 @@ private fun estimateLocalKarma(
         }
     }
     val relayKarma = relayJobs.count { it.status == "fulfilled" } * 12
-    val biodiversityKarma = biodiversity.count { it.verificationStatus == "verified" } * 8
+    val biodiversityKarma = biodiversity.sumOf { item ->
+        if (item.verificationStatus == "verified") {
+            item.rewardPointsAwarded.takeIf { it > 0 } ?: 8
+        } else {
+            0
+        }
+    }
     return reportKarma + relayKarma + biodiversityKarma
 }
 
@@ -1357,7 +1363,7 @@ private fun buildLocalRewardActivity(
                     "Verified biodiversity contribution"
                 },
                 occurredAt = it.verifiedAt ?: it.createdAt,
-                karmaDelta = 8,
+                karmaDelta = it.rewardPointsAwarded.takeIf { awarded -> awarded > 0 } ?: 8,
                 txSignature = it.verificationTxSignature,
                 status = "local_demo"
             )
