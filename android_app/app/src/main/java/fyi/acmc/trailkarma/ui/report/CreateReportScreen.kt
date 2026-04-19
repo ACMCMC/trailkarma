@@ -15,7 +15,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Route
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -233,15 +232,7 @@ fun CreateReportScreen(
                                 .height(54.dp),
                             enabled = !saving && title.isNotBlank()
                         ) {
-                            if (saving) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.height(18.dp),
-                                    strokeWidth = 2.dp,
-                                    color = MaterialTheme.colorScheme.onPrimary
-                                )
-                            } else {
-                                Text("Save report")
-                            }
+                            Text("Save report")
                         }
                     }
                 }

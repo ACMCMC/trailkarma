@@ -19,6 +19,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -34,6 +35,17 @@ fun ContactTracingScreen(onBack: () -> Unit, vm: BleViewModel = viewModel()) {
     Log.d("ContactTracing", "🔧 ContactTracingScreen() called")
     val devices by vm.nearbyDevices.collectAsState()
     val syncingPeer by vm.syncingPeer.collectAsState()
+    val eventLog by vm.log.collectAsState()
+    val recentEvents = eventLog.take(12)
+    val bleStatus = when {
+        syncingPeer != null -> "Syncing with $syncingPeer now."
+        devices.isNotEmpty() -> "Found ${devices.size} nearby hiker${if (devices.size == 1) "" else "s"} ready for relay exchange."
+        else -> "Scanning for nearby hikers. Recent encounters will appear here as they happen."
+    }
+
+    LaunchedEffect(Unit) {
+        vm.startScan()
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         TopAppBar(
@@ -100,12 +112,29 @@ fun ContactTracingScreen(onBack: () -> Unit, vm: BleViewModel = viewModel()) {
                     modifier = Modifier.padding(bottom = 4.dp)
                 )
             }
-            item {
-                Text(
-                    "No recent peer connections",
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(bottom = 12.dp)
-                )
+            if (recentEvents.isEmpty()) {
+                item {
+                    Text(
+                        "No peer activity yet on this device.",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+                }
+            } else {
+                items(recentEvents) { event ->
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp)
+                    ) {
+                        Text(
+                            text = event,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(12.dp)
+                        )
+                    }
+                }
             }
             item {
                 Text(
@@ -116,7 +145,7 @@ fun ContactTracingScreen(onBack: () -> Unit, vm: BleViewModel = viewModel()) {
             }
             item {
                 Text(
-                    "BLE is active and scanning for nearby trail reporters.",
+                    bleStatus,
                     style = MaterialTheme.typography.bodySmall
                 )
             }

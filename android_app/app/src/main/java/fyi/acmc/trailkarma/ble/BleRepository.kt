@@ -31,6 +31,8 @@ private const val SYNC_COOLDOWN_SECS = 1L
 private const val RECIPROCAL_SYNC_COOLDOWN_SECS = 1L
 private const val INBOUND_WAIT_SECS = 12L
 private const val RECENT_PEER_WINDOW_SECS = 20L
+private const val STALE_PEER_WINDOW_SECS = 18L
+private const val SCAN_WATCHDOG_INTERVAL_MS = 8_000L
 
 @SuppressLint("MissingPermission")
 class BleRepository(
@@ -53,6 +55,9 @@ class BleRepository(
     private var advertiser: BluetoothLeAdvertiser? = null
     private var advertiseCallback: AdvertiseCallback? = null
     private var localHikerId: String? = null
+    private var scanDesired = false
+    private var scanActive = false
+    private var watchdogStarted = false
 
     // Track peer state by BLE address. Hiker IDs are just display labels and may change.
     private val lastSyncTime = mutableMapOf<String, Long>()
@@ -76,6 +81,10 @@ class BleRepository(
             relayInboxMessageDao = relayInboxMessageDao,
             onLog = ::log
         )
+    }
+
+    init {
+        startScanWatchdog()
     }
 
     // ── Advertising ───────────────────────────────────────────────────────────
@@ -152,10 +161,22 @@ class BleRepository(
      *   3. If not yet synced this session → initiate GATT client sync
      */
     fun startScan() {
+        scanDesired = true
+        startScanWatchdog()
+        pruneStalePeers()
+        if (syncInProgress) {
+            Log.d(TAG, "startScan requested while sync is in progress; scan will resume after sync")
+            return
+        }
+        if (scanActive && scanCallback != null) {
+            Log.d(TAG, "startScan ignored because scanning is already active")
+            return
+        }
         Log.d(TAG, "startScan: btAdapter=${btAdapter != null}, isEnabled=${btAdapter?.isEnabled}")
         scanner = btAdapter?.bluetoothLeScanner
         if (scanner == null) {
             val msg = "BLE scanning not supported (adapter=${btAdapter != null}, isEnabled=${btAdapter?.isEnabled})"
+            scanActive = false
             log(msg); Log.w(TAG, msg)
             return
         }
@@ -242,6 +263,7 @@ class BleRepository(
             }
 
             override fun onScanFailed(errorCode: Int) {
+                scanActive = false
                 val reason = when (errorCode) {
                     SCAN_FAILED_ALREADY_STARTED          -> "already started"
                     SCAN_FAILED_APPLICATION_REGISTRATION_FAILED -> "app registration failed"
@@ -261,12 +283,17 @@ class BleRepository(
             .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
             .build()
         scanner?.startScan(listOf(filter), settings, scanCallback!!)
+        scanActive = true
         val msg = "Scanning for nearby hikers… (filter UUID: $GATT_SERVICE_UUID)"
         log(msg); Log.i(TAG, msg)
     }
 
     fun stopScan() {
+        scanDesired = false
         scanCallback?.let { scanner?.stopScan(it) }
+        scanCallback = null
+        scanActive = false
+        nearbyDevices.value = emptySet()
         log("Scan stopped"); Log.d(TAG, "Scan stopped")
     }
 
@@ -382,7 +409,7 @@ class BleRepository(
     private suspend fun runSyncSession(device: android.bluetooth.BluetoothDevice, peerKey: String) {
         var followUpReason: String? = null
         try {
-            stopScan()
+            pauseScanForSync()
             delay(500)
             gattClient.syncWithPeer(device, lastSuccessfulDataSyncAt[peerKey])
             lastSuccessfulDataSyncAt[peerKey] = Instant.now().toString()
@@ -394,7 +421,9 @@ class BleRepository(
             syncingPeer.value = null
             lastSyncTime[peerKey] = Instant.now().epochSecond
             inboundWaitUntil.remove(peerKey)
-            startScan()
+            if (scanDesired) {
+                startScan()
+            }
             if (!syncInProgress && pendingReciprocalAddress != null && !inboundConnectedPeers.contains(pendingReciprocalAddress!!)) {
                 val address = pendingReciprocalAddress!!
                 pendingReciprocalAddress = null
@@ -408,6 +437,50 @@ class BleRepository(
 
     private fun displayPeer(hikerId: String, address: String): String =
         "$hikerId ($address)"
+
+    private fun pauseScanForSync() {
+        scanCallback?.let { scanner?.stopScan(it) }
+        scanCallback = null
+        scanActive = false
+        log("Scan paused while syncing with a nearby hiker")
+    }
+
+    private fun pruneStalePeers() {
+        val now = Instant.now().epochSecond
+        val stalePeerKeys = recentSeenAtByPeerKey
+            .filterValues { seenAt -> now - seenAt > STALE_PEER_WINDOW_SECS }
+            .keys
+        if (stalePeerKeys.isEmpty()) return
+
+        stalePeerKeys.forEach { peerKey ->
+            recentSeenAtByPeerKey.remove(peerKey)
+            recentDeviceByPeerKey.remove(peerKey)
+            lastSuccessfulDataSyncAt.remove(peerKey)
+            inboundWaitUntil.remove(peerKey)
+            lastSyncTime.remove(peerKey)
+            inboundConnectedPeers.remove(peerKey)
+            peerNameByKey.remove(peerKey)
+        }
+
+        nearbyDevices.value = recentSeenAtByPeerKey.keys
+            .map { peerKey -> displayPeer(peerNameByKey[peerKey] ?: "Trail Hiker", peerKey) }
+            .toSet()
+    }
+
+    private fun startScanWatchdog() {
+        if (watchdogStarted) return
+        watchdogStarted = true
+        scope.launch {
+            while (true) {
+                delay(SCAN_WATCHDOG_INTERVAL_MS)
+                pruneStalePeers()
+                if (scanDesired && !syncInProgress && !scanActive) {
+                    log("🔁 Restarting BLE scan to keep nearby hiker discovery active")
+                    startScan()
+                }
+            }
+        }
+    }
 
     private fun shouldInitiateSyncWith(remoteHikerId: String, remoteAddress: String): Boolean {
         val local = localHikerId
