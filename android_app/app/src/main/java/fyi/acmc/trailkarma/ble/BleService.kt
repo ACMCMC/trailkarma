@@ -49,13 +49,7 @@ class BleService : Service() {
             val userId = userRepo.currentUserId.first() ?: "unknown"
             Log.i(TAG, "BLE stack starting for userId=$userId")
 
-            bleRepo = BleRepository(
-                applicationContext,
-                db.relayPacketDao(),
-                db.trailReportDao(),
-                db.relayJobIntentDao(),
-                db.relayInboxMessageDao()
-            )
+            bleRepo = BleRepositoryHolder.getInstance(applicationContext)
             gattServer = GattServer(applicationContext, db.trailReportDao(), db.relayPacketDao())
 
             gattServer.start()

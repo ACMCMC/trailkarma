@@ -8,6 +8,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -102,13 +103,7 @@ class BleViewModel(app: Application) : AndroidViewModel(app) {
     private val userRepository = UserRepository(app, db.userDao())
     private val networkUtil = NetworkUtil(app)
 
-    val repo = BleRepository(
-        context = app,
-        relayPacketDao = db.relayPacketDao(),
-        trailReportDao = db.trailReportDao(),
-        relayJobIntentDao = db.relayJobIntentDao(),
-        relayInboxMessageDao = db.relayInboxMessageDao()
-    )
+    val repo = BleRepositoryHolder.getInstance(app)
     val nearbyDevices = repo.nearbyDevices
     val log = repo.eventLog
     val relayJobs = db.relayJobIntentDao().getAll()
@@ -378,6 +373,7 @@ fun BleScreen(
     onBack: () -> Unit = {},
     vm: BleViewModel = viewModel()
 ) {
+    Log.d("BleScreen", "🔧 BleScreen() called")
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
@@ -407,6 +403,8 @@ fun BleScreen(
     val operation by vm.operation.collectAsState()
     val isOnline by vm.isOnline.collectAsState(initial = false)
     val celebration by vm.celebration.collectAsState()
+
+    Log.d("BleScreen", "🖥️ rendering BleScreen with ${devices.size} devices")
 
     var selectedContact by remember(contacts) { mutableStateOf(contacts.firstOrNull()) }
     var manualRecipientName by remember { mutableStateOf("") }

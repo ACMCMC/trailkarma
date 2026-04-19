@@ -151,7 +151,9 @@ class BleRepository(
                 val rawData  = result.scanRecord?.serviceData?.get(ParcelUuid(GATT_SERVICE_UUID))
 
                 Log.d(TAG, "onScanResult: address=$address rssi=$rssi hasServiceData=${rawData != null} serviceDataLen=${rawData?.size ?: 0}")
-                nearbyDevices.value = nearbyDevices.value + address
+                val updated = nearbyDevices.value + address
+                Log.d(TAG, "nearbyDevices.value updated: ${nearbyDevices.value.size} -> ${updated.size} devices")
+                nearbyDevices.value = updated
 
                 if (rawData != null && rawData.isNotEmpty()) {
                     val version = rawData[0]
