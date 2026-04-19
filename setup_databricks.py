@@ -50,16 +50,20 @@ def _simplify_coords(coords, tolerance=0.005):
 
 
 def load_pct_trail_statements(full_schema, now):
-    """Read Southern California GeoJSON and return (trail_inserts, first_trail_id)."""
+    """Read Southern California GeoJSON and return (trail_inserts, first_trail_id, section_centroids).
+
+    section_centroids: list of (trail_id, section_name, centroid_lat, centroid_lng)
+    """
     statements = []
     first_trail_id = None
+    section_centroids = []
 
     try:
         with open(PCT_GEOJSON, encoding="utf-8") as f:
             data = json.load(f)
     except FileNotFoundError:
-        print(f"  ⚠️  PCT GeoJSON not found at {PCT_GEOJSON}, using mock trail")
-        return [], None
+        print(f"  WARNING: PCT GeoJSON not found at {PCT_GEOJSON}, using mock trail")
+        return [], None, []
 
     sections = {}
     for feat in data.get("features", []):
@@ -87,9 +91,11 @@ def load_pct_trail_statements(full_schema, now):
             f"{length_miles}, '{data['region']}', '{geom}', "
             f"current_timestamp(), current_timestamp())"
         )
+        mid = coords[len(coords) // 2]
+        section_centroids.append((trail_id, section_name, round(mid[1], 6), round(mid[0], 6)))
 
-    print(f"  ✓ Loaded {len(sections)} PCT sections from GeoJSON")
-    return statements, first_trail_id
+    print(f"  Loaded {len(sections)} PCT sections from GeoJSON")
+    return statements, first_trail_id, section_centroids
 
 def load_species_report_statements(full_schema):
     """Read iNaturalist CSV, filter to Southern California, return INSERT statements."""
@@ -165,6 +171,24 @@ def load_water_report_statements(full_schema):
     return statements
 
 
+
+def load_weather_cache_statements(full_schema, section_centroids):
+    """Seed weather_cache with one row per PCT section using pre-computed centroids.
+
+    section_centroids: list of (trail_id, section_name, centroid_lat, centroid_lng)
+    trail_id matches the trails table — weather columns are NULL until first Job run.
+    """
+    statements = []
+    for trail_id, name, lat, lng in section_centroids:
+        statements.append(
+            f"INSERT INTO {full_schema}.weather_cache VALUES ("
+            f"'{trail_id}', '{name}', {lat}, {lng}, "
+            f"NULL, NULL, NULL, NULL, NULL, current_timestamp())"
+        )
+    print(f"  Seeded {len(statements)} weather_cache rows (weather pending first Job run)")
+    return statements
+
+
 def load_env():
     config = {}
     if os.path.exists('.env'):
@@ -236,6 +260,7 @@ def main():
         f"DROP TABLE IF EXISTS {full_schema}.location_updates",
         f"DROP TABLE IF EXISTS {full_schema}.relay_packets",
         f"DROP TABLE IF EXISTS {full_schema}.trail_reports",
+        f"DROP TABLE IF EXISTS {full_schema}.weather_cache",
         f"DROP TABLE IF EXISTS {full_schema}.users",
         f"DROP TABLE IF EXISTS {full_schema}.trail_waypoints",
         f"DROP TABLE IF EXISTS {full_schema}.trails",
@@ -253,6 +278,19 @@ def main():
             updated_at TIMESTAMP
         ) USING DELTA""",
         
+        f"""CREATE TABLE {full_schema}.weather_cache (
+            trail_id STRING NOT NULL PRIMARY KEY,
+            trail_name STRING NOT NULL,
+            centroid_lat DOUBLE NOT NULL,
+            centroid_lng DOUBLE NOT NULL,
+            temperature_c DOUBLE,
+            precipitation_mm DOUBLE,
+            windspeed_ms DOUBLE,
+            weathercode INT,
+            fetched_at TIMESTAMP,
+            updated_at TIMESTAMP
+        ) USING DELTA""",
+
         f"""CREATE TABLE {full_schema}.trail_waypoints (
             waypoint_id STRING NOT NULL PRIMARY KEY,
             trail_id STRING NOT NULL,
@@ -335,7 +373,7 @@ def main():
     # PUT IN ALL THE DATA SO WE START FRESH
 
     # Trails — load real PCT Southern California sections
-    trail_statements, first_trail_id = load_pct_trail_statements(full_schema, now)
+    trail_statements, first_trail_id, section_centroids = load_pct_trail_statements(full_schema, now)
     if trail_statements:
         sql_statements.extend(trail_statements)
         pct_trail_id = first_trail_id  # use real trail id for FK references
@@ -371,6 +409,9 @@ def main():
 
     # Water source reports from PCT Water Report
     sql_statements.extend(load_water_report_statements(full_schema))
+
+    # Weather cache — one row per PCT section, weather filled by scheduled Job
+    sql_statements.extend(load_weather_cache_statements(full_schema, section_centroids))
 
     # Contacts
     # Aldan and Qianqian are contacts
