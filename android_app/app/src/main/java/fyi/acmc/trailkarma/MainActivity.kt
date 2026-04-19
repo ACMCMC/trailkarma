@@ -107,6 +107,7 @@ class MainActivity : ComponentActivity() {
         if (hasPermission(Manifest.permission.ACCESS_FINE_LOCATION)) {
             startService(Intent(this, LocationService::class.java))
         }
+        requestPermissions()
 
         setContent {
             TrailKarmaAppTheme {
@@ -129,4 +130,19 @@ class MainActivity : ComponentActivity() {
 
     private fun hasPermission(permission: String) =
         ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
+
+    private fun requestPermissions() {
+        val perms = mutableListOf(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+            Manifest.permission.RECORD_AUDIO,
+            Manifest.permission.CAMERA
+        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            perms.add(Manifest.permission.BLUETOOTH_SCAN)
+            perms.add(Manifest.permission.BLUETOOTH_ADVERTISE)
+            perms.add(Manifest.permission.BLUETOOTH_CONNECT)
+        }
+        permissionLauncher.launch(perms.toTypedArray())
+    }
 }

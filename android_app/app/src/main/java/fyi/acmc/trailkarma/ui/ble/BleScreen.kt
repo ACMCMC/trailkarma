@@ -95,6 +95,7 @@ import fyi.acmc.trailkarma.ui.feedback.TrailFeedbackBus
 import fyi.acmc.trailkarma.ui.feedback.TrailOperationCard
 import fyi.acmc.trailkarma.ui.rewards.RewardsPalette
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -106,6 +107,7 @@ class BleViewModel(app: Application) : AndroidViewModel(app) {
 
     val repo = BleRepositoryHolder.getInstance(app)
     val nearbyDevices = repo.nearbyDevices
+    val syncingPeer = repo.syncingPeer
     val log = repo.eventLog
     val relayJobs = db.relayJobIntentDao().getAll()
     val isOnline = networkUtil.isOnline
@@ -119,6 +121,7 @@ class BleViewModel(app: Application) : AndroidViewModel(app) {
     private val _celebration = MutableStateFlow<String?>(null)
     val celebration = _celebration
     private var knownBadges = emptySet<String>()
+    private var announcedNearbyDevices = emptySet<String>()
 
     init {
         viewModelScope.launch {
@@ -133,6 +136,15 @@ class BleViewModel(app: Application) : AndroidViewModel(app) {
                 .orEmpty()
             if (networkUtil.isOnlineNow()) {
                 syncVoiceRelayNow(showFeedback = false)
+            }
+        }
+        viewModelScope.launch {
+            nearbyDevices.collectLatest { devices ->
+                val newDevices = devices - announcedNearbyDevices
+                newDevices.forEach { device ->
+                    TrailFeedbackBus.emit("New nearby hiker found: $device", FeedbackTone.Info)
+                }
+                announcedNearbyDevices = announcedNearbyDevices + newDevices
             }
         }
     }

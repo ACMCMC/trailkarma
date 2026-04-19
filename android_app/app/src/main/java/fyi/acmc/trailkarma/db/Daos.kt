@@ -73,6 +73,9 @@ interface TrailReportDao {
 
     @Query("UPDATE trail_reports SET verificationStatus = 'rejected' WHERE reportId = :id")
     suspend fun markRewardRejected(id: String)
+
+    @Query("DELETE FROM trail_reports")
+    suspend fun deleteAll()
 }
 
 @Dao
@@ -127,6 +130,9 @@ interface BiodiversityContributionDao {
         LIMIT 1
     """)
     suspend fun findVerifiedSpeciesCollectibleByLabel(label: String, observationId: String): BiodiversityContribution?
+
+    @Query("DELETE FROM biodiversity_contributions")
+    suspend fun deleteAll()
 }
 
 @Dao
@@ -176,6 +182,9 @@ interface RelayPacketDao {
 
     @Query("DELETE FROM relay_packets WHERE packetId = :id")
     suspend fun deleteById(id: String)
+
+    @Query("DELETE FROM relay_packets")
+    suspend fun deleteAll()
 }
 
 @Dao
@@ -209,6 +218,9 @@ interface RelayJobIntentDao {
         transcriptSummary: String?,
         replyJobId: String?
     )
+
+    @Query("DELETE FROM relay_job_intents")
+    suspend fun deleteAll()
 }
 
 @Dao
@@ -227,6 +239,9 @@ interface RelayInboxMessageDao {
 
     @Query("UPDATE relay_inbox_messages SET acknowledged = 1, status = 'delivered' WHERE replyId = :replyId")
     suspend fun markAcknowledged(replyId: String)
+
+    @Query("DELETE FROM relay_inbox_messages")
+    suspend fun deleteAll()
 }
 
 @Dao
@@ -251,4 +266,7 @@ interface KarmaEventDao {
 
     @Query("DELETE FROM karma_events WHERE observationId = :observationId")
     suspend fun deleteByObservationId(observationId: String)
+
+    @Query("DELETE FROM karma_events")
+    suspend fun deleteAll()
 }

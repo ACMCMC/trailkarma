@@ -10,14 +10,21 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -31,6 +38,8 @@ import fyi.acmc.trailkarma.models.LocationUpdate
 @Composable
 fun SyncStatusScreen(onBack: () -> Unit, vm: SyncStatusViewModel = viewModel()) {
     val syncData = vm.syncStatus.collectAsState(initial = SyncStatusData()).value
+    val resetInProgress by vm.resetInProgress.collectAsState()
+    var showResetDialog by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxSize()) {
         TopAppBar(
@@ -41,6 +50,31 @@ fun SyncStatusScreen(onBack: () -> Unit, vm: SyncStatusViewModel = viewModel()) 
                 }
             }
         )
+        if (showResetDialog) {
+            AlertDialog(
+                onDismissRequest = { showResetDialog = false },
+                title = { Text("Clear Local Sync Data?") },
+                text = {
+                    Text("This removes local trail reports, biodiversity entries, relay packets, relay jobs, inbox replies, and KARMA event logs so you can demo offline sync again. Trails and profile data stay intact.")
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            showResetDialog = false
+                            vm.clearLocalSyncDemoData()
+                        },
+                        enabled = !resetInProgress
+                    ) {
+                        Text("Clear local data")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showResetDialog = false }) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
         LazyColumn(modifier = Modifier.padding(12.dp).fillMaxSize()) {
             item {
                 Text(
@@ -48,6 +82,17 @@ fun SyncStatusScreen(onBack: () -> Unit, vm: SyncStatusViewModel = viewModel()) 
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
+            }
+            item {
+                Button(
+                    onClick = { showResetDialog = true },
+                    enabled = !resetInProgress,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp)
+                ) {
+                    Text(if (resetInProgress) "Clearing local sync data..." else "Clear local sync demo data")
+                }
             }
             item {
                 Text(

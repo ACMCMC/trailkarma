@@ -3,12 +3,15 @@ package fyi.acmc.trailkarma.ui.info
 import android.util.Log
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.BluetoothSearching
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -30,6 +33,7 @@ import fyi.acmc.trailkarma.ui.rewards.RewardsPalette
 fun ContactTracingScreen(onBack: () -> Unit, vm: BleViewModel = viewModel()) {
     Log.d("ContactTracing", "🔧 ContactTracingScreen() called")
     val devices by vm.nearbyDevices.collectAsState()
+    val syncingPeer by vm.syncingPeer.collectAsState()
 
     Column(modifier = Modifier.fillMaxSize()) {
         TopAppBar(
@@ -62,10 +66,29 @@ fun ContactTracingScreen(onBack: () -> Unit, vm: BleViewModel = viewModel()) {
                     modifier = Modifier.padding(bottom = 12.dp)
                 )
             }
+            syncingPeer?.let { peer ->
+                item {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 12.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text("Sync in progress", style = MaterialTheme.typography.titleSmall)
+                            Text(
+                                "Currently syncing with $peer",
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+                    }
+                }
+            }
             items(devices.toList()) { device ->
                 TrailListRow(
                     title = device,
-                    subtitle = "Available as a potential relay carrier",
+                    subtitle = if (device == syncingPeer) "Currently syncing now" else "Available as a potential relay carrier",
                     icon = Icons.AutoMirrored.Filled.BluetoothSearching,
                     accent = RewardsPalette.Sky
                 )

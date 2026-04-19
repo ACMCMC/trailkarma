@@ -10,6 +10,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.android.gms.location.LocationServices
 import fyi.acmc.trailkarma.BuildConfig
+import fyi.acmc.trailkarma.ble.BleRepositoryHolder
 import fyi.acmc.trailkarma.db.AppDatabase
 import fyi.acmc.trailkarma.models.BiodiversityContribution
 import fyi.acmc.trailkarma.models.CloudSyncState
@@ -85,6 +86,7 @@ data class CameraLocationSnapshot(
 
 class CameraViewModel(app: Application) : AndroidViewModel(app) {
     private val db = AppDatabase.get(app)
+    private val bleRepo = BleRepositoryHolder.getInstance(app)
     private val userRepo = UserRepository(app, db.userDao())
     private val fusedLocation = LocationServices.getFusedLocationProviderClient(app)
     private val databricksRepo = DatabricksSyncRepository(app, db)
@@ -280,9 +282,10 @@ class CameraViewModel(app: Application) : AndroidViewModel(app) {
         }
 
         if (result.matchedClaim && location.lat != null && location.lon != null) {
+            val mirroredReportId = "photo-$observationId"
             db.trailReportDao().insert(
                 TrailReport(
-                    reportId = "photo-$observationId",
+                    reportId = mirroredReportId,
                     userId = user.userId,
                     type = ReportType.species,
                     title = "Photo-verified species: ${result.finalLabel}",
@@ -304,6 +307,7 @@ class CameraViewModel(app: Application) : AndroidViewModel(app) {
                     highConfidenceBonus = result.rewardAmount >= 13
                 )
             )
+            bleRepo.onNewLocalReportCreated(mirroredReportId)
             SyncWorker.schedule(getApplication())
         }
 

@@ -249,7 +249,7 @@ class GattClient(
         val reportsJob = scope.async {
             syncReports(gatt, senderDevice, since)
         }
-        reportsJob.await()
+        val pulledReports = reportsJob.await()
         syncPackets(gatt, senderDevice, since)
     }
 
@@ -273,11 +273,11 @@ class GattClient(
         return false
     }
 
-    private suspend fun syncReports(gatt: BluetoothGatt, senderDevice: String, since: String?) {
+    private suspend fun syncReports(gatt: BluetoothGatt, senderDevice: String, since: String?): Int {
         onLog("🔄 Reading peer report manifest...")
         val peerIds = readIdManifest(gatt, MANIFEST_CHAR_UUID, since) ?: run {
             onLog("✗ Could not read peer report manifest from $senderDevice (timeout/error)")
-            return
+            return 0
         }
         onLog("✓ Got peer manifest: ${peerIds.size} reports")
 
@@ -287,7 +287,7 @@ class GattClient(
 
         if (missing.isEmpty()) {
             onLog("✓ All reports synced")
-            return
+            return 0
         }
 
         onLog("📥 Requesting ${missing.size} missing reports...")
@@ -306,13 +306,14 @@ class GattClient(
         }
 
         onLog("✓ Synced $pulledCount/${ missing.size} reports (${failedCount} timeouts)")
+        return pulledCount
     }
 
-    private suspend fun syncPackets(gatt: BluetoothGatt, senderDevice: String, since: String?) {
-        val peerIds = readIdManifest(gatt, PACKET_MANIFEST_CHAR_UUID, since) ?: return
+    private suspend fun syncPackets(gatt: BluetoothGatt, senderDevice: String, since: String?): Int {
+        val peerIds = readIdManifest(gatt, PACKET_MANIFEST_CHAR_UUID, since) ?: return 0
         val localIds = relayPacketDao.getIds().toSet()
         val missing = peerIds - localIds
-        if (missing.isEmpty()) return
+        if (missing.isEmpty()) return 0
 
         var pulledCount = 0
         for (packetId in missing) {
@@ -322,6 +323,7 @@ class GattClient(
         }
 
         onLog("Pulled $pulledCount relay packets from $senderDevice")
+        return pulledCount
     }
 
     private suspend fun readIdManifest(gatt: BluetoothGatt, characteristicUuid: UUID, since: String?): Set<String>? {

@@ -7,8 +7,10 @@ import fyi.acmc.trailkarma.db.AppDatabase
 import fyi.acmc.trailkarma.models.LocationUpdate
 import fyi.acmc.trailkarma.models.TrailReport
 import fyi.acmc.trailkarma.models.Trail
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -24,6 +26,7 @@ data class SyncStatusData(
 
 class SyncStatusViewModel(app: Application) : AndroidViewModel(app) {
     private val db = AppDatabase.get(app)
+    val resetInProgress = MutableStateFlow(false)
 
     val syncStatus: Flow<SyncStatusData> = combine(
         db.trailReportDao().getAll(),
@@ -48,5 +51,22 @@ class SyncStatusViewModel(app: Application) : AndroidViewModel(app) {
 
     fun formatDate(millis: Long): String {
         return SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault()).format(Date(millis))
+    }
+
+    fun clearLocalSyncDemoData() {
+        if (resetInProgress.value) return
+        viewModelScope.launch {
+            resetInProgress.value = true
+            try {
+                db.trailReportDao().deleteAll()
+                db.biodiversityContributionDao().deleteAll()
+                db.karmaEventDao().deleteAll()
+                db.relayPacketDao().deleteAll()
+                db.relayJobIntentDao().deleteAll()
+                db.relayInboxMessageDao().deleteAll()
+            } finally {
+                resetInProgress.value = false
+            }
+        }
     }
 }

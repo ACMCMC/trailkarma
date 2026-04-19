@@ -5,6 +5,7 @@ import android.annotation.SuppressLint
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.android.gms.location.LocationServices
+import fyi.acmc.trailkarma.ble.BleRepositoryHolder
 import fyi.acmc.trailkarma.db.AppDatabase
 import fyi.acmc.trailkarma.models.ReportSource
 import fyi.acmc.trailkarma.models.ReportType
@@ -30,6 +31,7 @@ import java.util.UUID
 class CreateReportViewModel(app: Application) : AndroidViewModel(app) {
     private val db = AppDatabase.get(app)
     private val repo = ReportRepository(db.trailReportDao())
+    private val bleRepo = BleRepositoryHolder.getInstance(app)
     private val fusedLocation = LocationServices.getFusedLocationProviderClient(app)
     private val userRepo = UserRepository(app, db.userDao())
     private val syncRepo = DatabricksSyncRepository(app, db)
@@ -59,109 +61,117 @@ class CreateReportViewModel(app: Application) : AndroidViewModel(app) {
                 OperationStepUi("KARMA claim", "Runs after verification checks.", OperationStepState.Pending),
             )
         )
-        fusedLocation.lastLocation.addOnSuccessListener { loc ->
+        fusedLocation.lastLocation.addOnCompleteListener { task ->
+            val loc = task.result
+            if (!task.isSuccessful) {
+                Log.w("CreateReport", "⚠ Unable to read cached location, saving report without it", task.exception)
+            }
             viewModelScope.launch {
-                val user = userRepo.ensureLocalUser()
-                val reportId = UUID.randomUUID().toString()
+                try {
+                    val user = userRepo.ensureLocalUser()
+                    val reportId = UUID.randomUUID().toString()
 
-                Log.d("CreateReport", "💾 Saving report locally: $reportId - $title")
-                repo.save(
-                    TrailReport(
-                        reportId = reportId,
-                        userId = user.userId,
-                        type = type,
-                        title = title,
-                        description = description,
-                        lat = loc?.latitude ?: 0.0,
-                        lng = loc?.longitude ?: 0.0,
-                        timestamp = Instant.now().toString(),
-                        speciesName = speciesName,
-                        source = ReportSource.self
-                    )
-                )
-                Log.d("CreateReport", "✓ Report saved locally")
-
-                if (networkUtil.isOnlineNow()) {
-                    operation.value = OperationUiState(
-                        title = "Syncing report",
-                        message = "Service is available, so the app is uploading the report and checking the reward path now.",
-                        tone = OperationStateTone.Working,
-                        progress = 0.62f,
-                        steps = listOf(
-                            OperationStepUi("Saved on this phone", "Your report is safe locally.", OperationStepState.Complete),
-                            OperationStepUi("Cloud sync", "Uploading report and trail context.", OperationStepState.Active),
-                            OperationStepUi("KARMA claim", "Preparing the reward verification step.", OperationStepState.Pending),
+                    Log.d("CreateReport", "💾 Saving report locally: $reportId - $title")
+                    repo.save(
+                        TrailReport(
+                            reportId = reportId,
+                            userId = user.userId,
+                            type = type,
+                            title = title,
+                            description = description,
+                            lat = loc?.latitude ?: 0.0,
+                            lng = loc?.longitude ?: 0.0,
+                            timestamp = Instant.now().toString(),
+                            speciesName = speciesName,
+                            source = ReportSource.self
                         )
                     )
+                    Log.d("CreateReport", "✓ Report saved locally")
+                    bleRepo.onNewLocalReportCreated(reportId)
 
-                    if (syncRepo.isConfigured()) {
-                        Log.d("CreateReport", "🔄 Syncing report to Databricks...")
-                        val syncSuccess = syncRepo.syncReports()
-                        Log.d("CreateReport", if (syncSuccess) "✓ Sync successful" else "✗ Sync failed")
+                    if (networkUtil.isOnlineNow()) {
+                        operation.value = OperationUiState(
+                            title = "Syncing report",
+                            message = "Service is available, so the app is uploading the report and checking the reward path now.",
+                            tone = OperationStateTone.Working,
+                            progress = 0.62f,
+                            steps = listOf(
+                                OperationStepUi("Saved on this phone", "Your report is safe locally.", OperationStepState.Complete),
+                                OperationStepUi("Cloud sync", "Uploading report and trail context.", OperationStepState.Active),
+                                OperationStepUi("KARMA claim", "Preparing the reward verification step.", OperationStepState.Pending),
+                            )
+                        )
+
+                        if (syncRepo.isConfigured()) {
+                            Log.d("CreateReport", "🔄 Syncing report to Databricks...")
+                            val syncSuccess = syncRepo.syncReports()
+                            Log.d("CreateReport", if (syncSuccess) "✓ Sync successful" else "✗ Sync failed")
+                        } else {
+                            Log.w("CreateReport", "⚠ Databricks not configured, skipping sync")
+                        }
+
+                        rewardsRepo.syncCurrentUserRegistration()
+                        rewardsRepo.claimRewardsForPendingReports()
+
+                        val refreshed = db.trailReportDao().getById(reportId)
+                        val claimed = refreshed?.rewardClaimed == true
+                        operation.value = OperationUiState(
+                            title = if (claimed) "Reward submitted" else "Saved and syncing",
+                            message = if (claimed) {
+                                "The report was synced and its KARMA claim was recorded."
+                            } else {
+                                "The report is synced. Reward settlement will appear once verification completes."
+                            },
+                            tone = OperationStateTone.Success,
+                            progress = 1f,
+                            steps = listOf(
+                                OperationStepUi("Saved on this phone", "Done.", OperationStepState.Complete),
+                                OperationStepUi("Cloud sync", "Uploaded successfully.", OperationStepState.Complete),
+                                OperationStepUi(
+                                    "KARMA claim",
+                                    if (claimed) "Submitted to the rewards pipeline." else "Waiting for verification.",
+                                    OperationStepState.Complete
+                                ),
+                            )
+                        )
+                        TrailFeedbackBus.emit(
+                            if (claimed) "Report saved, synced, and sent to the KARMA ledger." else "Report saved and synced. Reward verification will continue in the background.",
+                            FeedbackTone.Success
+                        )
                     } else {
-                        Log.w("CreateReport", "⚠ Databricks not configured, skipping sync")
+                        operation.value = OperationUiState(
+                            title = "Saved offline",
+                            message = "The report is stored safely on this phone and will sync when service returns.",
+                            tone = OperationStateTone.Success,
+                            progress = 1f,
+                            steps = listOf(
+                                OperationStepUi("Saved on this phone", "Done.", OperationStepState.Complete),
+                                OperationStepUi("Cloud sync", "Waiting for service.", OperationStepState.Pending),
+                                OperationStepUi("KARMA claim", "Will run after sync.", OperationStepState.Pending),
+                            )
+                        )
+                        TrailFeedbackBus.emit(
+                            "Report saved offline. TrailKarma will sync and claim rewards when service returns.",
+                            FeedbackTone.Success
+                        )
                     }
 
-                    rewardsRepo.syncCurrentUserRegistration()
-                    rewardsRepo.claimRewardsForPendingReports()
-
-                    val refreshed = db.trailReportDao().getById(reportId)
-                    val claimed = refreshed?.rewardClaimed == true
+                    saveCompleted.value = true
+                } catch (error: Exception) {
+                    Log.e("CreateReport", "✗ Failed to save report", error)
                     operation.value = OperationUiState(
-                        title = if (claimed) "Reward submitted" else "Saved and syncing",
-                        message = if (claimed) {
-                            "The report was synced and its KARMA claim was recorded."
-                        } else {
-                            "The report is synced. Reward settlement will appear once verification completes."
-                        },
-                        tone = OperationStateTone.Success,
-                        progress = 1f,
+                        title = "Save failed",
+                        message = error.message ?: "The report could not be saved right now.",
+                        tone = OperationStateTone.Error,
                         steps = listOf(
-                            OperationStepUi("Saved on this phone", "Done.", OperationStepState.Complete),
-                            OperationStepUi("Cloud sync", "Uploaded successfully.", OperationStepState.Complete),
-                            OperationStepUi(
-                                "KARMA claim",
-                                if (claimed) "Submitted to the rewards pipeline." else "Waiting for verification.",
-                                OperationStepState.Complete
-                            ),
+                            OperationStepUi("Saved on this phone", "The local write did not finish.", OperationStepState.Error),
                         )
                     )
-                    TrailFeedbackBus.emit(
-                        if (claimed) "Report saved, synced, and sent to the KARMA ledger." else "Report saved and synced. Reward verification will continue in the background.",
-                        FeedbackTone.Success
-                    )
-                } else {
-                    operation.value = OperationUiState(
-                        title = "Saved offline",
-                        message = "The report is stored safely on this phone and will sync when service returns.",
-                        tone = OperationStateTone.Success,
-                        progress = 1f,
-                        steps = listOf(
-                            OperationStepUi("Saved on this phone", "Done.", OperationStepState.Complete),
-                            OperationStepUi("Cloud sync", "Waiting for service.", OperationStepState.Pending),
-                            OperationStepUi("KARMA claim", "Will run after sync.", OperationStepState.Pending),
-                        )
-                    )
-                    TrailFeedbackBus.emit(
-                        "Report saved offline. TrailKarma will sync and claim rewards when service returns.",
-                        FeedbackTone.Success
-                    )
+                    TrailFeedbackBus.emit("Unable to save the report right now.", FeedbackTone.Error)
+                } finally {
+                    saving.value = false
                 }
-
-                saving.value = false
-                saveCompleted.value = true
             }
-        }.addOnFailureListener { error ->
-            operation.value = OperationUiState(
-                title = "Save failed",
-                message = error.message ?: "The report could not be saved right now.",
-                tone = OperationStateTone.Error,
-                steps = listOf(
-                    OperationStepUi("Saved on this phone", "The local write did not finish.", OperationStepState.Error),
-                )
-            )
-            saving.value = false
-            TrailFeedbackBus.emit("Unable to save the report right now.", FeedbackTone.Error)
         }
     }
 }
