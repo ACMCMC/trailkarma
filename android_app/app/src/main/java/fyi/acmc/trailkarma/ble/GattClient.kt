@@ -31,6 +31,7 @@ import org.json.JSONObject
 import java.time.Instant
 import java.util.UUID
 import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 private const val CONNECT_TIMEOUT_MS = 15_000L
 private const val MAX_HOP_COUNT = 5
@@ -52,7 +53,7 @@ class GattClient(
     private var reassemblyChunks: Array<ByteArray?>? = null
     private var reassemblyTotal: Int = 0
     private var reassemblyReceived: Int = 0
-    private var reportNotificationsReady = false
+    private var notificationSetupQueue: ArrayDeque<UUID> = ArrayDeque()
 
     suspend fun syncWithPeer(device: BluetoothDevice) {
         onLog("📱 syncWithPeer called for ${device.address}")
@@ -69,7 +70,8 @@ class GattClient(
 
     private suspend fun connectAndSync(device: BluetoothDevice) = suspendCancellableCoroutine<Unit> { continuation ->
         var gatt: BluetoothGatt? = null
-        reportNotificationsReady = false
+        notificationSetupQueue.clear()
+        var connected = false
 
         onLog("🔗 Attempting GATT connection to ${device.address}")
 
@@ -78,12 +80,18 @@ class GattClient(
                 val stateStr = if (newState == BluetoothProfile.STATE_CONNECTED) "CONNECTED" else "DISCONNECTED"
                 onLog("📶 onConnectionStateChange: status=$status, newState=$stateStr (${device.address})")
                 if (newState == BluetoothProfile.STATE_CONNECTED) {
+                    connected = true
                     onLog("🔄 Requesting MTU 517...")
                     g.requestMtu(517)
                 } else if (newState == BluetoothProfile.STATE_DISCONNECTED && continuation.isActive) {
                     onLog("❌ Peer disconnected, ending sync")
                     g.close()
-                    continuation.resume(Unit)
+                    val message = if (connected) {
+                        "Peer disconnected mid-sync (status=$status)"
+                    } else {
+                        "GATT connection failed before reaching CONNECTED (status=$status)"
+                    }
+                    continuation.resumeWithException(IllegalStateException(message))
                 } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                     g.close()
                 }
@@ -101,39 +109,34 @@ class GattClient(
                     g.disconnect()
                     return
                 }
-                onLog("✓ Found GATT service, looking for REPORT_CHAR...")
-                val reportChar = service.getCharacteristic(REPORT_CHAR_UUID)
-                val descriptor = reportChar?.getDescriptor(CCCD_UUID)
-                if (reportChar == null || descriptor == null) {
-                    onLog("✗ REPORT_CHAR or CCCD descriptor not found!")
+                notificationSetupQueue = ArrayDeque(
+                    listOf(
+                        MANIFEST_CHAR_UUID,
+                        REPORT_CHAR_UUID,
+                        PACKET_MANIFEST_CHAR_UUID,
+                        PACKET_CHAR_UUID
+                    )
+                )
+                onLog("✓ Found GATT service, enabling notifications for all sync characteristics...")
+                if (!enableNextNotification(g)) {
+                    onLog("✗ Failed to enable characteristic notifications")
                     g.disconnect()
-                    return
                 }
-
-                onLog("✓ Enabling notifications for REPORT_CHAR...")
-                g.setCharacteristicNotification(reportChar, true)
-                descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-                g.writeDescriptor(descriptor)
             }
 
             override fun onDescriptorWrite(g: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {
                 onLog("✓ Descriptor write complete, status=$status")
-                if (!reportNotificationsReady && descriptor.characteristic.uuid == REPORT_CHAR_UUID) {
-                    onLog("🔔 REPORT_CHAR notifications ready, enabling PACKET_CHAR...")
-                    reportNotificationsReady = true
-                    val packetChar = g.getService(GATT_SERVICE_UUID)?.getCharacteristic(PACKET_CHAR_UUID)
-                    val packetDescriptor = packetChar?.getDescriptor(CCCD_UUID)
-                    if (packetChar != null && packetDescriptor != null) {
-                        g.setCharacteristicNotification(packetChar, true)
-                        packetDescriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-                        g.writeDescriptor(packetDescriptor)
-                        return
-                    } else {
-                        onLog("⚠ PACKET_CHAR not found, skipping...")
-                    }
+                if (status != BluetoothGatt.GATT_SUCCESS) {
+                    onLog("✗ Descriptor write failed for ${descriptor.characteristic.uuid}")
+                    g.disconnect()
+                    return
                 }
 
-                if (descriptor.characteristic.uuid == PACKET_CHAR_UUID || reportNotificationsReady) {
+                if (enableNextNotification(g)) {
+                    return
+                }
+
+                if (notificationSetupQueue.isEmpty()) {
                     onLog("🟢 All notifications ready, starting sync...")
                     scope.launch {
                         syncReports(g, device.address)
@@ -180,7 +183,12 @@ class GattClient(
 
                 if (reassemblyReceived == total) {
                     val fullBytes = reassemblyChunks!!.flatMap { it!!.toList() }.toByteArray()
-                    payloadDeferred?.complete(String(fullBytes, Charsets.UTF_8))
+                    val fullPayload = String(fullBytes, Charsets.UTF_8)
+                    if (characteristic.uuid == MANIFEST_CHAR_UUID || characteristic.uuid == PACKET_MANIFEST_CHAR_UUID) {
+                        manifestDeferred?.complete(fullPayload)
+                    } else {
+                        payloadDeferred?.complete(fullPayload)
+                    }
                     reassemblyChunks = null
                     reassemblyTotal = 0
                     reassemblyReceived = 0
@@ -199,6 +207,26 @@ class GattClient(
             gatt?.disconnect()
             gatt?.close()
         }
+    }
+
+    private fun enableNextNotification(gatt: BluetoothGatt): Boolean {
+        val service = gatt.getService(GATT_SERVICE_UUID) ?: return false
+        while (notificationSetupQueue.isNotEmpty()) {
+            val characteristicUuid = notificationSetupQueue.removeFirst()
+            val characteristic = service.getCharacteristic(characteristicUuid)
+            val descriptor = characteristic?.getDescriptor(CCCD_UUID)
+            if (characteristic == null || descriptor == null) {
+                onLog("⚠ $characteristicUuid missing, skipping notification setup")
+                continue
+            }
+
+            onLog("🔔 Enabling notifications for $characteristicUuid...")
+            gatt.setCharacteristicNotification(characteristic, true)
+            descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+            gatt.writeDescriptor(descriptor)
+            return true
+        }
+        return false
     }
 
     private suspend fun syncReports(gatt: BluetoothGatt, senderDevice: String) {

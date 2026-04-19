@@ -46,6 +46,7 @@ class BleRepository(
     private var scanCallback: ScanCallback? = null
     private var advertiser: BluetoothLeAdvertiser? = null
     private var advertiseCallback: AdvertiseCallback? = null
+    private var localHikerId: String? = null
 
     // Track last sync time per device (map of address -> epochSecond)
     // Allow re-sync every 10 seconds to handle data updates
@@ -74,6 +75,7 @@ class BleRepository(
      */
     fun startAdvertising(hikerId: String) {
         Log.d(TAG, "startAdvertising: hikerId=$hikerId btAdapter=${btAdapter != null}")
+        localHikerId = hikerId
         advertiser = btAdapter?.bluetoothLeAdvertiser
         if (advertiser == null) {
             val msg = "BLE advertising not supported on this device (adapter=${btAdapter != null}, isEnabled=${btAdapter?.isEnabled})"
@@ -185,6 +187,8 @@ class BleRepository(
                     val lastSync = lastSyncTime[address] ?: 0L
                     if (syncInProgress) {
                         Log.d(TAG, "Sync already in progress with another device, skipping $address")
+                    } else if (!shouldInitiateSyncWith(hikerId, address)) {
+                        Log.d(TAG, "Peer $hikerId won initiator election, waiting for inbound GATT connection")
                     } else if (now - lastSync >= 10) {
                         lastSyncTime[address] = now
                         val msg2 = "🔗 Syncing reports with $hikerId ($address)…"
@@ -192,9 +196,11 @@ class BleRepository(
                         syncInProgress = true
                         scope.launch {
                             try {
+                                stopScan()
                                 gattClient.syncWithPeer(device)
                             } finally {
                                 syncInProgress = false
+                                startScan()
                             }
                         }
                     } else {
@@ -242,5 +248,20 @@ class BleRepository(
     private fun log(msg: String) {
         Log.d(TAG, msg)
         eventLog.value = (listOf(msg) + eventLog.value).take(100)
+    }
+
+    private fun shouldInitiateSyncWith(remoteHikerId: String, remoteAddress: String): Boolean {
+        val local = localHikerId
+        if (local.isNullOrBlank()) return true
+
+        val comparison = local.compareTo(remoteHikerId, ignoreCase = true)
+        return when {
+            comparison < 0 -> true
+            comparison > 0 -> false
+            else -> {
+                val localAddress = btAdapter?.address
+                localAddress.isNullOrBlank() || localAddress.compareTo(remoteAddress, ignoreCase = true) < 0
+            }
+        }
     }
 }

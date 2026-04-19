@@ -485,36 +485,6 @@ fun MapScreen(
                 }
             }
 
-        Card(
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(WindowInsets.systemBars.asPaddingValues())
-                .padding(start = 56.dp, top = 100.dp)
-                .clickable(onClick = onNavigateToRewards),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-        ) {
-            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("REWARDS", style = MaterialTheme.typography.labelSmall, fontSize = 10.sp)
-                if (walletState != null) {
-                    Text(walletState!!.karmaBalance ?: "0", style = MaterialTheme.typography.titleMedium)
-                    val badges = walletState!!.badgeDetails ?: emptyList()
-                    Text(
-                        if (badges.isEmpty()) "Tap to open collectibles" else badges.joinToString(" • ") { it.label },
-                        style = MaterialTheme.typography.labelSmall,
-                        fontSize = 9.sp,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                } else {
-                    Text("Wallet syncing", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        if (isOnline) "Registering rewards state now" else "Will register when service returns",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontSize = 9.sp,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                }
-            }
-        }
 
         TrailBriefingSheet(
             reports = displayReports,
