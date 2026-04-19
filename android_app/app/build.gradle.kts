@@ -1,3 +1,6 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -27,14 +30,24 @@ android {
             ?: "http://10.0.2.2:3000"
         buildConfigField("String", "REWARDS_BASE_URL", "\"$rewardsBaseUrl\"")
 
+        // Read from local.properties
+        val localProperties = Properties()
+        val localPropertiesFile = rootProject.file("local.properties")
+        if (localPropertiesFile.exists()) {
+            FileInputStream(localPropertiesFile).use { localProperties.load(it) }
+        }
+
         // Databricks credentials
-        val databricksUrl = project.findProperty("databricks.url")?.toString()
+        val databricksUrl = localProperties.getProperty("databricks.url")
+            ?: project.findProperty("databricks.url")?.toString()
             ?: System.getenv("DATABRICKS_HOST")
             ?: "https://dbc-f1d1578e-8435.cloud.databricks.com"
-        val databricksToken = project.findProperty("databricks.token")?.toString()
+        val databricksToken = localProperties.getProperty("databricks.token")
+            ?: project.findProperty("databricks.token")?.toString()
             ?: System.getenv("DATABRICKS_TOKEN")
             ?: ""
-        val databricksWarehouse = project.findProperty("databricks.warehouse")?.toString()
+        val databricksWarehouse = localProperties.getProperty("databricks.warehouse")
+            ?: project.findProperty("databricks.warehouse")?.toString()
             ?: System.getenv("DATABRICKS_WAREHOUSE")
             ?: "5fa7bca37483870e"
 
@@ -56,9 +69,15 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
-buildFeatures {
+    buildFeatures {
         compose = true
         buildConfig = true
+    }
+
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
     }
 }
 
@@ -114,4 +133,11 @@ dependencies {
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
+
+    // CameraX
+    val cameraxVersion = "1.4.1"
+    implementation("androidx.camera:camera-core:$cameraxVersion")
+    implementation("androidx.camera:camera-camera2:$cameraxVersion")
+    implementation("androidx.camera:camera-lifecycle:$cameraxVersion")
+    implementation("androidx.camera:camera-view:$cameraxVersion")
 }

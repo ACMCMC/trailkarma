@@ -22,6 +22,8 @@ class LocationService : Service() {
     private val scope = CoroutineScope(Dispatchers.IO)
     private lateinit var fusedClient: FusedLocationProviderClient
     private lateinit var callback: LocationCallback
+    // h3Cell is intentionally null on-device — computed server-side by Databricks
+    // via h3_longlatash3(lng, lat, 9) during the MERGE INTO ingestion step.
 
     override fun onCreate() {
         super.onCreate()
@@ -42,7 +44,13 @@ class LocationService : Service() {
                     val userRepo = UserRepository(applicationContext, db.userDao())
                     val userId = userRepo.currentUserId.first() ?: "unknown"
                     db.locationUpdateDao().insert(
-                        LocationUpdate(userId = userId, lat = loc.latitude, lng = loc.longitude, timestamp = Instant.now().toString())
+                        LocationUpdate(
+                            userId    = userId,
+                            lat       = loc.latitude,
+                            lng       = loc.longitude,
+                            h3Cell    = null, // computed by Databricks on upload
+                            timestamp = Instant.now().toString()
+                        )
                     )
                 }
             }

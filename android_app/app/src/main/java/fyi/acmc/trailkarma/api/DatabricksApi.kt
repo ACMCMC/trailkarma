@@ -39,7 +39,7 @@ data class SqlError(
 
 @JsonClass(generateAdapter = true)
 data class SqlResult(
-    val data: List<List<Any?>>? = null
+    val data_array: List<List<Any?>>? = null
 )
 
 object DatabricksApiClient {
@@ -55,6 +55,9 @@ object DatabricksApiClient {
             .addInterceptor(okhttp3.logging.HttpLoggingInterceptor().apply {
                 level = okhttp3.logging.HttpLoggingInterceptor.Level.BASIC
             })
+            .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+            .writeTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
             .build()
 
         return retrofit2.Retrofit.Builder()

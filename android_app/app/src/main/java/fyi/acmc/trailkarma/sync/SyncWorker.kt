@@ -5,6 +5,7 @@ import androidx.work.*
 import fyi.acmc.trailkarma.db.AppDatabase
 import fyi.acmc.trailkarma.repository.DatabricksSyncRepository
 import fyi.acmc.trailkarma.repository.RewardsRepository
+import kotlinx.coroutines.CancellationException
 
 class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
@@ -14,25 +15,26 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
 
         if (!syncRepo.isOnline()) return Result.retry()
 
-        if (syncRepo.isConfigured()) {
-            runCatching {
+        return try {
+            if (syncRepo.isConfigured()) {
                 syncRepo.syncReports()
                 syncRepo.syncLocations()
+                syncRepo.syncRelayPackets()
                 syncRepo.pullReportsFromCloud()
-            }.getOrElse {
-                return Result.retry()
+                syncRepo.pullTrailsFromCloud()
             }
-        }
 
-        runCatching {
             rewardsRepo.syncCurrentUserRegistration()
             rewardsRepo.claimRewardsForPendingReports()
             rewardsRepo.openPendingRelayJobs()
-        }.getOrElse {
-            return Result.retry()
+            Result.success()
+        } catch (e: CancellationException) {
+            android.util.Log.w("SyncWorker", "Sync cancelled, will retry", e)
+            Result.retry()
+        } catch (e: Exception) {
+            android.util.Log.e("SyncWorker", "Sync failed", e)
+            Result.retry()
         }
-
-        return Result.success()
     }
 
     companion object {

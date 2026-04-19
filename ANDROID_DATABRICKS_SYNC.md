@@ -4,9 +4,9 @@ The TrailKarma Android app now syncs trail reports and location data to Databric
 
 ## How It Works
 
-1. **Offline Mode**: Data is stored locally in Room database
-2. **Online Mode**: When network is available, WorkManager syncs unsynced reports and locations to Databricks
-3. **Cache**: Previously synced data is available offline
+1. **Offline Mode**: Data is stored locally in Room database.
+2. **Online Mode**: When network is available, the app PUSHES unsynced offline data to Databricks and PULLS the latest community data down to the device.
+3. **Cache**: The most recent synced data remains available offline.
 
 ## Setup Instructions
 
@@ -26,6 +26,12 @@ syncRepo.setDatabricksConfig(
     token = "dapi...",  // Your Databricks personal access token
     warehouse = "5fa7bca37483870e"  // Current SQL warehouse ID
 )
+
+// Initial sync on app startup
+if (syncRepo.isOnline()) {
+    syncRepo.syncReports() // Push offline data
+    syncRepo.pullReportsFromCloud() // Pull community updates
+}
 ```
 
 ### 2. Get Your Databricks Credentials
@@ -43,18 +49,46 @@ From your Databricks workspace:
 
 ### 3. What Gets Synced
 
-When online, the app automatically syncs:
+When online, the app automatically syncs in both directions:
 
-- **Trail Reports** (all fields): type, title, description, location, species, confidence
-- **Location Updates**: timestamp, lat/lng, synced status
-- **Status**: Each record is marked `synced=true` after successful upload
+- **Pushes Trail Reports**: Pushes locally generated reports (type, title, description, lat, lng) to Databricks.
+- **Pulls Trail Reports**: Pulls the most recent global reports from Databricks (idempotent deduplication via UUID).
+- **Pushes Location Updates**: Pushes GPS pings with ID-based `MERGE INTO` protection.
+- **Pushes Relay Packets**: Synchronizes encounter logs and relayed data from the BLE mesh.
+- **Status**: Records show an animated orange spinner while pending, and a green badge once synced.
+- **Server-Side H3**: The app sends raw coordinates; Databricks computes the `h3_cell` index automatically during ingestion.
 
 ### 4. Sync Behavior
 
-- **Automatic**: WorkManager triggers sync when network becomes available
-- **Manual**: Call `syncRepo.syncReports()` and `syncRepo.syncLocations()` from your ViewModel
-- **Retry**: If sync fails, WorkManager will retry on next network change
-- **Offline**: All data remains accessible locally until sync succeeds
+- **Automatic**: WorkManager triggers sync when network becomes available.
+- **Manual**: Triggered via `DatabricksSyncRepository` in the ViewModel.
+- **Retry**: If sync fails, WorkManager will retry on next network change.
+- **Offline**: All data remains accessible locally until sync succeeds.
+- **GATT Mesh**: Data from nearby hikers is exchanged via a GATT server/client protocol. Devices "diff" manifests to sync missing reports phone-to-phone.
+
+## 📡 BLE Mesh Networking (The "Wild" Sync)
+The app uses a persistent BLE foreground service (`BleService`) to synchronize data between hikers in zero-signal areas.
+
+- **Persistent Mesh**: Running as a Foreground Service with a custom notification, it ensures you are always "connected" to the trail community even when the app is in your pocket.
+- **Manifest Diffing**: When two hikers meet, their phones exchange "manifests" (lists of report IDs). They then pull only the missing reports from each other.
+- **GATT Sync**: Data is streamed over BLE GATT characteristics using a chunked protocol to handle reports larger than the standard 512-byte MTU.
+- **Relay Logs**: Every peer encounter is logged as a `RelayPacket` and uploaded to Databricks to visualize the "gossiped" path of a report through the mesh.
+
+## 📱 User Interface Updates
+
+### Full-Screen Report Detail
+Tapping any marker on the map or an item in the history list launches the **Full-Screen Report Detail**. This view provides a rich card layout with:
+- Color-coded hero banners (Red for Hazards, Teal for Water, Green for Species).
+- Species identification confidence badges.
+- Explicit sync status (Animated spinner vs. Green "✓ synced" badge).
+- "via BLE relay" indicator for data that traveled through the mesh.
+
+### Hiker Nickname (Login)
+The initial login screen asks for your **"Hiker Nickname (Trail Name)"**. This is your personal alias in the TrailKarma community (e.g., "Strider").
+
+### Dynamic Trail Selection
+You can select your active trail (e.g., PCT) from the Map Screen. The list is pulled live from Databricks, with spatial data optimized via H3 for the current region.
+
 
 ## Code Examples
 
@@ -91,7 +125,7 @@ reports.collectAsState().value.forEach { report ->
 
 3. Verify in Databricks:
    ```sql
-   SELECT * FROM trailkarma.trail_reports WHERE synced = true;
+   SELECT * FROM workspace.trailkarma.trail_reports WHERE synced = true;
    ```
 
 ## Architecture Diagram
@@ -99,16 +133,21 @@ reports.collectAsState().value.forEach { report ->
 ```
 Mobile App (offline-first)
 ├── Local Room DB
-│   ├── reports (synced=false until upload)
-│   └── locations (synced=false until upload)
-└── Databricks Sync (when online)
-    ├── ExecuteSql API
-    ├── INSERT trail_reports
-    └── INSERT location_updates
+│   ├── reports (animated spinner until synced)
+│   ├── locations (synced=false until upload)
+│   └── relay_packets (BLE mesh encounter logs)
+└── Databricks Sync (WorkManager)
+    ├── ExecuteSql API (idempotent MERGE INTO)
+    ├── PUSH: Reports, Locations, RelayLogs
+    └── PULL: Global Reports (Manifest diffing)
         ↓
-    Databricks SQL Warehouse
-    └── trailkarma.trail_reports/location_updates
+    Databricks SQL Warehouse (H3 Spatial Cluster)
+    └── workspace.trailkarma.trail_reports (H3 computed on ingest)
 ```
+
+## 🛠 Android 15 & 16KB Alignment
+The app is fully optimized for **Android 15**. We have upgraded to **CameraX 1.4.1** and **NDK r27** to ensure that all native libraries are 16KB page-aligned, preventing "ELF alignment" warnings on modern hardware.
+
 
 ## Troubleshooting
 
@@ -118,7 +157,7 @@ Mobile App (offline-first)
 - Check: Is network connectivity available?
 
 **Data Not in Databricks?**
-- Check Reports: `SELECT COUNT(*) FROM trailkarma.trail_reports;`
+- Check Reports: `SELECT COUNT(*) FROM workspace.trailkarma.trail_reports;`
 - Check Logs: Look for network errors in Android Studio logcat
 - Check Status: Is `synced` column true or false?
 

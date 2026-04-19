@@ -54,33 +54,90 @@ Safe to run anytime—drops old tables and creates fresh ones.
 
 ```
 trailkarma/
-├── users (3 demo hikers)
+├── trails (1 master trail - PCT)
+├── trail_waypoints (master POIs)
+├── users (4 demo hikers)
+├── user_contacts (2 friendships/requests)
 ├── trail_reports (5 reports: 2 hazards, 1 water, 2 species)
 ├── location_updates (3 GPS pings)
-└── relay_packets (BLE mesh data)
+└── relay_packets (BLE mesh data / encounters)
 ```
 
+In our Databricks workspace the active catalog is `workspace`, so fully-qualified references like `workspace.trailkarma.trail_reports` also work. The setup script itself creates the `trailkarma` schema and seeds it with demo data.
+
+### 📍 H3 Spatial Indexing (Advanced Analytics)
+To win the **Cloud/Analytics tracks**, we are leveraging **Uber H3 Indexing**. Instead of slow raw-coordinate queries, we index all trail data and reports into hexagonal cells.
+- **Server-Side Computation**: The Android client sends raw lat/lng; Databricks uses the built-in `h3_longlatash3()` function during `MERGE INTO` to compute the cell ID (Resolution 9) server-side.
+- **Z-Ordering**: The Delta Lake is clustered using `OPTIMIZE ... ZORDER BY (h3_cell)` for O(1) spatial lookups.
+- **Trail Snapping**: The `trail_segments` table allows for instant snapping of hiker positions to the nearest trail index.
+
+
+### trails (Master Data)
+Stores master definitions of trails (like the PCT) to allow hikers to switch context. Includes a `geometry_json` column specifically designed to hold GeoJSON representations. This allows you to import external GIS datasets (Shapefiles, GPX, KMZ converted to GeoJSON) directly into Databricks so the Android client can pull and render the trail path.
+
+### trail_waypoints (Master POIs)
+Stores fixed trail metadata like trailheads, permanent water sources, peaks, and established campsites. This keeps static trail data separate from dynamic, user-generated `trail_reports`.
+
 ## Schema
+
+### trails (Master Data)
+```
+trail_id STRING (PK)
+name STRING
+description STRING
+total_length_miles DOUBLE
+region STRING
+geometry_json STRING (GeoJSON representation of the path)
+created_at TIMESTAMP, updated_at TIMESTAMP
+```
+
+### trail_waypoints (Master POIs)
+```
+waypoint_id STRING (PK)
+trail_id STRING (FK to trails)
+name STRING
+type STRING (e.g. trailhead | water | campsite | peak)
+lat DOUBLE, lng DOUBLE
+description STRING
+created_at TIMESTAMP, updated_at TIMESTAMP
+```
 
 ### users
 ```
 user_id STRING (PK)
 display_name STRING
+wallet_address STRING
+karma_points INT
+profile_image_url STRING
+active_trail_id STRING (FK to trails)
 created_at TIMESTAMP
 updated_at TIMESTAMP
+```
+
+### user_contacts
+```
+contact_id STRING (PK)
+user_id STRING (FK to users)
+contact_user_id STRING (FK to users)
+status STRING ('pending' | 'accepted')
+created_at TIMESTAMP, updated_at TIMESTAMP
 ```
 
 ### trail_reports
 ```
 report_id STRING (PK)
+user_id STRING (FK to users.user_id)
 type STRING (hazard | water | species)
 title STRING
 description STRING
 lat DOUBLE, lng DOUBLE (coordinates)
+h3_cell STRING (Computed server-side: Res-9)
 timestamp STRING (ISO 8601)
+image_url STRING (optional)
 species_name STRING (optional)
 confidence DOUBLE (optional, 0-1)
 source STRING (self | relayed)
+upvotes INT
 synced BOOLEAN
 created_at TIMESTAMP, updated_at TIMESTAMP
 ```
@@ -88,10 +145,20 @@ created_at TIMESTAMP, updated_at TIMESTAMP
 ### location_updates
 ```
 id STRING (PK)
+user_id STRING (FK to users.user_id)
 timestamp STRING
 lat DOUBLE, lng DOUBLE
+h3_cell STRING (Computed server-side: Res-9)
 synced BOOLEAN
 created_at TIMESTAMP, updated_at TIMESTAMP
+```
+
+### trail_segments (Path Geometry)
+```
+segment_id STRING (PK)
+trail_id STRING (FK to trails)
+h3_cell STRING (Index for fast line-snapping)
+geometry_json STRING (GeoJSON LineString segment)
 ```
 
 ### relay_packets
@@ -134,23 +201,26 @@ Great for demo resets between pitches!
 Run these in Databricks SQL to impress judges:
 
 ```sql
--- Active hazards on PCT around current location
+-- Active hazards on PCT using H3 optimization
 SELECT title, description, lat, lng, timestamp
 FROM trailkarma.trail_reports
 WHERE type = 'hazard'
-AND ABS(lat - 32.88) < 0.05
-AND ABS(lng + 117.24) < 0.05
+AND h3_cell = h3_longlatash3(-117.24, 32.88, 9)
 ORDER BY timestamp DESC;
 
--- Species sightings heatmap
-SELECT lat, lng, species_name, confidence, COUNT(*) as sightings
+-- Species sightings heatmap (Hexagonal Aggregation)
+SELECT h3_cell, species_name, AVG(confidence) as avg_conf, COUNT(*) as sightings
 FROM trailkarma.trail_reports
 WHERE type = 'species'
-GROUP BY lat, lng, species_name, confidence;
+GROUP BY h3_cell, species_name;
 
--- Real-time hiker positions
-SELECT * FROM trailkarma.location_updates
-ORDER BY timestamp DESC LIMIT 10;
+-- Real-time hiker trail snapping
+-- Finds hikers currently in the same H3 cell as a known trail segment
+SELECT u.display_name, r.h3_cell, t.name as trail_name
+FROM trailkarma.location_updates r
+JOIN trailkarma.users u ON r.user_id = u.user_id
+JOIN trailkarma.trail_segments s ON r.h3_cell = s.h3_cell
+JOIN trailkarma.trails t ON s.trail_id = t.trail_id;
 ```
 
 ## Troubleshooting

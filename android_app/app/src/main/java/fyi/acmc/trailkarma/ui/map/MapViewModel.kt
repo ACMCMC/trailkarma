@@ -6,7 +6,10 @@ import androidx.lifecycle.viewModelScope
 import fyi.acmc.trailkarma.api.WalletStateResponse
 import fyi.acmc.trailkarma.db.AppDatabase
 import fyi.acmc.trailkarma.models.LocationUpdate
+import fyi.acmc.trailkarma.models.Trail
 import fyi.acmc.trailkarma.models.TrailReport
+import fyi.acmc.trailkarma.network.NetworkUtil
+import fyi.acmc.trailkarma.repository.DatabricksSyncRepository
 import fyi.acmc.trailkarma.repository.RewardsRepository
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -22,12 +25,45 @@ data class MapMarker(
 
 class MapViewModel(app: Application) : AndroidViewModel(app) {
     private val db = AppDatabase.get(app)
+    private val syncRepo = DatabricksSyncRepository(app, db)
     private val rewardsRepository = RewardsRepository(app, db)
 
     val reports: Flow<List<TrailReport>> = db.trailReportDao().getAll()
     val userLocation: Flow<LocationUpdate?> = db.locationUpdateDao().getLatest()
-    val selectedReport = MutableStateFlow<TrailReport?>(null)
+    val trails: Flow<List<Trail>> = db.trailDao().getAll()
     val walletState = MutableStateFlow<WalletStateResponse?>(null)
+
+    init {
+        viewModelScope.launch {
+            refreshCloudData()
+            refreshWalletState()
+        }
+        listenForNetworkChanges()
+    }
+
+    private suspend fun refreshCloudData() {
+        if (!syncRepo.isOnline() || !syncRepo.isConfigured()) return
+        runCatching {
+            syncRepo.syncReports()
+            syncRepo.syncLocations()
+            syncRepo.syncRelayPackets()
+            syncRepo.pullReportsFromCloud()
+            syncRepo.pullTrailsFromCloud()
+        }
+    }
+
+    private fun listenForNetworkChanges() {
+        viewModelScope.launch {
+            val networkUtil = NetworkUtil(getApplication())
+            networkUtil.networkChanged.collect { changed ->
+                if (changed && networkUtil.isOnlineNow()) {
+                    refreshCloudData()
+                    refreshWalletState()
+                    networkUtil.clearNetworkChangeFlag()
+                }
+            }
+        }
+    }
 
     // Combined markers for the map
     val mapMarkers: Flow<List<MapMarker>> = combine(
@@ -70,14 +106,6 @@ class MapViewModel(app: Application) : AndroidViewModel(app) {
         markers
     }
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
-
-    fun selectReport(report: TrailReport?) {
-        selectedReport.value = report
-    }
-
-    init {
-        refreshWalletState()
-    }
 
     fun refreshWalletState() {
         viewModelScope.launch {

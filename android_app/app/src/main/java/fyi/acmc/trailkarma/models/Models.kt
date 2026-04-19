@@ -2,6 +2,7 @@ package fyi.acmc.trailkarma.models
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import java.util.UUID
 
 @Entity(tableName = "users")
 data class User(
@@ -14,11 +15,13 @@ data class User(
 
 @Entity(tableName = "location_updates")
 data class LocationUpdate(
-    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    // UUID so any device can dedup this record — same ping seen by two phones = same row
+    @PrimaryKey val id: String = UUID.randomUUID().toString(),
     val userId: String,
     val timestamp: String,
     val lat: Double,
     val lng: Double,
+    val h3Cell: String? = null,   // H3 res-9 cell, e.g. "89283082837ffff"
     val synced: Boolean = false
 )
 
@@ -34,6 +37,7 @@ data class TrailReport(
     val description: String,
     val lat: Double,
     val lng: Double,
+    val h3Cell: String? = null,   // H3 res-9 cell, e.g. "89283082837ffff"
     val timestamp: String,
     val speciesName: String? = null,
     val confidence: Float? = null,
@@ -55,6 +59,7 @@ data class RelayPacket(
     val payloadJson: String,
     val receivedAt: String,
     val senderDevice: String,
+    val hopCount: Int = 0,        // loop guard: stop re-advertising after N hops
     val uploaded: Boolean = false
 )
 
@@ -77,4 +82,14 @@ data class RelayJobIntent(
     val fulfilledTxSignature: String? = null,
     val createdAt: String,
     val synced: Boolean = false
+)
+
+@Entity(tableName = "trails")
+data class Trail(
+    @PrimaryKey val trailId: String,
+    val name: String,
+    val description: String?,
+    val totalLengthMiles: Double?,
+    val region: String?,
+    val geometryJson: String?
 )

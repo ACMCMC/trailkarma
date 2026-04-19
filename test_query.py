@@ -24,7 +24,7 @@ r = requests.get(f"{workspace_url}/api/2.0/sql/warehouses", headers=headers, tim
 warehouse_id = next((wh.get('id') for wh in r.json().get('warehouses', []) if wh.get('state') == 'RUNNING'), None)
 
 print(f"Executing query on {warehouse_id}...")
-payload = {'warehouse_id': warehouse_id, 'statement': 'SELECT * FROM hive_metastore.trailkarma.users;', 'wait_timeout': '30s'}
+payload = {'warehouse_id': warehouse_id, 'statement': 'SELECT * FROM workspace.trailkarma.users;', 'wait_timeout': '30s'}
 r = requests.post(f"{workspace_url}/api/2.0/sql/statements", json=payload, headers=headers)
 result = r.json()
 

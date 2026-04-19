@@ -42,6 +42,12 @@ class CreateReportViewModel(app: Application) : AndroidViewModel(app) {
                         source = ReportSource.self
                     )
                 )
+
+                // Trigger immediate sync to Databricks if we have internet connection
+                val syncRepo = fyi.acmc.trailkarma.repository.DatabricksSyncRepository(getApplication(), db)
+                if (syncRepo.isOnline()) {
+                    syncRepo.syncReports()
+                }
             }
         }
     }
