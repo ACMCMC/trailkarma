@@ -245,8 +245,7 @@ class MainActivity : ComponentActivity() {
                 verificationStatus = "claimed",
                 verificationTier = "Tier 1",
                 rewardClaimed = true,
-                rewardTxSignature = "demo-hazard-verify-24",
-                lastUpdatedAt = now.minusSeconds(10_800).toString()
+                rewardTxSignature = "demo-hazard-verify-24"
             )
         )
         db.trailReportDao().insert(
@@ -264,8 +263,7 @@ class MainActivity : ComponentActivity() {
                 verificationStatus = "claimed",
                 verificationTier = "Tier 3",
                 rewardClaimed = true,
-                rewardTxSignature = "demo-water-verify-18",
-                lastUpdatedAt = now.minusSeconds(6_600).toString()
+                rewardTxSignature = "demo-water-verify-18"
             )
         )
         db.trailReportDao().insert(
@@ -283,8 +281,7 @@ class MainActivity : ComponentActivity() {
                 confidence = 0.79f,
                 synced = false,
                 verificationStatus = "pending",
-                highConfidenceBonus = false,
-                lastUpdatedAt = now.minusSeconds(2_700).toString()
+                highConfidenceBonus = false
             )
         )
     }

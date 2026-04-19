@@ -64,7 +64,6 @@ class CreateReportViewModel(app: Application) : AndroidViewModel(app) {
                 val user = userRepo.ensureLocalUser()
                 val reportId = UUID.randomUUID().toString()
 
-                val now = Instant.now().toString()
                 Log.d("CreateReport", "💾 Saving report locally: $reportId - $title")
                 repo.save(
                     TrailReport(
@@ -75,10 +74,9 @@ class CreateReportViewModel(app: Application) : AndroidViewModel(app) {
                         description = description,
                         lat = loc?.latitude ?: 0.0,
                         lng = loc?.longitude ?: 0.0,
-                        timestamp = now,
+                        timestamp = Instant.now().toString(),
                         speciesName = speciesName,
-                        source = ReportSource.self,
-                        lastUpdatedAt = now
+                        source = ReportSource.self
                     )
                 )
                 Log.d("CreateReport", "✓ Report saved locally")
