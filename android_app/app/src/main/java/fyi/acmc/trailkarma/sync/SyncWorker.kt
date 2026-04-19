@@ -13,7 +13,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         // Only sync if online and Databricks is configured
         if (!syncRepo.isOnline()) return Result.retry()
 
-        runCatching {
+        return try {
             // Push local changes to cloud
             syncRepo.syncReports()
             syncRepo.syncLocations()
@@ -21,9 +21,14 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
 
             // Pull all data from cloud to local
             syncRepo.pullReportsFromCloud()
-        }.getOrNull() ?: return Result.retry()
-
-        return Result.success()
+            Result.success()
+        } catch (e: kotlinx.coroutines.JobCancellationException) {
+            android.util.Log.w("SyncWorker", "Sync cancelled, will retry", e)
+            Result.retry()
+        } catch (e: Exception) {
+            android.util.Log.e("SyncWorker", "Sync failed", e)
+            Result.retry()
+        }
     }
 
     companion object {

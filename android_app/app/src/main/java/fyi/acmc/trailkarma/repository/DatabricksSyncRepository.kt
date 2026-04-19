@@ -86,7 +86,10 @@ class DatabricksSyncRepository(context: Context, private val db: AppDatabase) {
                     success = false
                 }
             } catch (e: Exception) {
-                Log.e("DatabricksSync", "✗ Error uploading: ${report.title}", e)
+                when (e) {
+                    is kotlinx.coroutines.JobCancellationException -> Log.e("DatabricksSync", "✗ Sync cancelled: ${report.title}")
+                    else -> Log.e("DatabricksSync", "✗ Error uploading: ${report.title}", e)
+                }
                 success = false
             }
         }
