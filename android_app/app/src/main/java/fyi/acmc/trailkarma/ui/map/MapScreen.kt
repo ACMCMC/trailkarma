@@ -146,7 +146,7 @@ fun MapScreen(
                     zoomLevel = currentZoom
                 }
 
-                val markerSize = (20 + (zoomLevel - 10) * 4).coerceIn(20, 80)
+                val markerSize = (40 + (zoomLevel - 10) * 6).coerceIn(40, 140)
 
                 map.overlays.clear()
                 map.setTileSource(currentMapStyle)
